@@ -91,6 +91,27 @@ the engine's compact text encodings, `engine/v0/encode.gno`, read back
 through `Start()`, `Cards()`, `Events()`: as structs a turn cost over 17 KB
 of storage deposit, encoded about a tenth).
 
+### Storage deposit
+Measured on gnodev on 2026-10-10 (storage price 100 ugnot/byte; gnokey
+prints `STORAGE DELTA` and `STORAGE FEE` for each call):
+
+| Call | Bytes | Deposit |
+|---|---|---|
+| `CreateGame` | 18,527 | 1.85 GNOT |
+| `JoinGame` | 1,382 | 0.14 GNOT |
+| first `SubmitPlan` of a turn (plan stored) | 50–85 | ~0.007 GNOT |
+| resolving `SubmitPlan`, both pass | 1,971 | 0.20 GNOT |
+| resolving, both advance + run | 1,876 | 0.19 GNOT |
+| resolving, both Draw & Cock | 1,825 | 0.18 GNOT |
+| resolving, aim + shoot + aim each | 2,679 | 0.27 GNOT |
+
+A turn costs about 1.9–2.8 KB (0.19–0.28 GNOT), nearly all of it paid by
+the player whose plan resolves it. Even a turn where both pass costs ~1.9
+KB: the base is most likely the `TurnResult` kept for replays and the
+rewritten `Game` (not broken down further); events (combat: shots, wounds,
+their cards) add a few hundred bytes. A 20-turn game is roughly 40–55 KB
+(4–5.5 GNOT) on top of create and join.
+
 ### Crossing functions (called with MsgCall, args are strings)
 | Function | Notes |
 |---|---|
