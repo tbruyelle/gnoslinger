@@ -38,6 +38,7 @@ const (
 	ReasonLeap      = "leap"        // leap/drop draws two delay cards (rule 9.4)
 	ReasonOccupied  = "occupied"    // ending a move in an occupied hex (rule 9.24)
 	ReasonFence     = "fence"       // moving or staggering across a fence (rule 35.2)
+	ReasonObstacle  = "obstacle"    // moving or staggering onto or off an obstacle (rule 36.4)
 	ReasonDrop      = "drop"        // a DROP penalty draws three delay cards (rule 14.11)
 	ReasonStun      = "stun"        // a STUN draws wound cards (14.11)
 	ReasonLight     = "light"       // a LIGHT draws fatigue cards (14.11)
@@ -639,7 +640,7 @@ func stagger(board *hex.Board, p int, c *Character, shooter *Character, seg int,
 			from := c.Hex
 			c.Hex = to
 			*evs = append(*evs, Event{Seg: seg, Player: p, Kind: EvMove, From: from, To: to, Facing: c.Facing, Down: c.Down, Reason: ReasonStagger})
-			gained += crossFence(board, p, c, from, dir, seg, d, evs)
+			gained += terrain(board, p, c, from, dir, seg, d, evs)
 		}
 	}
 	if dir, ok := directionOf(board, c, shooter, second.Hex); ok && dir != c.Facing {
@@ -649,14 +650,20 @@ func stagger(board *hex.Board, p int, c *Character, shooter *Character, seg int,
 	return gained + drop(p, c, seg, d, evs)
 }
 
-// crossFence is the fence penalty (35.2): moving or staggering across a
-// fenced hexside, from the hex from in direction dir, draws two delay cards.
-func crossFence(board *hex.Board, p int, c *Character, from string, dir hex.Dir, seg int, d Drawer, evs *[]Event) (gained int) {
-	if !board.Fenced(from, dir) {
-		return 0
+// terrain is the penalty of the ground crossed by a move or a stagger from
+// the hex from in direction dir, to c's hex: two delay cards across a fence
+// (35.2), two more onto or off an obstacle (36.4; none from one obstacle
+// hex to another).
+func terrain(board *hex.Board, p int, c *Character, from string, dir hex.Dir, seg int, d Drawer, evs *[]Event) (gained int) {
+	if board.Fenced(from, dir) {
+		for i := 0; i < 2; i++ {
+			gained += drawDelay(p, c, seg, ReasonFence, d, evs)
+		}
 	}
-	for i := 0; i < 2; i++ {
-		gained += drawDelay(p, c, seg, ReasonFence, d, evs)
+	if board.Obstacle(from) != board.Obstacle(c.Hex) {
+		for i := 0; i < 2; i++ {
+			gained += drawDelay(p, c, seg, ReasonObstacle, d, evs)
+		}
 	}
 	return gained
 }
@@ -738,7 +745,7 @@ func execute(board *hex.Board, p int, a Action, st *State, c *Character, opp *Ch
 				gained += drawCard(p, c, seg, ReasonLeg, fatigueLine, d, evs)
 			}
 		}
-		gained += crossFence(board, p, c, from, dir, seg, d, evs)
+		gained += terrain(board, p, c, from, dir, seg, d, evs)
 		return true
 	}
 

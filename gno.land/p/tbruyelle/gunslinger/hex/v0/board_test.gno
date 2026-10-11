@@ -2,6 +2,7 @@ package hex
 
 import (
 	"sort"
+	"strings"
 	"testing"
 )
 
@@ -9,8 +10,8 @@ func TestBoardAIntegrity(t *testing.T) {
 	if A.Name() != "A" {
 		t.Errorf("name = %q", A.Name())
 	}
-	if A.Size() != 137 {
-		t.Fatalf("board A has %d hexes, want 137", A.Size())
+	if A.Size() != 138 { // 137 hexes, I11 split into two halves
+		t.Fatalf("board A has %d hexes, want 138", A.Size())
 	}
 	ids := A.IDs()
 	if !sort.StringsAreSorted(ids) {
@@ -38,9 +39,10 @@ func TestBoardAIntegrity(t *testing.T) {
 			if nb == id {
 				t.Errorf("%s is its own %s neighbour", id, d)
 			}
-			// Adjacency is symmetric: going back the opposite way returns.
+			// Adjacency is symmetric: going back the opposite way returns,
+			// to the same hex or to the other half of a split one.
 			back, ok := A.Neighbor(nb, d.Opposite())
-			if !ok || back != id {
+			if !ok || strings.TrimSuffix(back, "*") != strings.TrimSuffix(id, "*") {
 				t.Errorf("asymmetric: %s -%s-> %s but %s -%s-> %q", id, d, nb, nb, d.Opposite(), back)
 			}
 		}
@@ -121,5 +123,43 @@ func TestBoardAFences(t *testing.T) {
 		if got := A.Fenced(c.id, c.d); got != c.want {
 			t.Errorf("Fenced(%s, %d) = %v, want %v", c.id, c.d, got, c.want)
 		}
+	}
+}
+
+func TestBoardAObstacles(t *testing.T) {
+	// The horse trough (rule 36) is the only obstacle of board A.
+	n := 0
+	for _, id := range A.IDs() {
+		if A.Obstacle(id) {
+			n++
+		}
+	}
+	if n != 1 || !A.Obstacle("A-I11*") || A.Obstacle("A-I11") || A.Obstacle("A-X1") {
+		t.Errorf("obstacles: %d, I11* %v, I11 %v", n, A.Obstacle("A-I11*"), A.Obstacle("A-I11"))
+	}
+}
+
+func TestBoardAHalfHexes(t *testing.T) {
+	// I11 is split (36.2): the trough I11* on top, the empty I11 below.
+	if got := A.Neighbors("A-I11*"); got != [6]string{"A-I10", "A-J10", "A-I11", "A-I11", "A-H11", "A-H10"} {
+		t.Errorf("Neighbors(A-I11*) = %v", got)
+	}
+	if got := A.Neighbors("A-I11"); got != [6]string{"A-I11*", "A-J10", "A-J11", "A-I12", "A-H11", "A-I11*"} {
+		t.Errorf("Neighbors(A-I11) = %v", got)
+	}
+	for _, c := range []struct {
+		from string
+		d    Dir
+		want string
+	}{{"A-I10", S, "A-I11*"}, {"A-J10", SW, "A-I11*"}, {"A-H10", SE, "A-I11*"}, {"A-H11", NE, "A-I11*"}, {"A-J11", NW, "A-I11"}, {"A-I12", N, "A-I11"}} {
+		if nb, _ := A.Neighbor(c.from, c.d); nb != c.want {
+			t.Errorf("Neighbor(%s, %s) = %q, want %q", c.from, c.d, nb, c.want)
+		}
+	}
+	// Both halves share the coordinates of the whole hex.
+	q1, r1, _ := A.Coords("A-I11*")
+	q2, r2, _ := A.Coords("A-I11")
+	if q1 != q2 || r1 != r2 || A.Distance("A-I11*", "A-I11") != 1 {
+		t.Errorf("I11* at (%d,%d), I11 at (%d,%d), distance %d", q1, r1, q2, r2, A.Distance("A-I11*", "A-I11"))
 	}
 }

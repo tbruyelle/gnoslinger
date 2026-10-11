@@ -66,15 +66,15 @@ func (a Action) AimTime(oneHanded bool) int {
 	return 0
 }
 
-// validHex is a loose check of a hex id in a plan string ("A-F6"); the board
-// decides whether it exists.
+// validHex is a loose check of a hex id in a plan string ("A-F6", "A-I11*"
+// for a half-hex); the board decides whether it exists.
 func validHex(h string) bool {
 	if len(h) < 3 || len(h) > 8 {
 		return false
 	}
 	for i := 0; i < len(h); i++ {
 		c := h[i]
-		if !(c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-') {
+		if !(c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-' || c == '*') {
 			return false
 		}
 	}

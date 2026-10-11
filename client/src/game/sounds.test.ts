@@ -36,6 +36,7 @@ describe("soundsForEvents", () => {
     expect(cues.map((c) => c.group)).toEqual(["step", "obstacle", "step", "obstacle"]);
     expect(cues[1].delayMs).toBeGreaterThan(0);
     expect(groups([ev({ kind: "delay", reason: "occupied" })])).toEqual([]);
+    expect(groups([ev({ kind: "delay", reason: "obstacle" }), ev({ kind: "delay", reason: "obstacle" })])).toEqual(["obstacle"]);
   });
 
   it("plays wounds after the gunshot", () => {

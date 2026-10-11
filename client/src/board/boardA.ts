@@ -20,6 +20,8 @@ interface BoardData {
   neighbors: Record<string, (string | null)[]>;
   /** Fenced hexsides (rule 35), as the pairs of hexes they separate. */
   fences?: string[][];
+  /** Obstacle hexes (rule 36). */
+  obstacles?: string[];
 }
 
 /**
@@ -35,6 +37,7 @@ export class BoardMap {
   private readonly hexes: Record<string, HexPos>;
   private readonly neighbors: Record<string, (string | null)[]>;
   private readonly fenceSet: Set<string>;
+  private readonly obstacleSet: Set<string>;
 
   constructor(d: BoardData) {
     this.key = d.key;
@@ -43,6 +46,17 @@ export class BoardMap {
     this.hexes = d.hexes;
     this.neighbors = d.neighbors;
     this.fenceSet = new Set((d.fences ?? []).flatMap(([a, b]) => [`${a}|${b}`, `${b}|${a}`]));
+    this.obstacleSet = new Set(d.obstacles ?? []);
+  }
+
+  /** Whether a hex is an obstacle (as the realm's Board.Obstacle). */
+  obstacle(id: string): boolean {
+    return this.obstacleSet.has(id);
+  }
+
+  /** Whether a move between two neighbouring hexes crosses a fence or goes onto or off an obstacle (rules 35.2, 36.4). */
+  crossesObstacle(from: string, to: string): boolean {
+    return this.fenced(from, to) || this.obstacle(from) !== this.obstacle(to);
   }
 
   /** Whether a fence runs along the hexside between two neighbouring hexes (as the realm's Board.Fenced). */

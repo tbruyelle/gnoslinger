@@ -148,6 +148,41 @@ func TestFencePenalty(t *testing.T) {
 	}
 }
 
+func TestObstaclePenalty(t *testing.T) {
+	// Onto the trough (36.4): H10 -> I11* draws two delay cards...
+	st := NewState()
+	st.Chars[0] = Character{Hex: "A-F3", Facing: hex.S}
+	st.Chars[1] = Character{Hex: "A-H10", Facing: hex.SE}
+	st, evs := resolve(t, st, "", "1f:ahead")
+	d := ofKind(evs, 1, EvDelay)
+	if st.Chars[1].Hex != "A-I11*" || len(d) != 2 || d[0].Reason != ReasonObstacle || d[1].Reason != ReasonObstacle || st.Chars[1].Delay != 2 {
+		t.Errorf("char at %s, delay %d, delays = %v", st.Chars[1].Hex, st.Chars[1].Delay, d)
+	}
+	// ...and off it again, to the empty half: I11* -> I11.
+	st = NewState()
+	st.Chars[0] = Character{Hex: "A-F3", Facing: hex.S}
+	st.Chars[1] = Character{Hex: "A-I11*", Facing: hex.S}
+	st, evs = resolve(t, st, "", "1f:ahead")
+	if d := ofKind(evs, 1, EvDelay); st.Chars[1].Hex != "A-I11" || len(d) != 2 || d[0].Reason != ReasonObstacle {
+		t.Errorf("char at %s, delays = %v", st.Chars[1].Hex, d)
+	}
+	// The empty half on to I12, or past the trough, I10 -> J10: nothing.
+	st = NewState()
+	st.Chars[0] = Character{Hex: "A-F3", Facing: hex.S}
+	st.Chars[1] = Character{Hex: "A-I11", Facing: hex.S}
+	st, evs = resolve(t, st, "", "1f:ahead")
+	if d := ofKind(evs, 1, EvDelay); st.Chars[1].Hex != "A-I12" || len(d) != 0 {
+		t.Errorf("char at %s, delays = %v", st.Chars[1].Hex, d)
+	}
+	st = NewState()
+	st.Chars[0] = Character{Hex: "A-F3", Facing: hex.S}
+	st.Chars[1] = Character{Hex: "A-I10", Facing: hex.SE}
+	st, evs = resolve(t, st, "", "1f:ahead")
+	if d := ofKind(evs, 1, EvDelay); st.Chars[1].Hex != "A-J10" || len(d) != 0 {
+		t.Errorf("char at %s, delays = %v", st.Chars[1].Hex, d)
+	}
+}
+
 func TestOccupiedHexPenalty(t *testing.T) {
 	st := NewState()
 	st.Chars[0] = Character{Hex: "A-F5", Facing: hex.S}

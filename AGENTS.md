@@ -41,7 +41,7 @@ make test          # go tool gno test ./gno.land/...   (unit tests + filetests)
 make lint          # go tool gno lint ./gno.land/...
 make fmt           # go tool gno fmt -w ./gno.land
 make check         # tsc --noEmit + vitest for the client
-make gen-board     # regenerate board A adjacency + fences (realm + client) from assets/hex_grid.json
+make gen-board     # regenerate board A adjacency + fences + obstacles + half-hexes (realm + client) from assets/hex_grid.json
 make mod-download  # sync ~/.config/gno/pkg/mod with the pinned gno (after update-fork)
 make update-fork FORK_REF=<ref>   # re-pin gnolang/gno in go.mod
 ```
@@ -62,7 +62,7 @@ go tool gno test -update-golden-tests ./gno.land/r/tbruyelle/gunslinger/v0/   # 
 
 ```
 gno.land/
-  p/tbruyelle/gunslinger/hex/v0      directions, relative directions, Board adjacency + axial coords + fenced hexsides, range, aim zone (board_a.gno is generated)
+  p/tbruyelle/gunslinger/hex/v0      directions, relative directions, Board adjacency + axial coords + fenced hexsides + obstacles, range, aim zone (board_a.gno is generated)
   p/tbruyelle/gunslinger/cards/v0    the 12 action cards (24 sides), Enabled() = implemented actions
   p/tbruyelle/gunslinger/engine/v0   pure rules engine: plan DSL + validation, Resolve, EndTurn, result deck (deck.gno, fire.gno), impact table
   r/tbruyelle/gunslinger/v0          the realm: games, lobby, SubmitPlan, JSON views, Render, filetests/
@@ -187,7 +187,17 @@ across a fenced hexside draws two (35.2, reason `fence`). Board A's corral
 fence is 48 hexsides, listed as hex pairs in `FENCES` in
 `scripts/gen_board_data.py` (read off `board_A.png`, gates at F2 and F10)
 and generated into `Board.Fenced` and `fences` in `board_A.json`
-(`BoardMap.fenced`, used for the obstacle sound). Off-board moves are cancelled but still
+(`BoardMap.fenced`). Moving or staggering onto or off an obstacle hex draws
+two more (36.4, reason `obstacle`; none from one obstacle to another):
+board A's only obstacle is the horse trough, `OBSTACLES` in the generator,
+`Board.Obstacle` and `obstacles` in the JSON. The trough is an obstacle
+half-hex (36.2): it fills the top half of I11, so the generator splits I11
+(`HALF_HEXES`, `HALF_HEX_LINKS`) into **A-I11\*** (the trough, neighbours
+I10 J10 I11 I11 H11 H10, reached from I10, J10, H10 and H11) and **A-I11**
+(the empty bottom half, neighbours I11* J10 J11 I12 H11 I11*, reached from
+J11 and I12); both keep the whole hex's axial coordinates, and board A has
+138 hexes. Hex ids may end in `*` (plan strings accept it). `BoardMap.crossesObstacle`
+tells the planning preview when to play the obstacle sound. Off-board moves are cancelled but still
 consume their time. Unexecuted actions are cancelled after segment 5. End of
 turn (`EndTurn`, returns events) removes half the delay, rounded up, and a
 character with more delay than endurance at the end of two turns in a row
@@ -427,9 +437,9 @@ markers `aim{2,4,6,8}.gif` (from the VASSAL module), sound effects `sounds/`
 variants, `GameScene.playSounds` picks one at random; a miss, misfires
 included, adds a `missed*` ricochet after the gunshot; SERIOUS fatigue
 costing endurance at the turn start plays a `serious*` groan, crossing a
-fence an `obstacle*` sound) and while planning,
+fence or going onto or off an obstacle an `obstacle*` sound) and while planning,
 for what the plan alone decides (`soundsForPreview`: steps, climbing over a
-fence, turns, going down,
+fence or an obstacle, turns, going down,
 drawing, cocking, aiming, loading; shots wait for the cards, picking a
 shot's target plays `plan-shoot.wav`, a card added to the plan
 `pick-card.mp3` and one taken out `pick-card-reverse.mp3`, both converted

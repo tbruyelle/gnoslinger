@@ -1,9 +1,13 @@
 package hex
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestCoordsMatchNeighbors(t *testing.T) {
-	// Every neighbour sits one direction step away in axial coordinates.
+	// Every neighbour sits one direction step away in axial coordinates,
+	// except between the two halves of a split hex, which share them.
 	for _, id := range A.IDs() {
 		q, r, ok := A.Coords(id)
 		if !ok {
@@ -15,6 +19,9 @@ func TestCoordsMatchNeighbors(t *testing.T) {
 				continue
 			}
 			nq, nr, _ := A.Coords(nb)
+			if strings.TrimSuffix(nb, "*") == strings.TrimSuffix(id, "*") {
+				continue
+			}
 			sq, sr := d.Step()
 			if nq != q+sq || nr != r+sr {
 				t.Errorf("%s -[%s]-> %s: (%d,%d) -> (%d,%d), step (%d,%d)", id, d, nb, q, r, nq, nr, sq, sr)

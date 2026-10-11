@@ -61,8 +61,8 @@ const RICOCHET_AFTER_SHOT_MS = 350;
 /** The token reaches the hexside it climbs over halfway through its move. */
 const OBSTACLE_AFTER_MOVE_MS = 200;
 
-/** Delay reasons of crossing an obstacle (a fence, rule 35.2). */
-const OBSTACLE_REASONS = new Set(["fence"]);
+/** Delay reasons of crossing an obstacle: a fence (rule 35.2), onto or off an obstacle hex (36.4). */
+const OBSTACLE_REASONS = new Set(["fence", "obstacle"]);
 
 /** The sounds of one step's events, in the order they happen. */
 export function soundsForEvents(events: TurnEvent[]): SoundCue[] {

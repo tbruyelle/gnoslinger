@@ -2,16 +2,17 @@ import { describe, expect, it } from "vitest";
 import { BOARD_A } from "./boardA";
 
 describe("BOARD_A", () => {
-  it("has 137 hexes with symmetric adjacency", () => {
+  it("has 138 hexes (I11 split in two) with symmetric adjacency", () => {
     const ids = BOARD_A.ids();
-    expect(ids).toHaveLength(137);
+    expect(ids).toHaveLength(138);
+    const whole = (id: string | null) => id?.replace(/\*$/, "");
     for (const id of ids) {
       let n = 0;
       for (let d = 0; d < 6; d++) {
         const nb = BOARD_A.neighbor(id, d);
         if (!nb) continue;
         n++;
-        expect(BOARD_A.neighbor(nb, (d + 3) % 6)).toBe(id);
+        expect(whole(BOARD_A.neighbor(nb, (d + 3) % 6))).toBe(whole(id)); // back to the hex, or the other half of a split one
       }
       expect(n).toBeGreaterThanOrEqual(1);
       expect(n).toBeLessThanOrEqual(6);
@@ -23,6 +24,19 @@ describe("BOARD_A", () => {
     expect(BOARD_A.fenced("A-E2", "A-E3")).toBe(true);
     expect(BOARD_A.fenced("A-F3", "A-F2")).toBe(false); // the Upper Gate
     expect(BOARD_A.fenced("A-F6", "A-F5")).toBe(false);
+  });
+
+  it("knows the trough, as the realm's Board.Obstacle", () => {
+    expect(BOARD_A.ids().filter((id) => BOARD_A.obstacle(id))).toEqual(["A-I11*"]);
+    expect(BOARD_A.crossesObstacle("A-H10", "A-I11*")).toBe(true);
+    expect(BOARD_A.crossesObstacle("A-I11*", "A-I11")).toBe(true);
+    expect(BOARD_A.crossesObstacle("A-I11", "A-I12")).toBe(false);
+    expect(BOARD_A.crossesObstacle("A-I10", "A-J10")).toBe(false);
+    expect(BOARD_A.crossesObstacle("A-E3", "A-E2")).toBe(true); // the fence
+  });
+
+  it("offers I10, J10 and I11 to an advance from the trough facing NE", () => {
+    expect(BOARD_A.relNeighbors("A-I11*", 1, ["ahead_left", "ahead", "ahead_right"]).map((n) => n.hex)).toEqual(["A-I10", "A-J10", "A-I11"]);
   });
 
   it("matches the realm's sample rings", () => {
