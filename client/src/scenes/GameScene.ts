@@ -90,6 +90,8 @@ const STEP_MOVE_MS = 450;
 const STEP_SHOT_MS = 250;
 /** The pause between segments in auto play. */
 const AUTO_GAP_MS = 450;
+/** How much bigger a token is drawn on an obstacle, where the character stands higher. */
+const OBSTACLE_LIFT = 1.1;
 /** How far a hex highlight's corners are pulled in from the hex's own, in screen pixels. */
 const HEX_HIGHLIGHT_INSET = 4;
 /** How long a second click on Send plan confirms passing with an empty plan. */
@@ -164,6 +166,13 @@ class CharacterToken {
   private barTween: Phaser.Tweens.Tween | null = null;
   /** The sprite's resting tint (grey once out of the fight), which a hurt flash fades back to. */
   private baseTint = 0xffffff;
+  /** The sprite's scale as built, before any lift. */
+  private readonly baseScale: number;
+  /** How much bigger the token is drawn for standing higher (on an obstacle), and its tween. */
+  private lift = 1;
+  private liftTween: Phaser.Tweens.Tween | null = null;
+  /** The size the gun icon's shells were painted at, so they can be rescaled with the token. */
+  private gunPainted = 0;
 
   /** In-flight position tweens, retargeted by moveTo without touching the rotation. */
   private posTweens: Phaser.Tweens.Tween[] = [];
@@ -184,6 +193,46 @@ class CharacterToken {
   ) {
     highlight.setDepth(depth);
     sprite.setDepth(depth + 1);
+    this.baseScale = sprite.scaleX;
+  }
+
+  /**
+   * Draws the token lift times its size (on an obstacle it stands higher,
+   * 36.5), growing or shrinking over duration ms along with its ring,
+   * overlay and markers.
+   */
+  setLift(tweens: Phaser.Tweens.TweenManager, lift: number, duration: number) {
+    if (lift === this.lift && !this.liftTween) return;
+    this.liftTween?.stop();
+    this.liftTween = null;
+    if (duration <= 0) {
+      this.lift = lift;
+      this.applyLift();
+      return;
+    }
+    this.liftTween = tweens.add({
+      targets: this,
+      lift,
+      duration,
+      ease: "Cubic.easeInOut",
+      onUpdate: () => this.applyLift(),
+      onComplete: () => (this.liftTween = null),
+    });
+  }
+
+  private applyLift() {
+    this.sprite.setScale(this.baseScale * this.lift);
+    this.highlight.setScale(this.lift);
+    this.overlay?.setScale(this.sprite.scaleX);
+    const d = this.sprite.displayWidth;
+    this.badge?.setDisplaySize(d * 0.42, d * 0.42);
+    this.aim?.setDisplaySize(d * AIM_SIZE, d * AIM_SIZE);
+    if (this.gun && this.gunPainted > 0) {
+      this.gun.setDisplaySize(d * GUN_SIZE, d * GUN_SIZE);
+      this.shells?.setScale((d * GUN_SIZE) / this.gunPainted);
+    }
+    this.bar?.bg.setSize(d * 0.9, Math.max(6, d * 0.09));
+    this.follow();
   }
 
   static depthFor(seat: number): number {
@@ -484,6 +533,8 @@ class CharacterToken {
       this.gun.setTexture(key);
     }
     this.gunAlpha = paintGun(gun, this.gun, this.shells!, size);
+    this.gunPainted = size;
+    this.shells?.setScale(1);
     this.follow();
   }
 
@@ -1032,6 +1083,8 @@ export class GameScene extends Phaser.Scene {
       t.setEndurance(this, c.endurance, this.arrMask);
       t.setTargetAim(this, this.incomingAim(chars, i), this.arrMask);
       t.setStatus(c.status);
+      // Standing on an obstacle raises the character (36.5): drawn a bit bigger.
+      t.setLift(this.tweens, BOARD_A.obstacle(c.hex) ? OBSTACLE_LIFT : 1, animate ? 450 : 0);
       if (animate) {
         t.moveTo(this.tweens, sx, sy, 450);
         t.rotateTo(this.tweens, angle, 300);
