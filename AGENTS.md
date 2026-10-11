@@ -456,14 +456,28 @@ overlays `state_{down,dead,passed_out}.png` drawn over the tokens, markers. `pyt
 
 ## TODO
 
+- Size
+  - Encode boards so they took less space
+
 - UI
+  - segment tracker
+    - replace the 5 dots of replay tracker
+    - add 5 squares reprenting each fragment
+    - fill them in red when there is delay
+    - highlight current segment by surrounding it with red lines
+    - animate highlight with replay
+    - fill the segment with light green color when planning
+  - highlight full hex rather than drawing a circle for selection
   - change window size to see how things fit
-- Session keys (`MsgCreateSession`) so Adena signs once per game.
-- Replace the tbruyelle realm to sthing else
-- add a court to inspect games to spot any bug that could have lead to lost
-  funds
-- upgrade architecture with player boards and profile preserved
-- use gnotiff
+  - use gnotiff
+  - Session keys (`MsgCreateSession`) so Adena signs once per game.
+  - add report bug button
+
+- General
+  - Replace the tbruyelle realm to sthing else
+  - upgrade architecture
+    - how to add more boards/gun in the future w/o changing the realms
+
 - Player profile
   - Add profile page with specific token and linked reputation (check RPG rules)
     - Add XP to player to increase stats? 
@@ -474,12 +488,14 @@ overlays `state_{down,dead,passed_out}.png` drawn over the tokens, markers. `pyt
   - Buy bonus cards
     - Say some cowbow thing during the game
     - Real bonus cards from the game
+
 - Tutorial
   - Basic tutorial
     - Movement
     - draw & cock
     - aim & shoot
   - Advanced tutorial
+
 - Lobby
   - separate games that wait for player's turn and the others
   - add last turn replay when player goes back to a game
@@ -496,7 +512,12 @@ overlays `state_{down,dead,passed_out}.png` drawn over the tokens, markers. `pyt
     - any gun bought
     - chose number of turns (min 10 max 30)
     - move timeout in the same form
+    - scenario
+      - battelroyale 2 to 8
+      - OK coral with the whyatt earp (adapt with number of players)
+
 - Showdown
+  - Victory points (required for more than 2 players)
   - make reaming points more visible
   - add winning/losing burst
   - show tips (or highlight a card with some text)
@@ -508,41 +529,39 @@ overlays `state_{down,dead,passed_out}.png` drawn over the tokens, markers. `pyt
     - when player has serious
     - allow enable/disable tooltip
   - Add token placement during create/join phase
-  - Resolution log
-    - improve consistency
-    - improve visiblity/readability
-    - add missing end of turn statements 
-    - add start of turn statements like SERIOUS
+  - Movements
+    - Check possible to move around a building corner
   - Cards
     - add drop weapon action cards (show waepon on the ground)
     - add throw and strength
   - Character sheets
   - Aim/Shoots
-    - allow move aim on Aim and Shoot cards (if more than 1, restart aim)
-    - add smoke
+    - line of sight
+      - wall and doors block (except saloon)
+      - character in between doesnt block
+      - cant shot if target is down behind an obstacle
+      - cant shot if target is down behind a window
+      - cant shoot if both players are down and there is an obstacle between
+      - cant shoot if both players are down and there is a window between
+        them
+      - check case https://youtu.be/WGQbh6coUQI?t=2704
+    - fanfire
+    - keep smoke until end of next turn
     - hit
       - add more detailed burst that just hit (vital, critical, ...)
       - keep blood on the ground?
+    - Check LOS behind the horse trough
+    - when shooting empty hex, indicate this is only if a target go in the hex
   - Obstacles
-    - implement walls 
-    - obstacles delay
+    - walls 
+    - doors except saloon
+    - windows
     - check 3 players in the same hex
+    - check when 2 characters move at the same segment, but first one arrives on the same hex as the other before it moves, there's no delay.
   - Commit-reveal for plans (`PhaseCommit`/`PhaseRevaeal` reserved): secret
     simultaneous selection and dice seeded from revealed salts.
-  - More guns and brawling: enable Throw and the brawling cards;
-    other IMPACT TABLE lines (only the Colt's line B is in `impact.gno`);
-    fanfire; aim at hexes and aim transfer; pick guns up from the ground
-    (`State.Ground` is exposed as `ground` in the JSON); line of sight and
-    obstacles for ranges and aim zones; victory points.
-  - With more than one gun, Draw & Cock into the other hand (hand code 1,
-    second gun): lift the "only the gun hand" checks in `engine.Plan.Validate`
-    and `client/src/game/plan.ts`, and add `other_hand` to the sheet's
-    `DROP_HANDS`.
-  - Multi-board layouts (bring back SetupScene/TokenPlacementScene) and more
-    characters per player; victory points.
   - Sounds
     - Add western music
-      - Target screaming
     
 - Event systems
   - allow temparory events like "rob the bank" with rewards from realm funds
