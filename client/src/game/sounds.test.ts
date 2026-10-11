@@ -30,6 +30,14 @@ describe("soundsForEvents", () => {
     expect(groups([ev({ kind: "delay", reason: "sprint", endurance: 1 })])).toEqual([]);
   });
 
+  it("climbs over a fence once per character, after the step", () => {
+    const fence = (p: number) => ev({ p, kind: "delay", reason: "fence", card: 37, n: 1 });
+    const cues = soundsForEvents([ev({ kind: "move" }), fence(0), fence(0), ev({ p: 1, kind: "move" }), fence(1), fence(1)]);
+    expect(cues.map((c) => c.group)).toEqual(["step", "obstacle", "step", "obstacle"]);
+    expect(cues[1].delayMs).toBeGreaterThan(0);
+    expect(groups([ev({ kind: "delay", reason: "occupied" })])).toEqual([]);
+  });
+
   it("plays wounds after the gunshot", () => {
     const [shot, wound] = soundsForEvents([ev({ kind: "shot", hit: "vital" }), ev({ kind: "wound", result: "kill" })]);
     expect(shot.delayMs).toBeLessThan(wound.delayMs);
@@ -54,6 +62,12 @@ describe("soundsForPreview", () => {
     expect(groups(char(), char({ guns: [colt({ location: "gun_hand", jammed: true })] }))).toEqual(["unholster"]);
     expect(groups(char({ guns: [colt({ location: "gun_hand" })] }), char({ guns: [colt({ location: "gun_hand", cocked: true })] }))).toEqual(["cock"]);
     expect(groups(char({ guns: [colt({ location: "both_hands", shells: 5 })] }), char({ guns: [colt({ location: "both_hands" })] }))).toEqual(["reload"]);
+  });
+
+  it("climbs over an obstacle the move crosses", () => {
+    const fenced = (from: string, to: string) => from === "A-E3" && to === "A-E2";
+    expect(soundsForPreview(char({ hex: "A-E3" }), char({ hex: "A-E2" }), fenced).map((c) => c.group)).toEqual(["step", "obstacle"]);
+    expect(soundsForPreview(char({ hex: "A-F3" }), char({ hex: "A-F2" }), fenced).map((c) => c.group)).toEqual(["step"]);
   });
 
   it("leaves shots silent", () => {

@@ -30,6 +30,8 @@ export const SOUND_FILES = {
   // delay1.mp3 reversed (ffmpeg -af "atrim=0:0.29,areverse"): delay going down.
   undelay: ["delay1-reverse.mp3"],
   fall: ["drop1.ogg", "drop2.wav"],
+  // Climbing over a fence or another obstacle.
+  obstacle: ["obstacle1.wav", "obstacle2.wav"],
   wounded: ["serious1.wav", "serious2.ogg"],
   dead: ["dead1.wav", "dead2.wav", "dead3.wav"],
 } as const;
@@ -38,7 +40,7 @@ export type SoundGroup = keyof typeof SOUND_FILES;
 
 /** Volume per group: gunshots stand out, footsteps stay in the background. */
 export const SOUND_VOLUME: Record<SoundGroup, number> = {
-  pickCard: 0.6, unpickCard: 0.6, select: 0.6, step: 0.5, turn: 0.5, unholster: 0.8, cock: 0.8, aim: 0.8, planShoot: 0.8, gunshot: 1, ricochet: 0.8, reload: 0.8, delay: 0.7, undelay: 0.7, fall: 0.8, wounded: 0.9, dead: 0.9,
+  pickCard: 0.6, unpickCard: 0.6, select: 0.6, step: 0.5, turn: 0.5, unholster: 0.8, cock: 0.8, aim: 0.8, planShoot: 0.8, gunshot: 1, ricochet: 0.8, reload: 0.8, delay: 0.7, undelay: 0.7, fall: 0.8, obstacle: 0.8, wounded: 0.9, dead: 0.9,
 };
 
 /** The Phaser audio key of one variant of a group. */
@@ -56,11 +58,17 @@ const COCK_AFTER_DRAW_MS = 350;
 const WOUND_AFTER_SHOT_MS = 350;
 /** A miss ricochets once the bullet has passed the target. */
 const RICOCHET_AFTER_SHOT_MS = 350;
+/** The token reaches the hexside it climbs over halfway through its move. */
+const OBSTACLE_AFTER_MOVE_MS = 200;
+
+/** Delay reasons of crossing an obstacle (a fence, rule 35.2). */
+const OBSTACLE_REASONS = new Set(["fence"]);
 
 /** The sounds of one step's events, in the order they happen. */
 export function soundsForEvents(events: TurnEvent[]): SoundCue[] {
   const cues: SoundCue[] = [];
   const bled = new Set<number>();
+  const climbed = new Set<number>();
   for (const e of events) {
     switch (e.kind) {
       case "move":
@@ -99,6 +107,11 @@ export function soundsForEvents(events: TurnEvent[]): SoundCue[] {
         cues.push({ group: e.result === "kill" ? "dead" : "wounded", delayMs: WOUND_AFTER_SHOT_MS });
         break;
       case "delay":
+        // Crossing an obstacle draws its delay cards: one sound per character.
+        if (OBSTACLE_REASONS.has(e.reason) && !climbed.has(e.p)) {
+          climbed.add(e.p);
+          cues.push({ group: "obstacle", delayMs: OBSTACLE_AFTER_MOVE_MS });
+        }
         // SERIOUS fatigue cards at the turn start: a groan when they cost
         // endurance, once per character however many cards it draws.
         if (e.reason === "serious" && e.endurance > 0 && !bled.has(e.p)) {
@@ -116,13 +129,16 @@ export function soundsForEvents(events: TurnEvent[]): SoundCue[] {
 
 /**
  * The sounds of a plan step while planning, from the preview before and
- * after it: only what the plan alone decides (moves, turns, going down,
- * drawing, cocking, aiming, loading); shots and penalties wait for the cards
+ * after it: only what the plan alone decides (moves, climbing over an
+ * obstacle, turns, going down, drawing, cocking, aiming, loading); shots and penalties wait for the cards
  * drawn.
  */
-export function soundsForPreview(before: CharView, after: CharView): SoundCue[] {
+export function soundsForPreview(before: CharView, after: CharView, crossesObstacle?: (from: string, to: string) => boolean): SoundCue[] {
   const cues: SoundCue[] = [];
-  if (after.hex !== before.hex) cues.push({ group: "step", delayMs: 0 });
+  if (after.hex !== before.hex) {
+    cues.push({ group: "step", delayMs: 0 });
+    if (crossesObstacle?.(before.hex, after.hex)) cues.push({ group: "obstacle", delayMs: OBSTACLE_AFTER_MOVE_MS });
+  }
   if (after.facing !== before.facing) cues.push({ group: "turn", delayMs: 0 });
   if (after.down && !before.down) cues.push({ group: "fall", delayMs: 0 });
   if (after.aim > before.aim) cues.push({ group: "aim", delayMs: 0 });

@@ -18,6 +18,13 @@ describe("BOARD_A", () => {
     }
   });
 
+  it("knows the corral fence, as the realm's Board.Fenced", () => {
+    expect(BOARD_A.fenced("A-E3", "A-E2")).toBe(true);
+    expect(BOARD_A.fenced("A-E2", "A-E3")).toBe(true);
+    expect(BOARD_A.fenced("A-F3", "A-F2")).toBe(false); // the Upper Gate
+    expect(BOARD_A.fenced("A-F6", "A-F5")).toBe(false);
+  });
+
   it("matches the realm's sample rings", () => {
     expect([0, 1, 2, 3, 4, 5].map((d) => BOARD_A.neighbor("A-F6", d))).toEqual(["A-F5", "A-G6", "A-G7", "A-F7", "A-E7", "A-E6"]);
     expect(BOARD_A.neighbor("A-F12", 3)).toBeNull();

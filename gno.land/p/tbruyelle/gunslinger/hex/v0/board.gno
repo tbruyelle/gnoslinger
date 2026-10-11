@@ -12,7 +12,8 @@ type Board struct {
 	name string
 	ids  []string
 	nbr  [][6]int
-	qr   [][2]int // axial coordinates (q, r) of ids[i], see geom.gno
+	qr    [][2]int // axial coordinates (q, r) of ids[i], see geom.gno
+	fence []uint8  // fenced hexsides of ids[i]: bit d for direction d (rule 35)
 }
 
 // Name returns the board letter, e.g. "A".
@@ -61,6 +62,17 @@ func (b *Board) Neighbors(id string) [6]string {
 		}
 	}
 	return out
+}
+
+// Fenced reports whether a fence or hitching post (rule 35) runs along the
+// hexside of id in direction d, so that moving or staggering across it
+// costs two delay cards.
+func (b *Board) Fenced(id string, d Dir) bool {
+	i := b.Index(id)
+	if i < 0 || !d.Valid() || i >= len(b.fence) {
+		return false
+	}
+	return b.fence[i]&(1<<uint(d)) != 0
 }
 
 // IDs returns a copy of the sorted hex ids.

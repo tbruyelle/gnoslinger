@@ -86,3 +86,40 @@ func TestBoardANeighbors(t *testing.T) {
 		t.Error("IDs() must return a copy")
 	}
 }
+
+func TestBoardAFences(t *testing.T) {
+	// The corral fence (rule 35): 48 hexsides, each seen from both hexes.
+	n := 0
+	for _, id := range A.IDs() {
+		for d := Dir(0); d < 6; d++ {
+			if !A.Fenced(id, d) {
+				continue
+			}
+			n++
+			nb, ok := A.Neighbor(id, d)
+			if !ok || !A.Fenced(nb, d.Opposite()) {
+				t.Errorf("fence %s %d: not mirrored on %q", id, d, nb)
+			}
+		}
+	}
+	if n != 2*48 {
+		t.Errorf("fenced hexside ends = %d, want %d", n, 2*48)
+	}
+	for _, c := range []struct {
+		id   string
+		d    Dir
+		want bool
+	}{
+		{"A-E3", N, true},   // the fence west of the Upper Gate
+		{"A-E2", S, true},   // the same hexside, from outside
+		{"A-F3", N, false},  // through the Upper Gate
+		{"A-F10", S, false}, // through the Lower Gate
+		{"A-B4", NW, true},  // the west side, B4 | A4
+		{"A-F6", N, false},  // the middle of the corral
+		{"A-X1", N, false},  // unknown hex
+	} {
+		if got := A.Fenced(c.id, c.d); got != c.want {
+			t.Errorf("Fenced(%s, %d) = %v, want %v", c.id, c.d, got, c.want)
+		}
+	}
+}

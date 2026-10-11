@@ -102,6 +102,52 @@ func TestSegmentFiveCancels(t *testing.T) {
 	}
 }
 
+func TestFencePenalty(t *testing.T) {
+	// Advancing across the corral fence (35.2): E3 -> E2 draws two delay cards.
+	st := NewState()
+	st.Chars[0] = Character{Hex: "A-E3", Facing: hex.N}
+	st.Chars[1] = Character{Hex: "A-F9", Facing: hex.N}
+	st, evs := resolve(t, st, "1f:ahead", "")
+	d := ofKind(evs, 0, EvDelay)
+	if st.Chars[0].Hex != "A-E2" || len(d) != 2 || d[0].Reason != ReasonFence || d[1].Reason != ReasonFence || d[1].Card != 37 || st.Chars[0].Delay != 2 {
+		t.Errorf("char at %s, delay %d, delays = %v", st.Chars[0].Hex, st.Chars[0].Delay, d)
+	}
+	// Through the Upper Gate (F3 -> F2): no fence, no penalty.
+	st = NewState()
+	st.Chars[0] = Character{Hex: "A-F3", Facing: hex.N}
+	st.Chars[1] = Character{Hex: "A-F9", Facing: hex.N}
+	st, evs = resolve(t, st, "1f:ahead", "")
+	if st.Chars[0].Hex != "A-F2" || len(ofKind(evs, 0, EvDelay)) != 0 {
+		t.Errorf("char at %s, delays = %v", st.Chars[0].Hex, ofKind(evs, 0, EvDelay))
+	}
+	// Crawling across it: the crawl's 2 delay and the fence's two cards.
+	st = NewState()
+	st.Chars[0] = Character{Hex: "A-E3", Facing: hex.N, Down: true}
+	st.Chars[1] = Character{Hex: "A-F9", Facing: hex.N}
+	st, evs = resolve(t, st, "1f:ahead", "")
+	d = ofKind(evs, 0, EvDelay)
+	if len(d) != 3 || d[0].Reason != ReasonCrawl || d[1].Reason != ReasonFence || d[2].Reason != ReasonFence || st.Chars[0].Delay != 4 {
+		t.Errorf("delay %d, delays = %v", st.Chars[0].Delay, d)
+	}
+	// Staggered across it: B4 facing NE, thrown ahead left (N) to B3 over the
+	// fence: card 55 (Ahead Left), card 61 (Same), two fence cards, then the
+	// DROP's three.
+	c := Character{Hex: "A-B4", Facing: hex.NE}
+	shooter := Character{Hex: "A-D5", Facing: hex.NW}
+	seq := Sequence{55, 61, 37}
+	var sevs []Event
+	gained := stagger(hex.A, 0, &c, &shooter, 1, &seq, &sevs)
+	reasons := ""
+	for _, e := range sevs {
+		if e.Kind == EvDelay {
+			reasons += e.Reason + " "
+		}
+	}
+	if c.Hex != "A-B3" || !c.Down || gained != 5 || reasons != "fence fence drop drop drop " {
+		t.Errorf("char %+v, gained %d, delays %q", c, gained, reasons)
+	}
+}
+
 func TestOccupiedHexPenalty(t *testing.T) {
 	st := NewState()
 	st.Chars[0] = Character{Hex: "A-F5", Facing: hex.S}

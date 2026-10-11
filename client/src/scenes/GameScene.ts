@@ -2195,7 +2195,7 @@ export class GameScene extends Phaser.Scene {
     const prev = this.previewPlan;
     this.previewPlan = encoded;
     if (!withSounds || encoded.length <= prev.length || !encoded.startsWith(prev)) return;
-    this.playCues(soundsForPreview(before, this.preview));
+    this.playCues(soundsForPreview(before, this.preview, (from, to) => BOARD_A.fenced(from, to)));
     if (this.preview.aim > before.aim) this.landPlannedAim();
   }
 
