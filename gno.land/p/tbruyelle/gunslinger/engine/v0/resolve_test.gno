@@ -691,7 +691,7 @@ func TestShotStatusAndOutOfZone(t *testing.T) {
 	st.Chars[1].PlayedFoot = true
 	seq := Sequence{2, 1, 1, 61, 61, 1}
 	_, evs := resolveWith(t, st, "5f:shoot:@1", "3b:ahead", &seq)
-	if sh := ofKind(evs, 0, EvShot); len(sh) != 1 || sh[0].Hit != string(SideHit) {
+	if sh := ofKind(evs, 0, EvShot); len(sh) != 1 || sh[0].Hit != string(SideHit) || sh[0].Chart != string(Bullseye) || sh[0].Status != "M" {
 		t.Errorf("shot = %v", sh)
 	}
 	// Down status on top: card 5 lists Down; a SIDE hit on a DOWN target misses.
@@ -701,7 +701,7 @@ func TestShotStatusAndOutOfZone(t *testing.T) {
 	st.Chars[1].Down = true
 	seq = Sequence{5}
 	_, evs = resolveWith(t, st, "5f:shoot:@1", "", &seq)
-	if sh := ofKind(evs, 0, EvShot); len(sh) != 1 || sh[0].Hit != string(Miss) {
+	if sh := ofKind(evs, 0, EvShot); len(sh) != 1 || sh[0].Hit != string(Miss) || sh[0].Chart != string(SideHit) || sh[0].Status != "D" {
 		t.Errorf("shot = %v", sh)
 	}
 	// Out of the aim zone: the shot fires (card drawn, shell spent) but misses

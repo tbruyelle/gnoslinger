@@ -12,7 +12,8 @@ func TestEncodeEventsRoundTrip(t *testing.T) {
 		{Seg: 2, Player: 0, Kind: EvMove, Action: cards.Advance, From: "A-F3", To: "A-F4", Facing: hex.S, Down: false, Step: StepAction},
 		{Seg: 3, Player: 1, Kind: EvDelay, N: 2, Delay: 5, Reason: ReasonStun, Card: 67, Endurance: 2, Step: StepEnd},
 		{Seg: 3, Player: 1, Kind: EvDelay, Reason: ReasonDrop, Card: 97, Result: "lose_aim", Delay: 5},
-		{Seg: 4, Player: 0, Kind: EvShot, Action: cards.Shoot, Card: 34, Target: 1, To: "A-F9", Hit: "BODY", Range: 2, N: 7, Gun: Colt45, GunID: 1, Step: StepShots},
+		{Seg: 4, Player: 0, Kind: EvShot, Action: cards.Shoot, Card: 34, Target: 1, To: "A-F9", Hit: "BODY", Range: 2, N: 7, Gun: Colt45, GunID: 1, Step: StepShots, Chart: "BODY"},
+		{Seg: 5, Player: 0, Kind: EvShot, Action: cards.Shoot, Card: 92, Target: 1, To: "A-D8", Hit: "ARM", Range: 3, N: 3, Gun: Colt45, GunID: 1, Step: StepShots, Chart: "BE", Status: "M"},
 		{Seg: 4, Player: 0, Kind: EvShot, Action: cards.Shoot, Card: 6, Target: -1, To: "A-F6", Hit: string(Miss), Reason: ReasonEmptyHex, Range: 3, N: 1, Gun: Colt45, GunID: 1},
 		{Seg: 5, Player: 1, Kind: EvDraw, Action: cards.DrawAndCock, From: "ground", To: "gun_hand", Gun: Colt45, GunID: 2, N: 3},
 		{Seg: EndOfTurn, Player: 0, Kind: EvCancel, Action: cards.Turn, Reason: ReasonTime},
@@ -32,6 +33,11 @@ func TestEncodeEventsRoundTrip(t *testing.T) {
 	old := DecodeEvents("2|0|move|advance|A-F3|A-F4|3|0|0|0||0||0|0||0||0")
 	if len(old) != 1 || old[0].To != "A-F4" || old[0].Step != 0 {
 		t.Errorf("19-field record: got %+v", old)
+	}
+	// Turns recorded before the chart and Target Status decode without them.
+	old = DecodeEvents("4|0|shot|shoot||A-F9|0|0|7|0||34||0|1|BODY|2|colt45|1|1")
+	if len(old) != 1 || old[0].Hit != "BODY" || old[0].Step != StepShots || old[0].Chart != "" || old[0].Status != "" {
+		t.Errorf("20-field record: got %+v", old)
 	}
 	if DecodeEvents("") != nil || len(DecodeEvents("garbage")) != 0 {
 		t.Error("empty or malformed input should decode to nothing")

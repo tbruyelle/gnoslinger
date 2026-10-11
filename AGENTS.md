@@ -227,7 +227,11 @@ ARM wounds) and range; off the chart is a miss, and so is a
 shot at a target out of the aim zone, which still draws its card and spends
 the shell (11.32, 13.2). Target Status (13.6): Move (foot action played or dropped this turn)
 and Run turn a bullseye into the card's lesser hit and any other hit into a
-miss; Down turns any hit but a bullseye into a miss. A bullseye becomes a
+miss; Down turns any hit but a bullseye into a miss. The shot event keeps
+the chart's hit (`Chart`, `chart` in the JSON) and the letters of the
+entries that changed it (`Status`, `status`: M, R, D; the 21st and 22nd
+encoded fields, older records decode with ""), and the resolution log
+shows "BE → ARM hit (target moved)". A bullseye becomes a
 VITAL hit (the shooter's best choice). The shooter then uncocks, spends a
 shell and loses the aim. **Hits** map through the IMPACT TABLE (`impact.gno`,
 line B from the VASSAL module's table; the rules PDF has none) and apply at
@@ -432,6 +436,8 @@ overlays `state_{down,dead,passed_out}.png` drawn over the tokens, markers. `pyt
 
 ## TODO
 
+- UI
+  - change window size to see how things fit
 - Session keys (`MsgCreateSession`) so Adena signs once per game.
 - Replace the tbruyelle realm to sthing else
 - add a court to inspect games to spot any bug that could have lead to lost
@@ -483,17 +489,6 @@ overlays `state_{down,dead,passed_out}.png` drawn over the tokens, markers. `pyt
     - when gun is exploded: nothing can be done except thrown or drop
     - when player has serious
     - allow enable/disable tooltip
-  - Test other wounds:
-    - Gun hand X
-    - Gun ARM
-    - LEG
-    - Other ARM
-    - Other hand
-    - Serious X
-    - Stagger X
-    - Drop X
-    - Sun X
-    - target status affects the shot
   - players with Serious:
     - leave some blood behind them when moving
     - find a way to show the status on the character token
@@ -506,6 +501,7 @@ overlays `state_{down,dead,passed_out}.png` drawn over the tokens, markers. `pyt
   - Cards
     - make border transparent
     - add drop weapon action cards (show waepon on the ground)
+    - add trow and strength
   - Character sheets
   - Aim/Shoots
     - allow move aim on Aim and Shoot cards (if more than 1, restart aim)

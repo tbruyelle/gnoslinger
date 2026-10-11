@@ -8,7 +8,7 @@ import { userMessage } from "../chain/errors";
 import { GamePoller } from "../chain/poller";
 import { seatOf, shortAddr, type GameView, type TurnResult, type PlayerStatus, type TurnEvent, type GunView, type GroundGunView } from "../chain/types";
 import {
-  describeEvent,
+  describeEvents,
   endOfTurnEvents,
   eventsForSegment,
   snapshotAfterSegment,
@@ -2647,11 +2647,11 @@ export class GameScene extends Phaser.Scene {
           return [`${who}: ${p}`];
         }
       });
-      lines.push(...eventsForSegment(t.events, 0).map((e) => describeEvent(e, names)));
+      lines.push(...describeEvents(eventsForSegment(t.events, 0), names));
       return lines;
     }
-    let lines = eventsForSegment(t.events, pb.seg).map((e) => describeEvent(e, names));
-    if (pb.seg === SEGMENTS) lines.push(...endOfTurnEvents(t.events).map((e) => describeEvent(e, names)));
+    let lines = describeEvents(eventsForSegment(t.events, pb.seg), names);
+    if (pb.seg === SEGMENTS) lines.push(...describeEvents(endOfTurnEvents(t.events), names));
     if (lines.length === 0) lines = ["Nothing happens."];
     if (pb.seg === SEGMENTS && t.cards?.length) lines.push(`Result cards drawn: ${t.cards.join(", ")}`);
     return lines;

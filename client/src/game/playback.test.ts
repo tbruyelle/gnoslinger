@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { END_OF_TURN_SEG, STEP_ACTION, STEP_END, STEP_SHOTS, type GroundGunView, type GunView, type TurnEvent, type TurnResult } from "../chain/types";
-import { describeEvent, endOfTurnEvents, eventsForSegment, snapshotAfterSegment, splitSteps, startOfTurn, stepBack, stepForward } from "./playback";
+import { describeEvent, describeEvents, endOfTurnEvents, eventsForSegment, snapshotAfterSegment, splitSteps, startOfTurn, stepBack, stepForward } from "./playback";
 
 const ev = (partial: Partial<TurnEvent>): TurnEvent => ({
   seg: 0, p: 0, kind: "move", action: "", from: "", to: "", facing: 0, down: false, n: 0, delay: 0, reason: "", card: 0, result: "", endurance: 0, target: 0, hit: "", range: 0, gun: "", gunId: 0, step: 0, ...partial,
@@ -85,10 +85,8 @@ describe("snapshotAfterSegment", () => {
     expect(ground).toEqual([]);
     expect(describeEvent(pickup[0], ["marshal", "dude"])).toBe("dude picks up the Colt 45 from the ground to the gun hand and cocks it");
     const names = ["marshal", "dude"];
-    expect(describeEvent(evs[2], names)).toBe("marshal shoots dude in A-F12 (card 6, aim time 3, range 1): VITAL hit");
-    expect(describeEvent(ev({ p: 0, kind: "shot", card: 1, target: 1, to: "A-F9", hit: "-", range: 6, n: 3 }), names)).toBe("marshal shoots dude in A-F9 (card 1, aim time 3, range 6): miss");
-    expect(describeEvent(ev({ p: 0, kind: "shot", card: 104, target: 1, to: "A-F9", hit: "-", reason: "misfire" }), names)).toBe("marshal shoots dude in A-F9 (card 104, aim time 0, range 0): misfire");
-    expect(describeEvent(ev({ p: 0, kind: "shot", card: 6, target: -1, to: "A-F6", hit: "-", range: 3, n: 1, reason: "empty_hex" }), names)).toBe("marshal shoots at A-F6 (card 6, aim time 1, range 3): miss (empty hex)");
+    expect(describeEvent(evs[2], names)).toBe("marshal shoots dude in A-F12 (aim time 3, range 1)");
+    expect(describeEvent(ev({ p: 0, kind: "shot", card: 6, target: -1, to: "A-F6", hit: "-", range: 3, n: 1, reason: "empty_hex" }), names)).toBe("marshal shoots at A-F6 (aim time 1, range 3)");
     expect(describeEvent(evs[4], names)).toBe("dude suffers KILL");
     expect(describeEvent(ev({ p: 1, kind: "wound", result: "stun", n: 4 }), names)).toBe("dude suffers STUN 4");
     expect(describeEvent(evs[1], names)).toBe("marshal aims at A-F6: 2 AIM points");
@@ -118,6 +116,47 @@ describe("snapshotAfterSegment", () => {
     expect(describeEvent(ev({ seg: 3, p: 0, kind: "draw", action: "draw_and_cock", from: "gun_hand", to: "both_hands", result: "jammed", gun: "colt45" }), names)).toBe("marshal moves the Colt 45 into both hands (jammed: not cocked)");
     expect(describeEvent(ev({ seg: 3, p: 0, kind: "draw", action: "draw_and_cock", from: "gun_hand", to: "both_hands", gun: "colt45" }), names)).toBe("marshal moves the Colt 45 into both hands and cocks it");
     expect(describeEvent(ev({ seg: 3, p: 0, kind: "load", action: "load", n: 6, result: "unjammed", gun: "colt45" }), names)).toBe("marshal loads a shell in the Colt 45 (6 now): no longer jammed");
+  });
+});
+
+describe("describeEvents", () => {
+  const names = ["marshal", "kid"];
+  const shot = (partial: Partial<TurnEvent>) => ev({ seg: 5, p: 1, kind: "shot", target: 0, to: "A-F4", n: 2, range: 5, ...partial });
+  const malf = (card: number, result: string) => ev({ seg: 5, p: 1, kind: "malfunction", card, result, gun: "colt45", gunId: 1 });
+  const log = (events: TurnEvent[]) => describeEvents(events, names);
+
+  it("shows a hit lowered by the Target Status", () => {
+    expect(log([shot({ card: 92, hit: "ARM", chart: "BE", status: "M", n: 3, range: 3 })])[1]).toBe("    card 92: FIRE, BE → ARM hit (target moved)");
+    expect(log([shot({ card: 2, hit: "-", chart: "BE", status: "MR", n: 8, range: 1 })])[1]).toBe("    card 2: FIRE, BE → miss (target moved, ran)");
+  });
+
+  it("lists the cards a shot drew under it, in the order drawn", () => {
+    expect(log([shot({ card: 40, hit: "BODY", n: 5, range: 3 })])).toEqual(["kid shoots marshal in A-F4 (aim time 5, range 3)", "    card 40: FIRE, BODY hit"]);
+    expect(log([shot({ card: 9, hit: "-", reason: "out_of_zone", to: "A-H5", n: 1, range: 4 }), malf(101, "no_effect")])).toEqual([
+      "kid shoots marshal in A-H5 (aim time 1, range 4)",
+      "    card 101: MALFUNCTION, no effect: discarded, draws again",
+      "    card 9: FIRE, miss (out of the aim zone)",
+    ]);
+    expect(log([shot({ card: 105, hit: "-", reason: "misfire" }), malf(101, "no_effect"), malf(105, "misfire"), malf(87, "no_penalty")])).toEqual([
+      "kid shoots marshal in A-F4 (aim time 2, range 5)",
+      "    card 101: MALFUNCTION, no effect: discarded, draws again",
+      "    card 105: MALFUNCTION, misfire: the shot is cancelled, draws for the gun",
+      "    card 87: FIRE, the gun is fine",
+    ]);
+    expect(log([shot({ card: 108, hit: "-", reason: "misfire" }), malf(108, "misfire"), malf(104, "jams")])).toEqual([
+      "kid shoots marshal in A-F4 (aim time 2, range 5)",
+      "    card 108: MALFUNCTION, misfire: the shot is cancelled, draws for the gun",
+      "    card 104: MALFUNCTION, the gun jams",
+    ]);
+  });
+
+  it("reads turns logged with the MALFUNCTION cards before the shot the same way", () => {
+    expect(log([malf(101, "no_effect"), shot({ card: 9, hit: "-" }), ev({ seg: 5, p: 0, kind: "aim", to: "A-D6", target: -1, n: 2 })])).toEqual([
+      "kid shoots marshal in A-F4 (aim time 2, range 5)",
+      "    card 101: MALFUNCTION, no effect: discarded, draws again",
+      "    card 9: FIRE, miss",
+      "marshal aims at A-D6: 2 AIM points",
+    ]);
   });
 });
 

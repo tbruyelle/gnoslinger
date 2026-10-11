@@ -96,6 +96,10 @@ export interface TurnEvent {
    * 0 outside the segments and for turns recorded before steps existed.
    */
   step: number;
+  /** A shot's preliminary hit read on the FIRE card's chart, before Target Status ("" when no chart was read). */
+  chart?: string;
+  /** Target Status letters that changed a shot's hit (M move, R run, D down, H head), "" when none did. */
+  status?: string;
 }
 
 /** Steps of a segment (engine StepShots, StepEnd, StepAction). */

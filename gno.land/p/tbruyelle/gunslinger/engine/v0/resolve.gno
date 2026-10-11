@@ -107,6 +107,8 @@ type Event struct {
 	Gun       GunType // the gun's model, for gun events
 	GunID     int     // the gun's id, for gun events
 	Step      int     // which part of the segment it belongs to (StepShots, StepEnd, StepAction+seat), 0 outside the segments
+	Chart     string  // a shot's preliminary hit read on the FIRE card's chart, before Target Status ("" when no chart was read)
+	Status    string  // the Target Status letters (StatusMove...) that changed a shot's hit, "" when none did
 }
 
 // Steps of a segment, in the order they resolve: the shots (7.52), each
@@ -518,7 +520,9 @@ func shoot(board *hex.Board, p int, c *Character, target int, t *Character, a Ac
 	case !onTarget:
 		ev.Reason = ReasonEmptyHex
 	default:
-		hit = targetStatus(card, card.Fire.Lookup(aim, rng), t)
+		prelim := card.Fire.Lookup(aim, rng)
+		ev.Chart = string(prelim)
+		hit, ev.Status = targetStatus(card, prelim, t)
 		if hit == Bullseye { // the shooter picks the location (13.7): the deadliest
 			hit = VitalHit
 		}
@@ -543,11 +547,13 @@ func shoot(board *hex.Board, p int, c *Character, target int, t *Character, a Ac
 // targetStatus applies the card's Target Status entries to a preliminary
 // hit (13.6): for Move and Run, a bullseye becomes the card's lesser hit
 // and any other hit a miss; for Down, any hit but a bullseye misses. Head
-// counters are not played.
-func targetStatus(card ResultCard, hit HitLoc, t *Character) HitLoc {
+// counters are not played. It also returns the letters of the entries
+// that changed the hit.
+func targetStatus(card ResultCard, hit HitLoc, t *Character) (HitLoc, string) {
 	if hit == Miss {
-		return Miss
+		return Miss, ""
 	}
+	applied := ""
 	lesser := card.Fire.Lesser()
 	listed := func(s byte) bool { return strings.IndexByte(card.Status, s) >= 0 }
 	for _, s := range []struct {
@@ -557,15 +563,16 @@ func targetStatus(card ResultCard, hit HitLoc, t *Character) HitLoc {
 		if !listed(s.letter) || !s.on {
 			continue
 		}
+		applied += string(s.letter)
 		if hit != Bullseye {
-			return Miss
+			return Miss, applied
 		}
 		hit = lesser
 	}
 	if listed(StatusDown) && t.Down && hit != Bullseye {
-		return Miss
+		return Miss, applied + string(StatusDown)
 	}
-	return hit
+	return hit, applied
 }
 
 // applyPenalties inflicts the results of a hit on seat p (14.11, 14.12),

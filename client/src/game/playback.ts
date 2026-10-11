@@ -176,6 +176,51 @@ export function endOfTurnEvents(events: TurnEvent[]): TurnEvent[] {
 const DIRS = ["N", "NE", "SE", "S", "SW", "NW"];
 const GUN_NAMES: Record<string, string> = { colt45: "Colt 45" };
 
+/** What a shot's miss is put down to. */
+const MISS_REASONS: Record<string, string> = { out_of_zone: "out of the aim zone", empty_hex: "empty hex" };
+
+/** What a MALFUNCTION card drawn for a shot did, by its result. */
+const MALFUNCTION_LINES: Record<string, string> = {
+  no_effect: "MALFUNCTION, no effect: discarded, draws again",
+  misfire: "MALFUNCTION, misfire: the shot is cancelled, draws for the gun",
+  no_penalty: "FIRE, the gun is fine", // the draw after a misfire was a FIRE card (13.32)
+  jams: "MALFUNCTION, the gun jams",
+  explodes: "MALFUNCTION, the gun explodes",
+};
+
+const CARD_INDENT = "    ";
+
+/**
+ * The log lines of events: one per event, except that a shot is followed
+ * by the cards it drew, one indented line each in the order drawn (its
+ * MALFUNCTION cards, then the FIRE card read for the hit unless it
+ * misfired), and those MALFUNCTION events get no line of their own.
+ */
+export function describeEvents(events: TurnEvent[], names: string[]): string[] {
+  const shooters = new Set(events.filter((e) => e.kind === "shot").map((e) => e.p));
+  const lines: string[] = [];
+  for (const e of events) {
+    if (e.kind === "malfunction" && shooters.has(e.p)) continue;
+    lines.push(describeEvent(e, names));
+    if (e.kind !== "shot") continue;
+    for (const m of events) {
+      if (m.kind === "malfunction" && m.p === e.p) lines.push(`${CARD_INDENT}card ${m.card}: ${MALFUNCTION_LINES[m.result] ?? `MALFUNCTION, ${m.result.replace(/_/g, " ")}`}`);
+    }
+    if (e.reason === "misfire") continue;
+    let outcome = e.hit === "-" ? "miss" + (e.reason ? ` (${MISS_REASONS[e.reason] ?? e.reason.replace(/_/g, " ")})` : "") : `${e.hit} hit`;
+    if (e.status) outcome = `${e.chart} → ${outcome} (target ${targetStatusNames(e.status)})`;
+    lines.push(`${CARD_INDENT}card ${e.card}: FIRE, ${outcome}`);
+  }
+  return lines;
+}
+
+/** Target Status letters, as they read in the log (13.61-13.64). */
+const TARGET_STATUS: Record<string, string> = { M: "moved", R: "ran", D: "down", H: "head" };
+
+function targetStatusNames(letters: string): string {
+  return [...letters].map((l) => TARGET_STATUS[l] ?? l).join(", ");
+}
+
 /** A one-line description of an event; names are indexed by seat. */
 export function describeEvent(e: TurnEvent, names: string[]): string {
   const who = names[e.p] ?? `seat ${e.p}`;
@@ -207,11 +252,9 @@ export function describeEvent(e: TurnEvent, names: string[]): string {
     case "nothing":
       return `${who} does nothing (${action})`;
     case "shot": {
+      // The cards it drew follow on their own lines (describeEvents).
       const at = e.target >= 0 ? `${names[e.target] ?? `seat ${e.target}`} in ${e.to}` : `at ${e.to}`;
-      const head = `${who} shoots ${at} (card ${e.card}, aim time ${e.n}, range ${e.range}): `;
-      if (e.reason === "misfire") return head + "misfire";
-      if (e.hit === "-") return head + "miss" + (e.reason ? ` (${e.reason.replace(/_/g, " ")})` : "");
-      return head + `${e.hit} hit`;
+      return `${who} shoots ${at} (aim time ${e.n}, range ${e.range})`;
     }
     case "malfunction":
       return `${who} draws card ${e.card}: MALFUNCTION, ${e.result.replace(/_/g, " ")}`;
