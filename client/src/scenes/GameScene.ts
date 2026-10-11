@@ -91,6 +91,8 @@ const STEP_MOVE_MS = 450;
 const STEP_SHOT_MS = 250;
 /** The pause between segments in auto play. */
 const AUTO_GAP_MS = 450;
+/** How long a second click on Send plan confirms passing with an empty plan. */
+const PASS_CONFIRM_MS = 5000;
 /** The tracer a bullet leaves behind it. */
 const SHOT_LINE_COLOR = 0xffffff;
 
@@ -594,6 +596,8 @@ export class GameScene extends Phaser.Scene {
   private cardHighlights: Phaser.GameObjects.Rectangle[] = [];
   private selectedDisplay!: Phaser.GameObjects.Text;
   private sendBtn!: Phaser.GameObjects.Text;
+  /** When Send plan last warned about an empty plan: a second click within PASS_CONFIRM_MS passes. */
+  private passWarnedAt = 0;
   /** Full-size copy of the hovered card, drawn over it. */
   private cardPreview: Phaser.GameObjects.Image | null = null;
   /** Set by a click on a card; cleared once the pointer leaves the card panel. */
@@ -2182,6 +2186,13 @@ export class GameScene extends Phaser.Scene {
       showToast(this, problem, "error");
       return;
     }
+    // An empty plan passes the turn: warn first, unless there is nothing to play.
+    if (plan.length === 0 && this.budget() > 0 && Date.now() - this.passWarnedAt > PASS_CONFIRM_MS) {
+      this.passWarnedAt = Date.now();
+      showToast(this, "No action selected: click Send plan again to pass this turn", "info", PASS_CONFIRM_MS, { key: "pass-warning" });
+      return;
+    }
+    this.passWarnedAt = 0;
     this.mode = "submitting";
     this.refreshPanels();
     this.refreshHUD();
