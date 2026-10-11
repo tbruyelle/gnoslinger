@@ -22,6 +22,8 @@ interface BoardData {
   fences?: string[][];
   /** Obstacle hexes (rule 36). */
   obstacles?: string[];
+  /** Outlines of the hexes that are not regular (the halves of a split hex), in board pixels. */
+  shapes?: Record<string, number[][]>;
 }
 
 /**
@@ -38,6 +40,9 @@ export class BoardMap {
   private readonly neighbors: Record<string, (string | null)[]>;
   private readonly fenceSet: Set<string>;
   private readonly obstacleSet: Set<string>;
+  private readonly shapes: Record<string, number[][]>;
+  /** Centre-to-corner radius of a regular hex, in board pixels. */
+  readonly hexRadius: number;
 
   constructor(d: BoardData) {
     this.key = d.key;
@@ -47,6 +52,32 @@ export class BoardMap {
     this.neighbors = d.neighbors;
     this.fenceSet = new Set((d.fences ?? []).flatMap(([a, b]) => [`${a}|${b}`, `${b}|${a}`]));
     this.obstacleSet = new Set(d.obstacles ?? []);
+    this.shapes = d.shapes ?? {};
+    // Hexes of a column sit √3·R apart: R from the median spacing.
+    const gaps = Object.entries(this.neighbors)
+      .filter(([id, ns]) => ns[3] && !this.shapes[id] && !this.shapes[ns[3]])
+      .map(([id, ns]) => this.hexes[ns[3] as string].y - this.hexes[id].y)
+      .sort((a, b) => a - b);
+    this.hexRadius = (gaps[Math.floor(gaps.length / 2)] ?? 186) / Math.sqrt(3);
+  }
+
+  /**
+   * The outline of a hex in board pixels: a regular flat-top hexagon around
+   * its centre, or the traced shape of a half-hex (36.2).
+   */
+  outline(id: string): { x: number; y: number }[] {
+    const shape = this.shapes[id];
+    if (shape) return shape.map(([x, y]) => ({ x, y }));
+    const { x, y } = this.hexPos(id);
+    return this.regularOutline(x, y);
+  }
+
+  /** A regular flat-top hexagon around a point, in board pixels. */
+  regularOutline(x: number, y: number): { x: number; y: number }[] {
+    return [0, 60, 120, 180, 240, 300].map((deg) => {
+      const a = (deg * Math.PI) / 180;
+      return { x: x + this.hexRadius * Math.cos(a), y: y + this.hexRadius * Math.sin(a) };
+    });
   }
 
   /** Whether a hex is an obstacle (as the realm's Board.Obstacle). */

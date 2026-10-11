@@ -329,7 +329,10 @@ calls; `testing.SkipHeights(n)` advances block time 5 s per height.
   (`CREATOR_CHAR`/`JOINER_CHAR`); the realm still takes any character key.
 - `GameScene`: renders `committed` state from the chain; card strip builds an
   ordered plan with a live preview (`replayPlan`) and relative-direction hex
-  picks; sides the realm does not play yet (`isEnabled`) are not shown at
+  picks (move choices and the aim zone highlight whole hexes,
+  `GameScene.hexHighlight` over `BoardMap.outline`: a regular hexagon of
+  `hexRadius`, measured from the grid, or the traced outline of a half-hex,
+  `shapes` in `board_A.json`; turn choices use a regular hexagon that way); sides the realm does not play yet (`isEnabled`) are not shown at
   all, sides that cannot be picked right now are greyed out; **Send plan** → `SubmitPlan`; when `lastTurn.turn` changes, the
   resolution log is played back segment by segment (`playback.ts`) from the
   turn's stored starting state, then the state re-syncs. Moving forward, a

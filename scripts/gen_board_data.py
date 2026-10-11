@@ -10,7 +10,8 @@ Outputs (never edit by hand):
       + the obstacle hexes
   client/src/board/board_A.json
       {key, w, h, hexes: {id: {x, y, q, r}}, neighbors: {id: [6 x (id|null)]},
-       fences: [[id, id], ...], obstacles: [id, ...]}
+       fences: [[id, id], ...], obstacles: [id, ...],
+       shapes: {id: [[x, y], ...]}}  (outlines of the hexes that are not regular)
 
 Both files come from the same computation so the client's movement preview
 and the realm's resolution can never disagree on adjacency.
@@ -71,14 +72,23 @@ FENCES = [
 # Half-hexes (rule 36.2): the horse trough fills the top half of I11, an
 # obstacle half-hex named I11*, the bottom half being the empty I11. The
 # VASSAL grid has one point for the whole hex, so the split is added here:
-# the centre of each half (board pixels), the neighbours of each half in
+# the centre and outline of each half (board pixels, traced on board_A.png),
+# the neighbours of each half in
 # the six directions, and the links of the hexes around that now lead to
 # another half than the grid's. The trough's sides carry the labels of
 # its neighbours (H10, I10, J10, H11, I11); a half takes the axial
 # coordinates of the whole hex for aim zones.
 HALF_HEXES = {
-    "A-I11*": {"of": "A-I11", "pos": (1268, 1937), "nbr": ["A-I10", "A-J10", "A-I11", "A-I11", "A-H11", "A-H10"]},
-    "A-I11": {"of": "A-I11", "pos": (1283, 2000), "nbr": ["A-I11*", "A-J10", "A-J11", "A-I12", "A-H11", "A-I11*"]},
+    "A-I11*": {
+        "of": "A-I11", "pos": (1268, 1937),
+        "shape": [(1173, 1954), (1333, 1862), (1357, 1920), (1207, 2010)],
+        "nbr": ["A-I10", "A-J10", "A-I11", "A-I11", "A-H11", "A-H10"],
+    },
+    "A-I11": {
+        "of": "A-I11", "pos": (1283, 2000),
+        "shape": [(1207, 2010), (1357, 1920), (1387, 1954), (1333, 2047), (1227, 2047)],
+        "nbr": ["A-I11*", "A-J10", "A-J11", "A-I12", "A-H11", "A-I11*"],
+    },
 }
 HALF_HEX_LINKS = [  # (hex, direction, half it now leads to)
     ("A-I10", 3, "A-I11*"),
@@ -252,6 +262,7 @@ def write_json(ids, hexes, neighbors, coords):
         "neighbors": {hid: neighbors[hid] for hid in ids},
         "fences": [list(f) for f in FENCES],
         "obstacles": OBSTACLES,
+        "shapes": {hid: [list(p) for p in h["shape"]] for hid, h in HALF_HEXES.items()},
     }
     os.makedirs(os.path.dirname(OUT_JSON), exist_ok=True)
     with open(OUT_JSON, "w") as f:

@@ -41,7 +41,6 @@ const MIN_ZOOM = 1;
 const MAX_ZOOM = 5;
 const ZOOM_FACTOR = 0.12;
 const DRAG_THRESHOLD = 4;
-const HEX_HIGHLIGHT_R = 18;
 const HEX_SPACING = 185; // approximate centre-to-centre distance in board pixels
 const SEGMENTS = 5;
 const GOLD = 0xd4a044;
@@ -91,6 +90,8 @@ const STEP_MOVE_MS = 450;
 const STEP_SHOT_MS = 250;
 /** The pause between segments in auto play. */
 const AUTO_GAP_MS = 450;
+/** How far a hex highlight's corners are pulled in from the hex's own, in screen pixels. */
+const HEX_HIGHLIGHT_INSET = 4;
 /** How long a second click on Send plan confirms passing with an empty plan. */
 const PASS_CONFIRM_MS = 5000;
 /** The tracer a bullet leaves behind it. */
@@ -1713,7 +1714,8 @@ export class GameScene extends Phaser.Scene {
         const pos = hex ? BOARD_A.hexPos(hex) : { x: from.x + Math.cos(a) * HEX_SPACING, y: from.y + Math.sin(a) * HEX_SPACING };
         return { rel, hex, x: pos.x, y: pos.y };
       })
-      .filter((o) => isTurn || o.hex !== null);
+      // Moves: one option per hex (two directions can lead to the same half-hex).
+      .filter((o, i, all) => isTurn || (o.hex !== null && all.findIndex((x) => x.hex === o.hex) === i));
     this.choiceMode = { card, side, choiceType, options };
     this.showChoiceOverlays();
   }
@@ -1721,16 +1723,12 @@ export class GameScene extends Phaser.Scene {
   private showChoiceOverlays() {
     this.clearChoiceOverlays();
     if (!this.choiceMode) return;
-    const { scale } = this.displayTransform();
-    const r = Math.max(12, HEX_HIGHLIGHT_R * scale * 3);
+    const isTurn = this.choiceMode.choiceType === "turn_ahead" || this.choiceMode.choiceType === "turn_back";
     for (const opt of this.choiceMode.options) {
       const { sx, sy } = this.boardToScreen(opt.x, opt.y);
-      const circle = this.add
-        .circle(sx, sy, r, 0x44cc44, 0.35)
-        .setStrokeStyle(2, 0x44cc44, 0.9)
-        .setMask(this.arrMask)
-        .setInteractive({ useHandCursor: true })
-        .setDepth(500);
+      // A move highlights the hex it goes to; a turn, the hex-sized spot that way (always six apart).
+      const outline = opt.hex && !isTurn ? BOARD_A.outline(opt.hex) : BOARD_A.regularOutline(opt.x, opt.y);
+      const circle = this.hexHighlight(outline, sx, sy, 0x44cc44, 0.35, 0x44cc44);
       const label = this.add
         .text(sx, sy, opt.rel.replace(/_/g, "\n"), { fontSize: "10px", color: "#fff", align: "center" })
         .setOrigin(0.5)
@@ -1739,6 +1737,31 @@ export class GameScene extends Phaser.Scene {
       circle.on("pointerup", () => this.resolveChoice(opt.rel));
       this.choiceOverlays.push(circle, label);
     }
+  }
+
+  /**
+   * A hex to pick: its outline (board pixels) filled and stroked, around
+   * the screen point (sx, sy), clickable inside the outline only; it lights
+   * up while the pointer is over it.
+   */
+  private hexHighlight(outline: { x: number; y: number }[], sx: number, sy: number, fill: number, alpha: number, stroke: number): Phaser.GameObjects.Polygon {
+    // Pulled in a few pixels towards the centre, so the grid lines show between highlights.
+    const points = outline.map((p) => {
+      const s = this.boardToScreen(p.x, p.y);
+      const v = new Phaser.Math.Vector2(s.sx - sx, s.sy - sy);
+      return v.setLength(Math.max(0, v.length() - HEX_HIGHLIGHT_INSET));
+    });
+    const hex = this.add
+      .polygon(sx, sy, points, fill, alpha)
+      .setOrigin(0)
+      .setStrokeStyle(2, stroke, 0.9)
+      .setMask(this.arrMask)
+      .setInteractive({ hitArea: new Phaser.Geom.Polygon(points), hitAreaCallback: Phaser.Geom.Polygon.Contains, useHandCursor: true })
+      .setDepth(500);
+    // Above its neighbours while hovered, so its whole outline shows (labels stay above at 501).
+    hex.on("pointerover", () => hex.setFillStyle(fill, Math.min(1, alpha * 2)).setStrokeStyle(4, 0xffffff, 1).setDepth(500.5));
+    hex.on("pointerout", () => hex.setFillStyle(fill, alpha).setStrokeStyle(2, stroke, 0.9).setDepth(500));
+    return hex;
   }
 
   private clearChoiceOverlays() {
@@ -1768,8 +1791,7 @@ export class GameScene extends Phaser.Scene {
     const chars = this.displayChars();
     const me = this.myIndex >= 0 ? chars[this.myIndex] : null;
     if (!me) return;
-    const { scale } = this.displayTransform();
-    const r = Math.max(12, HEX_HIGHLIGHT_R * scale * 3);
+    const r = (BOARD_A.hexRadius * this.displayTransform().scale * Math.sqrt(3)) / 2; // centre to side
     const objects: Phaser.GameObjects.GameObject[] = [];
     // When shooting, the chance of hitting each hex.
     const shooting = this.pendingOpts.get(card) === "shoot";
@@ -1780,12 +1802,7 @@ export class GameScene extends Phaser.Scene {
     for (const hex of BOARD_A.aimZone(me.hex, me.facing)) {
       const { sx, sy } = this.hexToScreen(hex);
       const odds = shooting ? shotOdds(me, cardAimTime, hex, markersHex, BOARD_A) : null;
-      const circle = this.add
-        .circle(sx, sy, r, 0xb01010, 0.3)
-        .setStrokeStyle(2, 0xff6040, 0.9)
-        .setMask(this.arrMask)
-        .setInteractive({ useHandCursor: true })
-        .setDepth(500);
+      const circle = this.hexHighlight(BOARD_A.outline(hex), sx, sy, 0xb01010, 0.3, 0xff6040);
       // The chance shows on the hovered hex only.
       const labels: Phaser.GameObjects.Text[] = [];
       if (odds) {
@@ -1809,7 +1826,6 @@ export class GameScene extends Phaser.Scene {
       }
       let detail: Phaser.GameObjects.Text | null = null;
       circle.on("pointerover", () => {
-        circle.setFillStyle(0xb01010, 0.6);
         this.showAimLine(this.gunCentre(this.myIndex), { x: sx, y: sy }); // where the aim would go
         for (const l of labels) l.setVisible(true);
         if (!odds) return;
@@ -1826,7 +1842,6 @@ export class GameScene extends Phaser.Scene {
         objects.push(detail);
       });
       circle.on("pointerout", () => {
-        circle.setFillStyle(0xb01010, 0.3);
         this.hideAimLine();
         for (const l of labels) l.setVisible(false);
         detail?.destroy();

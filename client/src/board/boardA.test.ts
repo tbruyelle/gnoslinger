@@ -35,6 +35,17 @@ describe("BOARD_A", () => {
     expect(BOARD_A.crossesObstacle("A-E3", "A-E2")).toBe(true); // the fence
   });
 
+  it("outlines regular hexes and the traced half-hexes", () => {
+    expect(BOARD_A.hexRadius).toBeGreaterThan(100);
+    expect(BOARD_A.hexRadius).toBeLessThan(115);
+    const f6 = BOARD_A.outline("A-F6");
+    const c = BOARD_A.hexPos("A-F6");
+    expect(f6).toHaveLength(6);
+    for (const p of f6) expect(Math.hypot(p.x - c.x, p.y - c.y)).toBeCloseTo(BOARD_A.hexRadius);
+    expect(BOARD_A.outline("A-I11*")).toHaveLength(4);
+    expect(BOARD_A.outline("A-I11")).toHaveLength(5);
+  });
+
   it("offers I10, J10 and I11 to an advance from the trough facing NE", () => {
     expect(BOARD_A.relNeighbors("A-I11*", 1, ["ahead_left", "ahead", "ahead_right"]).map((n) => n.hex)).toEqual(["A-I10", "A-J10", "A-I11"]);
   });
