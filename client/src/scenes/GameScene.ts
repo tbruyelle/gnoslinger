@@ -2540,15 +2540,20 @@ export class GameScene extends Phaser.Scene {
   private stepPlayback(delta: 1 | -1) {
     const pb = this.playback;
     if (!pb) return;
+    this.stopAuto(); // a manual step pauses the auto play
     const pos = { index: pb.index, seg: pb.seg };
-    this.stepTo(delta > 0 ? stepForward(pos, pb.turns.length) : stepBack(pos), { stepwise: delta > 0 });
+    const to = delta > 0 ? stepForward(pos, pb.turns.length) : stepBack(pos);
+    if (to) this.stepTo(to, { stepwise: delta > 0 });
+    else this.refreshSequencePanel();
   }
 
   private jumpTurn(delta: 1 | -1) {
     const pb = this.playback;
     if (!pb) return;
     const index = Phaser.Math.Clamp(pb.index + delta, 0, pb.turns.length - 1);
-    if (index !== pb.index) this.stepTo({ index, seg: 0 });
+    if (index === pb.index) return;
+    this.stopAuto();
+    this.stepTo({ index, seg: 0 });
   }
 
   private toggleAuto() {
