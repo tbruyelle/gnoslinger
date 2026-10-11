@@ -477,8 +477,6 @@ overlays `state_{down,dead,passed_out}.png` drawn over the tokens, markers. `pyt
     - chose number of turns (min 10 max 30)
     - move timeout in the same form
 - Showdown
-  - replay: when Preivous and Next are clicked, put pause
-  - add warning when send plan without actions
   - make reaming points more visible
   - add winning/losing burst
   - show tips (or highlight a card with some text)
@@ -489,9 +487,6 @@ overlays `state_{down,dead,passed_out}.png` drawn over the tokens, markers. `pyt
     - when gun is exploded: nothing can be done except thrown or drop
     - when player has serious
     - allow enable/disable tooltip
-  - players with Serious:
-    - leave some blood behind them when moving
-    - find a way to show the status on the character token
   - Add token placement during create/join phase
   - Resolution log
     - improve consistency
@@ -499,9 +494,8 @@ overlays `state_{down,dead,passed_out}.png` drawn over the tokens, markers. `pyt
     - add missing end of turn statements 
     - add start of turn statements like SERIOUS
   - Cards
-    - make border transparent
     - add drop weapon action cards (show waepon on the ground)
-    - add trow and strength
+    - add throw and strength
   - Character sheets
   - Aim/Shoots
     - allow move aim on Aim and Shoot cards (if more than 1, restart aim)
