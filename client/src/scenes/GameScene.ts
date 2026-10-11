@@ -1898,6 +1898,40 @@ export class GameScene extends Phaser.Scene {
    * path with a little gravity, plus a few stains that linger on the board
    * under the tokens before fading.
    */
+  /**
+   * Gun smoke at the muzzle: a random handful of soft grey puffs, blown
+   * out along the shot's direction, drifting up as they swell and fade.
+   */
+  private puffSmoke(at: { sx: number; sy: number }, along: { x: number; y: number }) {
+    if (!this.textures.exists("smoke")) {
+      const g = this.make.graphics({ x: 0, y: 0 }, false);
+      for (let r = 16; r > 0; r -= 2) g.fillStyle(0xffffff, 0.12).fillCircle(16, 16, r);
+      g.generateTexture("smoke", 32, 32);
+      g.destroy();
+    }
+    const d = this.tokenDiameter();
+    const dir = Phaser.Math.RadToDeg(Math.atan2(along.y, along.x)) + Phaser.Math.Between(-15, 15);
+    const size = Math.max(0.4, d / 70);
+    const emitter = this.add
+      .particles(at.sx, at.sy, "smoke", {
+        angle: { min: dir - 40, max: dir + 40 },
+        speed: { min: d * 0.15, max: d * 0.8 },
+        lifespan: { min: 700, max: 1600 },
+        scale: { start: size * Phaser.Math.FloatBetween(0.4, 0.7), end: size * Phaser.Math.FloatBetween(1.4, 2.4) },
+        alpha: { start: Phaser.Math.FloatBetween(0.6, 0.9), end: 0 },
+        rotate: { min: 0, max: 360 },
+        tint: [0xd8d4cc, 0xbdb8ae, 0xa49f96, 0xe8e4dc],
+        gravityY: -d * 0.25,
+        x: { min: -d * 0.05, max: d * 0.05 },
+        y: { min: -d * 0.05, max: d * 0.05 },
+        emitting: false,
+      })
+      .setMask(this.arrMask)
+      .setDepth(36);
+    emitter.explode(Phaser.Math.Between(5, 10));
+    this.time.delayedCall(1800, () => emitter.destroy());
+  }
+
   private spurtBlood(at: { sx: number; sy: number }, along: { x: number; y: number }) {
     if (!this.textures.exists("blood")) {
       const g = this.make.graphics({ x: 0, y: 0 }, false);
@@ -2457,6 +2491,7 @@ export class GameScene extends Phaser.Scene {
         const from = { sx: gun.x, sy: gun.y };
         const angle = Math.random() * Math.PI * 2;
         this.flyTracer(from, this.beyondTheBoard(from, { sx: from.sx + Math.cos(angle), sy: from.sy + Math.sin(angle) }), 20);
+        this.puffSmoke(from, { x: Math.cos(angle), y: Math.sin(angle) });
         this.tokens[e.p]?.kickGun(this.tweens);
         this.cameras.main.shake(120, 0.0025);
         continue;
@@ -2485,6 +2520,7 @@ export class GameScene extends Phaser.Scene {
       const flight = this.flyTracer(from, to, hit ? this.lineDepth({ x: from.sx, y: from.sy }, { x: to.sx, y: to.sy }) : 20);
       const length = Math.hypot(to.sx - from.sx, to.sy - from.sy);
       // The gunshot kicks the gun and shakes the view as the bullet leaves, harder on a hit.
+      if (e.reason !== "misfire") this.puffSmoke(from, { x: to.sx - from.sx, y: to.sy - from.sy });
       this.tokens[e.p]?.kickGun(this.tweens);
       this.cameras.main.shake(hit ? 250 : 120, hit ? 0.006 : 0.0025);
       // "HIT!" or "MISSED!" bursts beside the target as the bullet reaches it; a hit bleeds.
