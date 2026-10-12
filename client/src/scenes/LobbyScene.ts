@@ -36,6 +36,22 @@ const GOLD_STR = "#d4a044";
 const DIM_STR = "#8a7150";
 const DIM_HEX = 0x8a7150;
 const SUBTITLE = "showdowns on the gno.land chain";
+/** Shown under the splash: the cover art and the game are Avalon Hill's. */
+const CREDIT =
+  "Based on GUNSLINGER © 1982 The Avalon Hill Game Company, cover art included. " +
+  "Gnoslinger is a fan project, not affiliated with Avalon Hill or Hasbro.";
+/** Music looping on the splash and in the lobby, loaded on demand. */
+const MUSIC_ENABLED = false; // off for now; flip to play it again
+const MUSIC_KEY = "music_splash";
+const MUSIC_FILE = "sounds/music-splash.mp3";
+const MUSIC_VOLUME = 0.5;
+const MUSIC_FADE_MS = 800;
+/** Splash animation: the intro the first time, then the slow zoom and the dust. */
+const SPLASH_INTRO_MS = 1400;
+const SPLASH_ZOOM = 1.03;
+const SPLASH_ZOOM_MS = 12000;
+const DUST_KEY = "splash_dust";
+const CLOUD_KEY = "splash_cloud";
 
 /** How much a row should stand out: games in progress first, finished ones last. */
 type Tone = "hot" | "normal" | "dim";
@@ -70,6 +86,11 @@ export class LobbyScene extends Phaser.Scene {
   private timeoutIndex = DEFAULT_TIMEOUT_INDEX;
   private refreshTimer: Phaser.Time.TimerEvent | null = null;
   private unsubscribe: (() => void)[] = [];
+  private splashIntroPlayed = false;
+  private shutDown = false;
+  /** Tweens and the mask of the splash, which children.removeAll does not clean up. */
+  private splashFx: { remove(): void }[] = [];
+  private music: Phaser.Sound.WebAudioSound | Phaser.Sound.HTML5AudioSound | Phaser.Sound.NoAudioSound | null = null;
 
   constructor() {
     super({ key: "LobbyScene" });
@@ -87,6 +108,8 @@ export class LobbyScene extends Phaser.Scene {
   }
 
   create() {
+    this.shutDown = false;
+    this.playMusic();
     this.buildAll();
     const onResize = () => this.buildAll();
     this.scale.on("resize", onResize);
@@ -96,6 +119,8 @@ export class LobbyScene extends Phaser.Scene {
       this.refreshTimer?.remove();
       for (const u of this.unsubscribe) u();
       this.unsubscribe = [];
+      this.shutDown = true;
+      this.fadeOutMusic();
     });
     if (this.screen === "lobby") void this.connect();
   }
@@ -229,6 +254,8 @@ export class LobbyScene extends Phaser.Scene {
   // ── Layout ────────────────────────────────────────────────────────────────
 
   private buildAll() {
+    for (const fx of this.splashFx) fx.remove();
+    this.splashFx = [];
     this.children.removeAll(true);
     const w = this.scale.width;
     const h = this.scale.height;
@@ -242,20 +269,153 @@ export class LobbyScene extends Phaser.Scene {
     this.buildBottomBar();
   }
 
+  /**
+   * Plays the music on the splash and in the lobby, fading in once loaded.
+   * Browsers hold audio back until the first click or key press, so on a first
+   * visit it starts then.
+   */
+  private playMusic() {
+    if (!MUSIC_ENABLED || this.music || this.shutDown) return;
+    if (!this.cache.audio.exists(MUSIC_KEY)) {
+      if (!this.load.isLoading()) {
+        this.load.audio(MUSIC_KEY, MUSIC_FILE);
+        this.load.once(`filecomplete-audio-${MUSIC_KEY}`, () => this.playMusic());
+        this.load.start();
+      }
+      return;
+    }
+    const music = this.sound.add(MUSIC_KEY, { loop: true, volume: 0 });
+    this.music = music;
+    music.play();
+    this.tweens.add({ targets: music, volume: MUSIC_VOLUME, duration: MUSIC_FADE_MS });
+  }
+
+  /** Fades the music out when a game opens; the scene's tweens stop with it, so plain timers do it. */
+  private fadeOutMusic() {
+    const music = this.music;
+    if (!music) return;
+    this.music = null;
+    const from = music.volume;
+    const start = performance.now();
+    const step = window.setInterval(() => {
+      const t = Math.min(1, (performance.now() - start) / MUSIC_FADE_MS);
+      music.volume = from * (1 - t);
+      if (t < 1) return;
+      window.clearInterval(step);
+      music.destroy();
+    }, 30);
+  }
+
   private buildSplash() {
     const w = this.scale.width;
     const h = this.scale.height;
     let subtitleY = h * 0.6;
+    const intro = !this.splashIntroPlayed;
+    this.splashIntroPlayed = true;
     if (this.textures.exists("splash")) {
       const img = this.add.image(w / 2, h * 0.42, "splash");
       const scale = Math.min((h * 0.7) / img.height, (w - 40) / img.width);
       img.setScale(scale);
       subtitleY = img.y + (img.height * scale) / 2 + 22;
+      this.animateCover(img, scale, intro);
     } else {
       this.add.text(w / 2, h * 0.4, "GNOSLINGER", { fontSize: "48px", color: GOLD_STR, fontStyle: "bold" }).setOrigin(0.5);
     }
+    const first = this.children.length;
     this.add.text(w / 2, subtitleY + 6, SUBTITLE.toUpperCase(), { fontSize: "24px", color: GOLD_STR, letterSpacing: 6 }).setOrigin(0.5);
     this.makeButton(w / 2, subtitleY + 70, 260, 52, "Connect with Adena", () => this.enter(), "adena_icon");
+    this.add.text(w / 2, h - 14, CREDIT, { fontSize: "12px", color: DIM_STR, align: "center", wordWrap: { width: w - 32 } }).setOrigin(0.5, 1);
+    if (intro) {
+      const rest = this.children.list.slice(first);
+      this.splashFx.push(this.tweens.add({ targets: rest, alpha: { from: 0, to: 1 }, delay: SPLASH_INTRO_MS * 0.7, duration: 600 }));
+    }
+  }
+
+  /** A sand speck and a soft round cloud (radial gradient), white to be tinted. */
+  private makeDustTextures() {
+    if (!this.textures.exists(DUST_KEY)) {
+      const g = this.make.graphics({}, false);
+      g.fillStyle(0xffffff, 0.4).fillCircle(4, 4, 4);
+      g.fillStyle(0xffffff, 1).fillCircle(4, 4, 2);
+      g.generateTexture(DUST_KEY, 8, 8);
+      g.destroy();
+    }
+    if (!this.textures.exists(CLOUD_KEY)) {
+      const size = 64;
+      const tex = this.textures.createCanvas(CLOUD_KEY, size, size)!;
+      const ctx = tex.getContext();
+      const grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+      grad.addColorStop(0, "rgba(255,255,255,1)");
+      grad.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, size, size);
+      tex.refresh();
+    }
+  }
+
+  /**
+   * The cover fades in from black while settling from a slight zoom (first
+   * time only), then keeps zooming slowly in and out, with dust blowing across
+   * the street; both stay inside the cover's frame.
+   */
+  private animateCover(img: Phaser.GameObjects.Image, scale: number, intro: boolean) {
+    const bounds = img.getBounds();
+    const shape = this.make.graphics({}, false);
+    shape.fillStyle(0xffffff).fillRect(bounds.x, bounds.y, bounds.width, bounds.height);
+    const mask = shape.createGeometryMask();
+    img.setMask(mask);
+    this.splashFx.push({ remove: () => { mask.destroy(); shape.destroy(); } });
+
+    this.makeDustTextures();
+    // The street: the lower 45% of the cover; the wind blows from the left,
+    // carrying soft clouds of dust and specks of sand.
+    const street = { min: bounds.y + bounds.height * 0.55, max: bounds.bottom };
+    const clouds = this.add.particles(0, 0, CLOUD_KEY, {
+      x: { min: bounds.x - 120, max: bounds.x },
+      y: street,
+      speedX: { min: 30, max: 70 },
+      speedY: { min: -6, max: 2 },
+      scale: { min: 1.5, max: 4 },
+      alpha: { onEmit: () => 0, onUpdate: (_p, _k, t) => 0.3 * Math.sin(Math.PI * t) },
+      tint: [0xf0d8a8, 0xe0b880],
+      lifespan: { min: 12000, max: 18000 },
+      frequency: 450,
+    });
+    const specks = this.add.particles(0, 0, DUST_KEY, {
+      x: { min: bounds.x - 40, max: bounds.right },
+      y: street,
+      speedX: { min: 60, max: 160 },
+      speedY: { min: -14, max: 4 },
+      scale: { min: 0.5, max: 1.4 },
+      alpha: { onEmit: () => 0, onUpdate: (_p, _k, t) => 0.9 * Math.sin(Math.PI * t) },
+      tint: [0xf8e8c8, 0xe8c48c, 0xffffff],
+      lifespan: { min: 4000, max: 7000 },
+      frequency: 40,
+    });
+    const dust = [clouds, specks];
+    for (const e of dust) {
+      e.setMask(mask);
+      e.fastForward(15000);
+    }
+
+    const zoom = () =>
+      this.tweens.add({ targets: img, scale: scale * SPLASH_ZOOM, duration: SPLASH_ZOOM_MS, ease: "Sine.easeInOut", yoyo: true, repeat: -1 });
+    if (!intro) {
+      this.splashFx.push(zoom());
+      return;
+    }
+    for (const e of dust) e.setAlpha(0);
+    this.splashFx.push(
+      this.tweens.add({
+        targets: img,
+        alpha: { from: 0, to: 1 },
+        scale: { from: scale * 1.08, to: scale },
+        duration: SPLASH_INTRO_MS,
+        ease: "Cubic.easeOut",
+        onComplete: () => this.splashFx.push(zoom()),
+      }),
+      this.tweens.add({ targets: dust, alpha: 1, delay: SPLASH_INTRO_MS * 0.5, duration: 1500 }),
+    );
   }
 
   private buildTopBar() {
