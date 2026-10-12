@@ -6,7 +6,7 @@ export interface ChainConfig {
   chainId: string;
   /** Name shown by Adena when the network is added. */
   chainName: string;
-  /** Package path of the gunslinger realm. */
+  /** Package path of the gnoslinger realm. */
   realmPath: string;
   /** Gas overrides for transactions; undefined lets Adena pick. */
   gasWanted?: number;
@@ -29,7 +29,7 @@ export const CONFIG: ChainConfig = {
   rpcUrl: str(import.meta.env.VITE_RPC_URL, "http://127.0.0.1:26657"),
   chainId: str(import.meta.env.VITE_CHAIN_ID, "dev"),
   chainName: str(import.meta.env.VITE_CHAIN_NAME, "gnodev"),
-  realmPath: str(import.meta.env.VITE_REALM_PATH, "gno.land/r/tbruyelle/gunslinger/v0"),
+  realmPath: str(import.meta.env.VITE_REALM_PATH, "gno.land/r/tbruyelle/gnoslinger/v0"),
   gasWanted: num(import.meta.env.VITE_GAS_WANTED),
   gasFee: num(import.meta.env.VITE_GAS_FEE),
   pollMs: num(import.meta.env.VITE_POLL_MS) ?? 2000,

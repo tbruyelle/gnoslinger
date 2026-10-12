@@ -1,4 +1,4 @@
-/** Mirrors of the realm's JSON views (see gno.land/r/tbruyelle/gunslinger/v0/json.gno). */
+/** Mirrors of the realm's JSON views (see gno.land/r/tbruyelle/gnoslinger/v0/json.gno). */
 
 export type Phase = "waiting" | "planning" | "finished";
 export type PlayerStatus = "alive" | "out" | "killed" | "passed_out";

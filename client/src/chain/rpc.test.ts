@@ -29,7 +29,7 @@ describe("Rpc", () => {
         result: {
           response: {
             ResponseBase: {
-              Error: { "@type": "/abci.StringError", value: "gunslinger: game not found" },
+              Error: { "@type": "/abci.StringError", value: "gnoslinger: game not found" },
               Data: null,
               Log: "--= Error =--\nData: ...",
             },
@@ -38,7 +38,7 @@ describe("Rpc", () => {
       },
     });
     await expect(new Rpc("http://x", fetchFn).qrender("p", "q")).rejects.toThrow(QueryError);
-    await expect(new Rpc("http://x", fetchFn).qrender("p", "q")).rejects.toThrow("gunslinger: game not found");
+    await expect(new Rpc("http://x", fetchFn).qrender("p", "q")).rejects.toThrow("gnoslinger: game not found");
   });
 
   it("reports status and JSON-RPC errors", async () => {
@@ -62,7 +62,7 @@ describe("Rpc", () => {
             ResponseBase:
               p.hash === "ok"
                 ? { Error: null, Data: utf8ToB64('("0000001" string)\n\n'), Log: "msg:0,success:true", Events: [{ type: "GameCreated" }] }
-                : { Error: { value: "gunslinger: you cannot use both sides of a card" }, Data: null, Log: "" },
+                : { Error: { value: "gnoslinger: you cannot use both sides of a card" }, Data: null, Log: "" },
           },
         },
       }),
@@ -74,7 +74,7 @@ describe("Rpc", () => {
     expect(unwrapQevalString(ok!.data!)).toBe("0000001");
     expect(ok?.events).toHaveLength(1);
     const bad = await rpc.tx("bad");
-    expect(bad?.error).toBe("gunslinger: you cannot use both sides of a card");
+    expect(bad?.error).toBe("gnoslinger: you cannot use both sides of a card");
   });
 });
 
@@ -86,8 +86,8 @@ describe("helpers", () => {
   });
 
   it("extracts panic messages from logs", () => {
-    expect(extractPanic('--= Error =--\nData: errors.FmtError{format:"gunslinger: game not found", args:[]}')).toBe(
-      "gunslinger: game not found",
+    expect(extractPanic('--= Error =--\nData: errors.FmtError{format:"gnoslinger: game not found", args:[]}')).toBe(
+      "gnoslinger: game not found",
     );
     expect(extractPanic("Data: something else\nMsg Traces:")).toBe("something else");
     expect(extractPanic("")).toBeUndefined();

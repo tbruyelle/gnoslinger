@@ -3,7 +3,7 @@
 and the web client from assets/hex_grid.json.
 
 Outputs (never edit by hand):
-  gno.land/p/tbruyelle/gunslinger/hex/v0/board_a.gno
+  gno.land/p/tbruyelle/gnoslinger/hex/v0/board_a.gno
       sorted hex ids + 6-neighbour table as indices into that list (-1 = off-board)
       + axial coordinates (q, r) of every hex, for ranges and aim zones
       + the fenced hexsides of every hex, as a bit per direction
@@ -31,7 +31,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 GRID = os.path.join(ROOT, "assets", "hex_grid.json")
-OUT_GNO = os.path.join(ROOT, "gno.land", "p", "tbruyelle", "gunslinger", "hex", "v0", "board_a.gno")
+OUT_GNO = os.path.join(ROOT, "gno.land", "p", "tbruyelle", "gnoslinger", "hex", "v0", "board_a.gno")
 OUT_JSON = os.path.join(ROOT, "client", "src", "board", "board_A.json")
 
 BOARD_KEY = "board_A"

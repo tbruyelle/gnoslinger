@@ -7,7 +7,7 @@ ifdef GNOROOT
 	GNOROOT = $(shell go list -f '{{.Module.Dir}}' github.com/gnolang/gno)
 endif
 
-REALM := gno.land/r/tbruyelle/gunslinger/v0
+REALM := gno.land/r/tbruyelle/gnoslinger/v0
 
 # Adena account addresses to premine on the local chain, space separated:
 #   ADENA_ADDRS="g1... g1..." make gnodev

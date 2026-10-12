@@ -13,7 +13,7 @@ interface Sent<R> {
   watched: R | null;
 }
 
-/** Typed access to the gunslinger realm: reads through Render, writes through Adena. */
+/** Typed access to the gnoslinger realm: reads through Render, writes through Adena. */
 export class RealmClient {
   private busy = false;
 

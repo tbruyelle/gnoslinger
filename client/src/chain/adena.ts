@@ -186,7 +186,7 @@ class AdenaWallet implements Wallet {
 export async function currentAccount(adena: AdenaApi): Promise<string | null> {
   let acc = await adena.GetAccount();
   if (acc.status === "failure" && acc.type === "NOT_CONNECTED") {
-    const est = await adena.AddEstablish("Gunslinger");
+    const est = await adena.AddEstablish("Gnoslinger");
     if (est.status === "failure" && est.type !== "ALREADY_CONNECTED") throw adenaError(est, "locked");
     acc = await adena.GetAccount();
   }
@@ -204,7 +204,7 @@ function shortAddr(addr: string): string {
 /** Connects the site to Adena, switches it to the configured chain and returns the active account. */
 export async function connectWallet(cfg: ChainConfig): Promise<Wallet> {
   const adena = await detectAdena();
-  const est = await adena.AddEstablish("Gunslinger");
+  const est = await adena.AddEstablish("Gnoslinger");
   if (est.status === "failure" && est.type !== "ALREADY_CONNECTED") throw adenaError(est, "locked");
   await ensureNetwork(adena, cfg);
   const address = await currentAccount(adena);

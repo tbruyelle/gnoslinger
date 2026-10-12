@@ -279,7 +279,7 @@ async def download_all(
     """Download all URLs concurrently; return {url: final_path} with corrected exts."""
     semaphore = asyncio.Semaphore(concurrency)
     limits = httpx.Limits(max_keepalive_connections=concurrency, max_connections=concurrency * 2)
-    headers = {"User-Agent": "gunslinger-asset-fetcher/1.0"}
+    headers = {"User-Agent": "gnoslinger-asset-fetcher/1.0"}
     timeout = httpx.Timeout(30.0, connect=10.0)
 
     results: dict[str, Path] = {}

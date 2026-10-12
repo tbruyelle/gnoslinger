@@ -6,7 +6,7 @@ import type { Rpc, TxResult } from "./rpc";
 import { utf8ToB64 } from "./rpc";
 
 const ME = "g1me";
-const PKG = "gno.land/r/x/gunslinger/v0";
+const PKG = "gno.land/r/x/gnoslinger/v0";
 
 function summary(id: string, addr = ME) {
   return { id, rev: 1, phase: "waiting", turn: 1, maxTurns: 10, createdAt: 0, updatedAt: 0, players: [{ addr, char: "marshal" }, { addr: "", char: "" }] };
@@ -54,7 +54,7 @@ describe("RealmClient.send", () => {
 
   it("surfaces a realm panic from the tx result", async () => {
     const rpc = fakeRpc(() => JSON.stringify({ open: [], mine: [] }), {
-      height: 3, error: "gunslinger: you cannot use both sides of a card", log: "", data: null, events: [],
+      height: 3, error: "gnoslinger: you cannot use both sides of a card", log: "", data: null, events: [],
     });
     const wallet = fakeWallet(async () => ({ hash: "x" }));
     const realm = new RealmClient(rpc, wallet, PKG);
@@ -63,7 +63,7 @@ describe("RealmClient.send", () => {
       players: [{ addr: ME, char: "marshal", hex: "A-F1", facing: 3, down: false, delay: 0, status: "alive", submitted: false, playedFoot: false, playedRun: false },
                 { addr: "g1o", char: "dude", hex: "A-F12", facing: 0, down: false, delay: 0, status: "alive", submitted: false, playedFoot: false, playedRun: false }] };
     const rpc2 = fakeRpc((path) => (path.startsWith("json/game/") ? JSON.stringify(game) : "{}"), {
-      height: 3, error: "gunslinger: you cannot use both sides of a card", log: "", data: null, events: [],
+      height: 3, error: "gnoslinger: you cannot use both sides of a card", log: "", data: null, events: [],
     });
     const realm2 = new RealmClient(rpc2, wallet, PKG);
     await expect(realm2.submitPlan("1", "1f:ahead,1b:back")).rejects.toThrow("both sides");

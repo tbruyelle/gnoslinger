@@ -134,7 +134,7 @@ export class Rpc {
 /** Pulls the realm's panic message out of a node log. */
 export function extractPanic(log: string | null | undefined): string | undefined {
   if (!log) return undefined;
-  const m = /(gunslinger: [^\n"]+)/.exec(log);
+  const m = /(gnoslinger: [^\n"]+)/.exec(log);
   if (m) return m[1];
   const data = /^Data: (.+)$/m.exec(log);
   return data ? data[1] : undefined;

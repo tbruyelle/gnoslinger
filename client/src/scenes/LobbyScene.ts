@@ -252,7 +252,7 @@ export class LobbyScene extends Phaser.Scene {
       img.setScale(scale);
       subtitleY = img.y + (img.height * scale) / 2 + 22;
     } else {
-      this.add.text(w / 2, h * 0.4, "GUNSLINGER", { fontSize: "48px", color: GOLD_STR, fontStyle: "bold" }).setOrigin(0.5);
+      this.add.text(w / 2, h * 0.4, "GNOSLINGER", { fontSize: "48px", color: GOLD_STR, fontStyle: "bold" }).setOrigin(0.5);
     }
     this.add.text(w / 2, subtitleY + 6, SUBTITLE.toUpperCase(), { fontSize: "24px", color: GOLD_STR, letterSpacing: 6 }).setOrigin(0.5);
     this.makeButton(w / 2, subtitleY + 70, 260, 52, "Connect with Adena", () => this.enter(), "adena_icon");
@@ -261,7 +261,7 @@ export class LobbyScene extends Phaser.Scene {
   private buildTopBar() {
     const w = this.scale.width;
     this.add.rectangle(0, 0, w, TOPBAR_H, 0x0f0804).setOrigin(0);
-    this.add.text(16, TOPBAR_H / 2, "GUNSLINGER", { fontSize: "24px", color: GOLD_STR, fontStyle: "bold" }).setOrigin(0, 0.5);
+    this.add.text(16, TOPBAR_H / 2, "GNOSLINGER", { fontSize: "24px", color: GOLD_STR, fontStyle: "bold" }).setOrigin(0, 0.5);
     this.add
       .text(170, TOPBAR_H / 2, SUBTITLE, { fontSize: "13px", color: DIM_STR })
       .setOrigin(0, 0.5);

@@ -5,7 +5,7 @@ this file.
 
 ## Project Goal
 
-A digital version of the 1982 Avalon Hill board game **Gunslinger** (tactical
+**Gnoslinger** is a digital version of the 1982 Avalon Hill board game **Gunslinger** (tactical
 Old West gunfight: hex movement, 5-segment action-point turns, action cards).
 The game runs **on the gno.land chain**: a Gno realm holds every game and
 resolves the turns; a Phaser web app is the interface and signs its
@@ -20,7 +20,7 @@ multi-board layouts and victory points come later.
 
 ## Tech Stack
 
-- **Realm**: Gno (`gno.land/{p,r}/tbruyelle/gunslinger/...`), pinned gno
+- **Realm**: Gno (`gno.land/{p,r}/tbruyelle/gnoslinger/...`), pinned gno
   toolchain through `go.mod` + `go tool` (like `~/src/aibgno`).
 - **Client**: TypeScript + Phaser 3 + Vite (port 5173), tests with vitest,
   wallet through the injected `window.adena` API.
@@ -51,21 +51,21 @@ standalone binary: `go.mod` pins the gno commit the realm is written against.
 
 Run one Gno package or test:
 ```bash
-go tool gno test -v ./gno.land/p/tbruyelle/gunslinger/engine/v0
-go tool gno test -run TestResolve_Seg5Cancel ./gno.land/p/tbruyelle/gunslinger/engine/v0
+go tool gno test -v ./gno.land/p/tbruyelle/gnoslinger/engine/v0
+go tool gno test -run TestResolve_Seg5Cancel ./gno.land/p/tbruyelle/gnoslinger/engine/v0
 # a filetest needs its full path in -run:
-go tool gno test -run ./gno.land/r/tbruyelle/gunslinger/v0/filetests/z2_ ./gno.land/r/tbruyelle/gunslinger/v0/
-go tool gno test -update-golden-tests ./gno.land/r/tbruyelle/gunslinger/v0/   # refresh // Output: and // Events:
+go tool gno test -run ./gno.land/r/tbruyelle/gnoslinger/v0/filetests/z2_ ./gno.land/r/tbruyelle/gnoslinger/v0/
+go tool gno test -update-golden-tests ./gno.land/r/tbruyelle/gnoslinger/v0/   # refresh // Output: and // Events:
 ```
 
 ## Layout
 
 ```
 gno.land/
-  p/tbruyelle/gunslinger/hex/v0      directions, relative directions, Board adjacency + axial coords + fenced hexsides + obstacles, range, aim zone (board_a.gno is generated)
-  p/tbruyelle/gunslinger/cards/v0    the 12 action cards (24 sides), Enabled() = implemented actions
-  p/tbruyelle/gunslinger/engine/v0   pure rules engine: plan DSL + validation, Resolve, EndTurn, result deck (deck.gno, fire.gno), impact table
-  r/tbruyelle/gunslinger/v0          the realm: games, lobby, SubmitPlan, JSON views, Render, filetests/
+  p/tbruyelle/gnoslinger/hex/v0      directions, relative directions, Board adjacency + axial coords + fenced hexsides + obstacles, range, aim zone (board_a.gno is generated)
+  p/tbruyelle/gnoslinger/cards/v0    the 12 action cards (24 sides), Enabled() = implemented actions
+  p/tbruyelle/gnoslinger/engine/v0   pure rules engine: plan DSL + validation, Resolve, EndTurn, result deck (deck.gno, fire.gno), impact table
+  r/tbruyelle/gnoslinger/v0          the realm: games, lobby, SubmitPlan, JSON views, Render, filetests/
 client/src/
   chain/      rpc.ts (abci_query/status/tx), adena.ts (wallet), realm.ts (typed calls), poller.ts, types.ts
   rules/      cards.ts, facing.ts (pure card data + facing math, mirrors the Gno packages)
@@ -122,7 +122,7 @@ their cards) add a few hundred bytes. A 20-turn game is roughly 40–55 KB
 | `Resign(cur, id)` | forfeit |
 | `ClaimTimeout(cur, id)` | anyone, after the game's timeout without progress (`time.Now()`, lazy: no timers on chain); waiting → `expired`, one plan in → `timeout` (other forfeits), none → `abandoned` |
 
-Errors are panics prefixed `gunslinger: `; the client extracts them from the
+Errors are panics prefixed `gnoslinger: `; the client extracts them from the
 tx result log. Events: `GameCreated`, `PlayerJoined`, `PlanSubmitted`,
 `PlanPassed`, `TurnResolved`, `GameEnded` (informational; there is no event subscription on
 the RPC, clients poll).
@@ -405,8 +405,8 @@ calls; `testing.SkipHeights(n)` advances block time 5 s per height.
    (facing S) and The Kid at A-F9 (facing N).
 3. Each account picks cards and sends its plan; the second submission
    resolves the turn, both tabs replay it, positions match
-   `go tool gnokey query vm/qrender -remote 127.0.0.1:26657 -data 'gno.land/r/tbruyelle/gunslinger/v0:json/game/0000001'`.
-4. CLI alternative: `go tool gnokey maketx call -pkgpath gno.land/r/tbruyelle/gunslinger/v0 -func SubmitPlan -args 0000001 -args "1f:ahead" -gas-fee 1000000ugnot -gas-wanted 20000000 -broadcast -chainid dev -remote 127.0.0.1:26657 <key>`.
+   `go tool gnokey query vm/qrender -remote 127.0.0.1:26657 -data 'gno.land/r/tbruyelle/gnoslinger/v0:json/game/0000001'`.
+4. CLI alternative: `go tool gnokey maketx call -pkgpath gno.land/r/tbruyelle/gnoslinger/v0 -func SubmitPlan -args 0000001 -args "1f:ahead" -gas-fee 1000000ugnot -gas-wanted 20000000 -broadcast -chainid dev -remote 127.0.0.1:26657 <key>`.
 
 ## Game Rules (quick reference)
 

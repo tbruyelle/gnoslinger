@@ -1,7 +1,7 @@
 /**
  * The 12 physical action cards, each with a front and a back action (24
  * actions). A player cannot use both sides of the same card in one turn.
- * Mirrors gno.land/p/tbruyelle/gunslinger/cards/v0.
+ * Mirrors gno.land/p/tbruyelle/gnoslinger/cards/v0.
  */
 
 /** Physical card numbers (1–12). */
