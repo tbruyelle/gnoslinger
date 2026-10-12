@@ -52,6 +52,8 @@ const SPLASH_ZOOM = 1.03;
 const SPLASH_ZOOM_MS = 12000;
 const DUST_KEY = "splash_dust";
 const CLOUD_KEY = "splash_cloud";
+/** The muzzle of the gunman's Colt in splash_screen.jpg (1200x1646), as fractions of the cover, and how high its smoke rises. */
+const MUZZLE = { x: 446 / 1200, y: 744 / 1646, rise: 180 / 1646 };
 
 /** How much a row should stand out: games in progress first, finished ones last. */
 type Tone = "hot" | "normal" | "dim";
@@ -331,6 +333,30 @@ export class LobbyScene extends Phaser.Scene {
     }
   }
 
+  /**
+   * Smoke curling up from the gunman's muzzle to the porch roof, over the
+   * painted smoke: wisps that grow, sway and fade, sized to the cover.
+   */
+  private gunSmoke(bounds: Phaser.Geom.Rectangle) {
+    const k = bounds.height / 1646; // cover pixels -> screen pixels
+    const lifespan = 3600;
+    const rise = (MUZZLE.rise * bounds.height) / (lifespan / 1000);
+    const drift = new DustDrift({ value: 1 }, 40);
+    const smoke = this.add.particles(bounds.x + MUZZLE.x * bounds.width, bounds.y + MUZZLE.y * bounds.height, CLOUD_KEY, {
+      x: { min: -4 * k, max: 4 * k },
+      speedX: { min: -14 * k, max: 6 * k },
+      speedY: { min: -rise * 1.15, max: -rise * 0.85 },
+      scale: { start: (14 * k) / 70, end: (55 * k) / 70 },
+      alpha: { onEmit: () => 0, onUpdate: (_p, _k, t) => 0.6 * (t < 0.15 ? t / 0.15 : (1 - t) / 0.85) },
+      rotate: { onEmit: (p) => drift.start(p!), onUpdate: (p) => drift.angle(p) },
+      tint: [0xece8e0, 0xdcd8d0],
+      lifespan: { min: lifespan * 0.85, max: lifespan * 1.15 },
+      frequency: 260,
+    });
+    smoke.addParticleProcessor(drift);
+    return smoke;
+  }
+
   /** A sand grain and a lumpy cloud of dust, white to be tinted; both irregular so their spin shows. */
   private makeDustTextures() {
     if (!this.textures.exists(DUST_KEY)) {
@@ -401,7 +427,8 @@ export class LobbyScene extends Phaser.Scene {
     });
     clouds.addParticleProcessor(cloudDrift);
     specks.addParticleProcessor(speckDrift);
-    const dust = [clouds, specks];
+    const smoke = this.gunSmoke(bounds);
+    const dust = [clouds, specks, smoke];
     // Gusts: now and then the wind picks up or dies down.
     this.splashFx.push(
       this.time.addEvent({
