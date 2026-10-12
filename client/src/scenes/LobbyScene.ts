@@ -331,24 +331,26 @@ export class LobbyScene extends Phaser.Scene {
     }
   }
 
-  /** A sand speck and a soft round cloud (radial gradient), white to be tinted. */
+  /** A sand grain and a lumpy cloud of dust, white to be tinted; both irregular so their spin shows. */
   private makeDustTextures() {
     if (!this.textures.exists(DUST_KEY)) {
       const g = this.make.graphics({}, false);
-      g.fillStyle(0xffffff, 0.4).fillCircle(4, 4, 4);
-      g.fillStyle(0xffffff, 1).fillCircle(4, 4, 2);
-      g.generateTexture(DUST_KEY, 8, 8);
+      const grain = [[2, 4], [5, 1], [9, 3], [8, 7], [4, 9], [1, 7]].map(([x, y]) => new Phaser.Math.Vector2(x, y));
+      g.fillStyle(0xffffff, 1).fillPoints(grain, true);
+      g.generateTexture(DUST_KEY, 10, 10);
       g.destroy();
     }
     if (!this.textures.exists(CLOUD_KEY)) {
-      const size = 64;
-      const tex = this.textures.createCanvas(CLOUD_KEY, size, size)!;
+      const tex = this.textures.createCanvas(CLOUD_KEY, 96, 64)!;
       const ctx = tex.getContext();
-      const grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-      grad.addColorStop(0, "rgba(255,255,255,1)");
-      grad.addColorStop(1, "rgba(255,255,255,0)");
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, size, size);
+      // Three soft blobs side by side, the middle one biggest.
+      for (const [x, y, r] of [[30, 36, 24], [52, 30, 30], [72, 38, 20]]) {
+        const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
+        grad.addColorStop(0, "rgba(255,255,255,0.7)");
+        grad.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, 96, 64);
+      }
       tex.refresh();
     }
   }
@@ -370,6 +372,9 @@ export class LobbyScene extends Phaser.Scene {
     // The street: the lower 45% of the cover; the wind blows from the left,
     // carrying soft clouds of dust and specks of sand.
     const street = { min: bounds.y + bounds.height * 0.55, max: bounds.bottom };
+    const wind = { value: 1 };
+    const cloudDrift = new DustDrift(wind, 25);
+    const speckDrift = new DustDrift(wind, 400);
     const clouds = this.add.particles(0, 0, CLOUD_KEY, {
       x: { min: bounds.x - 120, max: bounds.x },
       y: street,
@@ -377,9 +382,10 @@ export class LobbyScene extends Phaser.Scene {
       speedY: { min: -6, max: 2 },
       scale: { min: 1.5, max: 4 },
       alpha: { onEmit: () => 0, onUpdate: (_p, _k, t) => 0.3 * Math.sin(Math.PI * t) },
+      rotate: { onEmit: (p) => cloudDrift.start(p!), onUpdate: (p) => cloudDrift.angle(p) },
       tint: [0xf0d8a8, 0xe0b880],
       lifespan: { min: 12000, max: 18000 },
-      frequency: 450,
+      frequency: 1800,
     });
     const specks = this.add.particles(0, 0, DUST_KEY, {
       x: { min: bounds.x - 40, max: bounds.right },
@@ -388,11 +394,25 @@ export class LobbyScene extends Phaser.Scene {
       speedY: { min: -14, max: 4 },
       scale: { min: 0.5, max: 1.4 },
       alpha: { onEmit: () => 0, onUpdate: (_p, _k, t) => 0.9 * Math.sin(Math.PI * t) },
+      rotate: { onEmit: (p) => speckDrift.start(p!), onUpdate: (p) => speckDrift.angle(p) },
       tint: [0xf8e8c8, 0xe8c48c, 0xffffff],
       lifespan: { min: 4000, max: 7000 },
-      frequency: 40,
+      frequency: 160,
     });
+    clouds.addParticleProcessor(cloudDrift);
+    specks.addParticleProcessor(speckDrift);
     const dust = [clouds, specks];
+    // Gusts: now and then the wind picks up or dies down.
+    this.splashFx.push(
+      this.time.addEvent({
+        delay: 1500,
+        loop: true,
+        callback: () => {
+          if (Math.random() < 0.4) return;
+          this.tweens.add({ targets: wind, value: Phaser.Math.FloatBetween(0.4, 1.8), duration: Phaser.Math.Between(700, 2000), ease: "Sine.easeInOut" });
+        },
+      }),
+    );
     for (const e of dust) {
       e.setMask(mask);
       e.fastForward(15000);
@@ -719,4 +739,57 @@ export function formatDuration(seconds: number): string {
   if (h < 48) return `${h} hour${h > 1 ? "s" : ""}`;
   const d = Math.round(h / 24);
   return `${d} day${d > 1 ? "s" : ""}`;
+}
+
+/** One particle's drift: its spin, and its own speed factor easing towards a target that keeps changing. */
+interface Drift {
+  angle: number;
+  spin: number;
+  base?: number;
+  factor: number;
+  target: number;
+  wait: number;
+}
+
+/**
+ * Splash dust motion: each particle spins at its own rate and keeps speeding
+ * up and slowing down, on top of the wind's gusts (shared by every particle);
+ * the faster it goes, the faster it spins.
+ */
+class DustDrift extends Phaser.GameObjects.Particles.ParticleProcessor {
+  private drifts = new WeakMap<Phaser.GameObjects.Particles.Particle, Drift>();
+
+  constructor(
+    private wind: { value: number },
+    private maxSpin: number,
+  ) {
+    super(0, 0, true);
+  }
+
+  /** Starts a particle's drift; returns its starting angle (rotate op onEmit). */
+  start(p: Phaser.GameObjects.Particles.Particle): number {
+    const angle = Phaser.Math.Between(0, 359);
+    this.drifts.set(p, { angle, spin: Phaser.Math.FloatBetween(-this.maxSpin, this.maxSpin), factor: 1, target: 1, wait: 0 });
+    return angle;
+  }
+
+  /** The particle's current angle (rotate op onUpdate). */
+  angle(p: Phaser.GameObjects.Particles.Particle): number {
+    return this.drifts.get(p)?.angle ?? 0;
+  }
+
+  update(p: Phaser.GameObjects.Particles.Particle, delta: number) {
+    const d = this.drifts.get(p);
+    if (!d) return;
+    d.base ??= p.velocityX;
+    d.wait -= delta;
+    if (d.wait <= 0) {
+      d.target = Phaser.Math.FloatBetween(0.3, 1.8);
+      d.wait = Phaser.Math.Between(400, 2200);
+    }
+    d.factor += (d.target - d.factor) * Math.min(1, delta / 500);
+    const speed = d.factor * this.wind.value;
+    p.velocityX = d.base * speed;
+    d.angle += d.spin * (delta / 1000) * (0.4 + 0.6 * speed);
+  }
 }
