@@ -41,7 +41,6 @@
 - Advanced tutorial
 
 ## Lobby
-- separate games that wait for player's turn and the others
 - add last turn replay when player goes back to a game
 - allow winner to remove replay to be refunded for the deposit
 - Check game list order (sort by most recent)
@@ -54,8 +53,6 @@
     - part of the pot is hold by the realm to create events
   - only the default gun
   - any gun bought
-  - chose number of turns (min 10 max 30)
-  - move timeout in the same form
   - scenario
     - battelroyale 2 to 8
     - OK coral with the whyatt earp (adapt with number of players)
@@ -101,7 +98,6 @@
   - doors except saloon
   - windows
   - check 3 players in the same hex
-  - check when 2 characters move at the same segment, but first one arrives on the same hex as the other before it moves, there's no delay.
 - Commit-reveal for plans (`PhaseCommit`/`PhaseRevaeal` reserved): secret
   simultaneous selection and dice seeded from revealed salts.
 - Sounds
