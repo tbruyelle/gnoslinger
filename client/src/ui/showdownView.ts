@@ -38,9 +38,10 @@ export interface ShowdownLayout {
 export function showdownLayout(w: number, h: number): ShowdownLayout {
   const header = 56;
   const bottom = 268;
-  const narrow = w < 1180;
-  const left = narrow ? 240 : 290;
-  const right = narrow ? 270 : 320;
+  // Both columns the same width; narrower in a small window, so the board keeps some room.
+  const side = w < 1180 ? 255 : 296;
+  const left = side;
+  const right = side;
   return { header, left, right, bottom, board: { x: left, y: header, w: Math.max(120, w - left - right), h: Math.max(120, h - header - bottom) } };
 }
 
