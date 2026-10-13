@@ -5,8 +5,8 @@ import type { SegFill } from "../game/segments";
  * The showdown screen around the board, an HTML overlay over the canvas (like
  * the lobby and the character sheet), from the "Screen · Game" mockups of the
  * Design canvas (AGENTS.md, Design): the header; while planning (and waiting,
- * and once over) my character and the segment tracker on the left, the other
- * characters and my plan on the right, the hand along the bottom; in a replay
+ * and once over) my character and my plan (with the segment tracker) on the left,
+ * the other characters on the right, the hand along the bottom; in a replay
  * the characters on the left, the resolution log on the right, the timeline
  * and the controls along the bottom. The board stays on the canvas, in the
  * centre cell left free (showdownLayout); the overlay lets the pointer through
@@ -206,13 +206,12 @@ const CSS = `
 .gv-shells span.in{background:#B5482A}
 .gv-small .gv-who img{width:42px;height:42px}
 .gv-small .gv-name{font-size:18px}
-.gv-tracker h2{margin:0;font-family:Rye,Georgia,serif;font-weight:400;font-size:17px}
 .gv-segs{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
 .gv-seg{aspect-ratio:1;border:3px solid #2A1C14;border-radius:7px;position:relative;display:flex;align-items:center;justify-content:center}
 .gv-seg i{position:absolute;top:0;left:4px;font-family:Rye,Georgia,serif;font-style:normal;font-size:12px}
 .gv-seg.action{background:#4F7A3A;box-shadow:inset 0 0 0 2px rgba(243,231,206,.35);color:#F3E7CE}
 .gv-seg.delay{background:#B5482A;box-shadow:inset 0 0 0 2px rgba(243,231,206,.35);color:#F3E7CE}
-.gv-legend{display:flex;gap:12px;font-size:13px;font-weight:700}
+.gv-legend{display:flex;justify-content:center;gap:12px;font-size:13px;font-weight:700}
 .gv-legend span{display:flex;align-items:center;gap:5px}
 .gv-legend em{width:12px;height:12px;border:2px solid #2A1C14;border-radius:3px}
 .gv-plan{--rule:#B5482A}
@@ -372,8 +371,9 @@ export class ShowdownView {
       this.right.innerHTML = this.logHtml(m);
       this.bottom.innerHTML = this.replayHtml(m);
     } else {
-      this.left.innerHTML = m.left.map((c) => this.charHtml(c, false)).join("") + this.trackerHtml(m.tracker);
-      this.right.innerHTML = m.others.map((c) => this.charHtml(c, false)).join("") + this.planHtml(m);
+      // My plan goes with my character and the segment tracker; the other characters fill the right.
+      this.left.innerHTML = m.left.map((c) => this.charHtml(c, false)).join("") + this.planHtml(m);
+      this.right.innerHTML = m.others.map((c) => this.charHtml(c, false)).join("");
       this.bottom.innerHTML = this.handHtml(m);
     }
   }
@@ -417,14 +417,15 @@ export class ShowdownView {
     );
   }
 
+  /** My plan on the turn's five segments, inside the plan panel. */
   private trackerHtml(fills: SegFill[] | null): string {
     if (!fills) return "";
     const segs = fills
       .map((f, i) => `<div class="gv-seg ${f}"><i>${i + 1}</i>${f === "action" ? CHECK_SVG : f === "delay" ? HOURGLASS_SVG : ""}</div>`)
       .join("");
     return (
-      `<section class="gv-panel gv-tracker" aria-labelledby="gv-segs"><h2 id="gv-segs">Your turn, segment by segment</h2><div class="gv-segs">${segs}</div>` +
-      '<div class="gv-legend"><span><em style="background:#4F7A3A"></em>Action</span><span><em style="background:#B5482A"></em>Delay</span></div></section>'
+      `<div class="gv-segs" role="img" aria-label="Your plan on the turn's five segments">${segs}</div>` +
+      '<div class="gv-legend"><span><em style="background:#4F7A3A"></em>Action</span><span><em style="background:#B5482A"></em>Delay</span></div>'
     );
   }
 
@@ -439,6 +440,7 @@ export class ShowdownView {
       .join("");
     return (
       `<section class="gv-panel gv-plan" aria-labelledby="gv-plan"><div class="gv-plan-head"><h2 id="gv-plan">${esc(p.title)}</h2><span>${esc(p.points)}</span></div>` +
+      this.trackerHtml(m.tracker) +
       (lines ? `<ol>${lines}</ol>` : `<p class="gv-empty">${esc(p.empty)}</p>`) +
       (p.note ? `<p class="gv-note${p.warn ? " warn" : ""}">${esc(p.note)}</p>` : "") +
       `<div class="gv-buttons">${buttons}</div></section>`

@@ -355,10 +355,10 @@ calls; `testing.SkipHeights(n)` advances block time 5 s per height.
   board transform, mask, zoom/pan and input bounds use the same rectangle)
   and rendered from the scene's state (`viewModel`) on every change: the
   header (Lobby, turn, status, players); while planning, waiting or once
-  over, my character (endurance boxes, delay, AIM, wounds, guns) and the
-  segment tracker (`game/segments.ts`) on the left, the other characters
-  ("plan sent") and **Your plan** (entries, points, Send / Clear / Replay /
-  Resign, or the plan sent, Claim, Cancel) on the right, and the hand along
+  over, my character (endurance boxes, delay, AIM, wounds, guns) and
+  **Your plan** (the segment tracker, `game/segments.ts`, then the entries,
+  points, Send / Clear / Replay / Resign, or the plan sent, Claim, Cancel) on
+  the left, the other characters ("plan sent") on the right, and the hand along
   the bottom: one double-sided card per column, top or bottom half picked,
   the whole card shown on hover; in a replay, every character on the left,
   the resolution log on the right, and a timeline (one row per character,
