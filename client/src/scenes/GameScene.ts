@@ -20,24 +20,17 @@ import {
 } from "../game/playback";
 import { MAX_ACTION_POINTS, canPlay, drawDestinations, drawableGuns, encodePlan, planCost, validatePlan, type PlanEntry, isEnabled, decodePlan } from "../game/plan";
 import { firingGun, gunInHand, replayPlan, type CharView } from "../game/replay";
-import { SEGMENTS, segmentFills } from "../game/segments";
+import { SEGMENTS, segmentFills, turnSegmentCells } from "../game/segments";
 import { COCK_AIM_SHOOT_AIM_TIME, SHOOT_AIM_TIME, shotOdds } from "../game/shotOdds";
 import { SOUND_FILES, SOUND_VOLUME, soundKey, soundsForDelay, soundsForEvents, soundsForPreview, type SoundCue, type SoundGroup } from "../game/sounds";
 import { SHOOT_OPTIONS, isShooting, type ShootOption } from "../game/plan";
 import { closeCharacterSheet, openCharacterSheet, type GunPick } from "../ui/characterSheet";
-import { SegmentTracker } from "../ui/segmentTracker";
+import { ShowdownView, showdownLayout, type BoardRect, type CharPanel, type HandSide, type ShowdownLayout, type ShowdownModel, type TimelineRow } from "../ui/showdownView";
 import { showToast } from "../ui/toast";
 import { charName } from "../game/lobby";
 
 // ── Layout constants ────────────────────────────────────────────────────────
 
-const HUD_H = 48;
-const PANEL_H = 380;
-// Card images are 630×880; the strip shows them at 119×162.
-const CARD_W = 119;
-const CARD_H = 162;
-const CARD_GAP = 6;
-const CARD_ROW_GAP = 6;
 const TOKEN_SCALE_FACTOR = 1.7;
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 5;
@@ -45,15 +38,12 @@ const ZOOM_FACTOR = 0.12;
 const DRAG_THRESHOLD = 4;
 const HEX_SPACING = 185; // approximate centre-to-centre distance in board pixels
 const GOLD = 0xd4a044;
-const GOLD_STR = "#d4a044";
-const DIM_STR = "#8a7150";
 
 /** Screen angle (degrees) of each absolute direction, y down. */
 const DIR_ANGLE = [270, 330, 30, 90, 150, 210];
 
 type Mode = "sync" | "select" | "submitting" | "waiting" | "playback" | "ended" | "spectate";
 
-const BTN_STYLE = { fontSize: "16px", color: GOLD_STR, backgroundColor: "#2a1500", padding: { x: 16, y: 8 } };
 
 /** Highest delay marker available (DEL 1 to DEL 8). */
 const MAX_DELAY_MARKER = 8;
@@ -619,7 +609,6 @@ export class GameScene extends Phaser.Scene {
   // segment shown up to one of its steps), null for the whole segment;
   // anim counts the positions shown, so a step left over from one stops.
   private playback: { turns: TurnResult[]; index: number; seg: number; cut: number | null; anim: number; live: boolean; auto: Phaser.Time.TimerEvent | null } | null = null;
-  /** The plan being built when a history replay was opened, restored on close. */
   /** The plan sent this turn, shown while waiting: known from sending it, else read back from the chain. */
   private sentPlan: { turn: number; plan: string } | null = null;
 
@@ -640,47 +629,10 @@ export class GameScene extends Phaser.Scene {
   private spreadHex: string | null = null;
   private arrMask!: Phaser.Display.Masks.GeometryMask;
   private arrMaskGfx!: Phaser.GameObjects.Graphics;
-  private turnText!: Phaser.GameObjects.Text;
-  private statusText!: Phaser.GameObjects.Text;
-  private rightText!: Phaser.GameObjects.Text;
-  private cardContainer!: Phaser.GameObjects.Container;
-  private cardImages: Phaser.GameObjects.Image[] = [];
-  private cardHighlights: Phaser.GameObjects.Rectangle[] = [];
-  private selectedDisplay!: Phaser.GameObjects.Text;
-  private sendBtn!: Phaser.GameObjects.Text;
   /** When Send plan last warned about an empty plan: a second click within PASS_CONFIRM_MS passes. */
   private passWarnedAt = 0;
-  /** Full-size copy of the hovered card, drawn over it. */
-  private cardPreview: Phaser.GameObjects.Image | null = null;
-  /** Set by a click on a card; cleared once the pointer leaves the card panel. */
-  private previewSuppressed = false;
-  private infoContainer!: Phaser.GameObjects.Container;
-  private infoText!: Phaser.GameObjects.Text;
-  private sequenceContainer!: Phaser.GameObjects.Container;
-  private seqTitle!: Phaser.GameObjects.Text;
-  private seqDots: Phaser.GameObjects.Text[] = [];
-  private segTracker: SegmentTracker | null = null;
-  private seqLog!: Phaser.GameObjects.Text;
-  /** The resolution log scrolls inside its area when it overflows (wheel over it). */
-  private seqLogArea = { top: 0, bottom: 0 };
-  private seqScroll = 0;
-  private seqScrollbar: { track: Phaser.GameObjects.Rectangle; thumb: Phaser.GameObjects.Rectangle } | null = null;
-  /** A wide popup over the board: the resolution log (click on the log) or the plan sent this turn. */
-  private logPopup: {
-    kind: "log" | "plan";
-    objects: Phaser.GameObjects.GameObject[];
-    text: Phaser.GameObjects.Text;
-    area: { top: number; bottom: number };
-    scroll: number;
-    track: Phaser.GameObjects.Rectangle;
-    thumb: Phaser.GameObjects.Rectangle;
-  } | null = null;
-  private prevSeqBtn!: Phaser.GameObjects.Text;
-  private nextSeqBtn!: Phaser.GameObjects.Text;
-  private prevTurnBtn!: Phaser.GameObjects.Text;
-  private nextTurnBtn!: Phaser.GameObjects.Text;
-  private playBtn!: Phaser.GameObjects.Text;
-  private closeReplayBtn!: Phaser.GameObjects.Text;
+  /** The screen around the board: header, side columns, hand or replay controls (an HTML overlay). */
+  private showdown: ShowdownView | null = null;
 
   constructor() {
     super({ key: "GameScene" });
@@ -712,11 +664,17 @@ export class GameScene extends Phaser.Scene {
   private get ch() {
     return this.scale.height;
   }
-  private get arrH() {
-    return this.ch - HUD_H - PANEL_H;
+  /** The overlay's grid for the window (ui/showdownView.ts). */
+  private get layout(): ShowdownLayout {
+    return showdownLayout(this.cw, this.ch);
   }
-  private get panelY() {
-    return this.ch - PANEL_H;
+  /** Where the board is drawn: the centre cell the overlay leaves free. */
+  private get board(): BoardRect {
+    return this.layout.board;
+  }
+  private inBoard(x: number, y: number): boolean {
+    const b = this.board;
+    return x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h;
   }
 
   // ── Preload / create ──────────────────────────────────────────────────────
@@ -755,12 +713,23 @@ export class GameScene extends Phaser.Scene {
 
   create() {
     this.chain = getChain();
-    this.segTracker = new SegmentTracker();
+    this.showdown = new ShowdownView({
+      button: (id) => this.onButton(id),
+      card: (card, side) => {
+        if (this.mode === "select") this.toggleCard(card as CardNumber, side);
+      },
+      sheet: (seat) => this.openSheet(seat),
+      segment: (seg) => {
+        if (this.playback) this.stepTo({ index: this.playback.index, seg });
+      },
+    });
     this.buildAll();
     this.setupInput();
 
     const onResize = () => this.buildAll();
     this.scale.on("resize", onResize);
+    // The turn's deadline can pass while the screen is open: look again now and then.
+    this.time.addEvent({ delay: 15_000, loop: true, callback: () => this.mode !== "playback" && this.renderView() });
 
     this.poller = new GamePoller(
       this.chain.realm,
@@ -783,8 +752,8 @@ export class GameScene extends Phaser.Scene {
 
     this.events.once("shutdown", () => {
       closeCharacterSheet();
-      this.segTracker?.destroy();
-      this.segTracker = null;
+      this.showdown?.destroy();
+      this.showdown = null;
       this.scale.off("resize", onResize);
       this.poller?.stop();
       this.poller = null;
@@ -827,7 +796,7 @@ export class GameScene extends Phaser.Scene {
         if (/game not found|invalid game id/.test(msg)) this.scene.start("LobbyScene", { splash: false });
       }
     }
-    this.refreshHUD();
+    this.renderView();
   }
 
   private ensureTextures(view: GameView): Promise<void> {
@@ -866,8 +835,7 @@ export class GameScene extends Phaser.Scene {
 
     this.buildTokens();
     this.refreshTokens(!reset);
-    this.refreshPanels();
-    this.refreshHUD();
+    this.renderView();
     if (this.mode === "waiting" && view.phase === "planning") void this.loadSentPlan();
   }
 
@@ -876,40 +844,29 @@ export class GameScene extends Phaser.Scene {
   private buildAll() {
     this.children.removeAll(true);
     this.tokens = [];
-    this.cardImages = [];
-    this.cardHighlights = [];
     this.choiceOverlays = [];
-    this.cardPreview = null;
     // Everything above was destroyed with the children: drop the stale handles
     // (a destroyed Graphics would silently swallow the aim line).
     this.aimLine = null;
     this.aimLineEnds = null;
     this.aimMarkers = new Map();
     this.groundIcons = [];
-    this.logPopup = null;
     if (this.optMenu) this.optMenu.objects = [];
     if (this.aimMode) this.aimMode.objects = [];
 
-    const w = this.cw;
-    const h = this.ch;
-    this.add.rectangle(0, 0, w, h, 0x1a1008).setOrigin(0);
-    this.add.rectangle(0, HUD_H, w, this.arrH, 0x120b04).setOrigin(0);
+    const b = this.board;
+    this.add.rectangle(0, 0, this.cw, this.ch, 0x1e1618).setOrigin(0);
+    this.add.rectangle(b.x, b.y, b.w, b.h, 0x120b04).setOrigin(0);
 
     if (this.arrMaskGfx) this.arrMaskGfx.destroy();
     this.arrMaskGfx = this.make.graphics();
-    this.arrMaskGfx.fillRect(0, HUD_H, w, this.arrH);
+    this.arrMaskGfx.fillRect(b.x, b.y, b.w, b.h);
     this.arrMask = this.arrMaskGfx.createGeometryMask();
 
     this.buildBoard();
     this.buildTokens();
     this.refreshTokens(false);
-    this.buildHUD();
-    this.buildCardStrip();
-    this.buildInfoPanel();
-    this.buildSequencePanel();
-    this.placeSegmentTracker();
-    this.refreshPanels();
-    this.refreshHUD();
+    this.renderView();
     if (this.choiceMode) this.showChoiceOverlays();
     if (this.optMenu) this.openOptMenu(this.optMenu.card, this.optMenu.side);
     if (this.aimMode) this.enterAimMode(this.aimMode.card, this.aimMode.side);
@@ -921,14 +878,15 @@ export class GameScene extends Phaser.Scene {
   private baseTransform(): { scale: number; ox: number; oy: number } {
     const lw = BOARD_A.w;
     const lh = BOARD_A.h;
-    const scale = Math.min((this.arrH - 30) / lh, (this.cw - 30) / lw);
-    return { scale, ox: (this.cw - lw * scale) / 2, oy: HUD_H + (this.arrH - lh * scale) / 2 };
+    const b = this.board;
+    const scale = Math.min((b.h - 30) / lh, (b.w - 30) / lw);
+    return { scale, ox: b.x + (b.w - lw * scale) / 2, oy: b.y + (b.h - lh * scale) / 2 };
   }
 
   private displayTransform(): { scale: number; ox: number; oy: number } {
     const base = this.baseTransform();
-    const cx = this.cw / 2;
-    const cy = HUD_H + this.arrH / 2;
+    const cx = this.board.x + this.board.w / 2;
+    const cy = this.board.y + this.board.h / 2;
     return {
       scale: base.scale * this.zoom,
       ox: cx + (base.ox - cx) * this.zoom + this.panX,
@@ -1175,7 +1133,7 @@ export class GameScene extends Phaser.Scene {
 
   /** Fans out the stack under the pointer, within the disc the spread tokens cover. */
   private updateStackHover(pointer: Phaser.Input.Pointer) {
-    if (this.isDragging || pointer.y <= HUD_H || pointer.y >= this.panelY) {
+    if (this.isDragging || !this.inBoard(pointer.x, pointer.y)) {
       this.setSpreadHex(null);
       return;
     }
@@ -1233,43 +1191,6 @@ export class GameScene extends Phaser.Scene {
 
   // ── HUD ───────────────────────────────────────────────────────────────────
 
-  private buildHUD() {
-    const w = this.cw;
-    this.add.rectangle(0, 0, w, HUD_H, 0x0f0804).setOrigin(0);
-    const lobby = this.add
-      .text(16, HUD_H / 2, "◀ Lobby", { fontSize: "14px", color: DIM_STR, backgroundColor: "#2a1500", padding: { x: 10, y: 5 } })
-      .setOrigin(0, 0.5)
-      .setInteractive({ useHandCursor: true });
-    lobby.on("pointerover", () => lobby.setColor(GOLD_STR));
-    lobby.on("pointerout", () => lobby.setColor(DIM_STR));
-    lobby.on("pointerup", () => this.scene.start("LobbyScene", { splash: false }));
-    this.turnText = this.add
-      .text(lobby.x + lobby.width + 16, HUD_H / 2, "", { fontSize: "20px", color: GOLD_STR, fontStyle: "bold" })
-      .setOrigin(0, 0.5);
-    this.statusText = this.add.text(w / 2, HUD_H / 2, "", { fontSize: "17px", color: "#c4935a" }).setOrigin(0.5);
-    this.rightText = this.add.text(w - 16, HUD_H / 2, "", { fontSize: "13px", color: DIM_STR }).setOrigin(1, 0.5);
-  }
-
-  private refreshHUD() {
-    const view = this.view;
-    if (!this.turnText || !view) {
-      this.turnText?.setText(`Game ${this.gameID}`);
-      this.statusText?.setText("Loading…");
-      return;
-    }
-    this.turnText.setText(`Game ${view.id}  ·  Turn ${view.turn}/${view.maxTurns}`);
-    this.statusText.setText(this.statusLine());
-    const seats = view.players
-      .map((p, i) => {
-        if (!p.addr) return "empty seat";
-        const who = i === this.myIndex ? "you" : shortAddr(p.addr);
-        return `${charName(p.char)} (${who})`;
-      })
-      .join("  vs  ");
-    this.rightText.setText(this.netError ? `RPC offline: ${this.netError}` : seats);
-    this.rightText.setColor(this.netError ? "#ff8866" : DIM_STR);
-  }
-
   private statusLine(): string {
     const view = this.view!;
     switch (this.mode) {
@@ -1285,8 +1206,13 @@ export class GameScene extends Phaser.Scene {
         if (me && me.delay >= MAX_ACTION_POINTS) return `Too much delay to act this turn (${me.delay}): you pass, waiting for the opponent…`;
         return "Plan sent, waiting for the opponent…";
       }
-      case "playback":
-        return this.playback?.live ? `Turn ${this.playback.turns[0].turn} resolution` : "Replay";
+      case "playback": {
+        const pb = this.playback;
+        if (!pb) return "Replay";
+        const t = pb.turns[pb.index];
+        const where = pb.seg === 0 ? "start" : `segment ${pb.seg} of ${SEGMENTS}`;
+        return pb.live ? `Turn ${t.turn} resolution · ${where}` : `Replay · turn ${t.turn}, ${where}`;
+      }
       case "spectate":
         return "Spectating";
       case "ended": {
@@ -1298,217 +1224,313 @@ export class GameScene extends Phaser.Scene {
 
   // ── Bottom panels ─────────────────────────────────────────────────────────
 
-  private refreshPanels() {
-    if (!this.cardContainer) return;
-    this.hideCardPreview();
-    this.cardContainer.setVisible(this.mode === "select" || this.mode === "submitting");
-    this.sequenceContainer.setVisible(this.mode === "playback");
-    this.infoContainer.setVisible(!(this.mode === "select" || this.mode === "submitting" || this.mode === "playback"));
-    if (this.mode === "select" || this.mode === "submitting") {
-      this.refreshSelectionDisplay();
-      this.refreshCardHighlights();
-    } else if (this.mode === "playback") {
-      this.refreshSequencePanel();
-    } else {
-      this.refreshInfoPanel();
+  /** Renders the screen around the board (ui/showdownView.ts) from the scene's state. */
+  private renderView() {
+    this.showdown?.render(this.viewModel(), this.layout);
+  }
+
+  /** The overlay's buttons. */
+  private onButton(id: string) {
+    const pb = this.playback;
+    switch (id) {
+      case "lobby":
+        return this.scene.start("LobbyScene", { splash: false });
+      case "send":
+        return void this.sendPlan();
+      case "clear":
+        if (this.mode !== "select") return;
+        this.clearSelection();
+        this.updatePreview(false);
+        this.refreshTokens(true);
+        return this.renderView();
+      case "replay":
+        return void this.openReplay();
+      case "resign":
+        return void this.resign();
+      case "claim":
+        return void this.claimTimeout();
+      case "cancel":
+        return void this.cancelGame();
+      case "prevTurn":
+        return this.jumpTurn(-1);
+      case "nextTurn":
+        return this.jumpTurn(1);
+      case "prevSeg":
+        return this.stepPlayback(-1);
+      case "nextSeg":
+        return this.stepPlayback(1);
+      case "play":
+        return this.toggleAuto();
+      case "close":
+        if (pb) this.finishPlayback();
+        return;
     }
   }
 
-  /** The segment tracker sits in the top left corner of the board area, shrunk to fit beside the board. */
-  private placeSegmentTracker() {
-    const room = this.baseTransform().ox - 32;
-    this.segTracker?.place(16, HUD_H + 12, Phaser.Math.Clamp(room / SegmentTracker.WIDTH, 0.6, 1));
+  /** A character as the side panels show it. */
+  private charPanel(seat: number, c: CharView, badge: string): CharPanel {
+    const p = this.view!.players[seat];
+    return {
+      seat,
+      name: charName(p.char),
+      charKey: p.char,
+      you: seat === this.myIndex,
+      where: `${c.hex} · facing ${DIR_NAMES[c.facing] ?? "?"}${c.down ? " · down" : ""}`,
+      out: c.status === "killed" ? "DEAD" : c.status === "passed_out" ? "PASSED OUT" : "",
+      endurance: c.endurance,
+      maxEndurance: MAX_ENDURANCE,
+      delay: c.delay,
+      aim: c.aim,
+      wounds: c.serious + c.gunArm + c.otherArm + c.leg,
+      guns: c.guns.map((g) => ({ type: g.type, name: g.name, state: gunState(g), shells: g.shells, capacity: g.capacity, broken: g.exploded })),
+      badge,
+    };
   }
 
-  /**
-   * The segment tracker, while planning only: my plan laid out on the turn's
-   * segments as I pick it and once sent. A replay keeps its dots: the tracker
-   * cannot show both characters' actions and delay at once.
-   */
-  private refreshSegmentTracker() {
-    const tracker = this.segTracker;
-    if (!tracker) return;
+  /** The turn's time is up: the game takes no more plans, it can only be claimed (the realm's assertInTime). */
+  private outOfTime(): boolean {
+    const at = this.view?.timeoutAt ?? 0;
+    return at > 0 && Date.now() / 1000 >= at;
+  }
+
+  /** Everything the overlay shows, from the scene's state. */
+  private viewModel(): ShowdownModel {
     const view = this.view;
-    const me = view && this.myIndex >= 0 ? view.players[this.myIndex] : null;
-    let plan: PlanEntry[] | null = null;
-    if (this.mode === "select" || this.mode === "submitting") plan = this.currentPlan();
-    else if (this.mode === "waiting" && view?.phase === "planning") {
+    const players = view?.players ?? [];
+    const names = players.map((p) => charName(p.char));
+    const tone: ShowdownModel["statusTone"] =
+      this.mode === "select" || this.mode === "submitting" ? "move" : this.mode === "playback" ? "replay" : this.mode === "ended" ? "over" : this.mode === "waiting" ? "wait" : "info";
+    const base = {
+      title: view ? `Game ${view.id} · Turn ${view.turn} of ${view.maxTurns}` : `Game ${this.gameID}`,
+      status: view ? this.statusLine() : "Loading…",
+      statusTone: tone,
+      right: this.netError
+        ? `RPC offline: ${this.netError}`
+        : players.map((p, i) => (p.addr ? `${charName(p.char)} (${i === this.myIndex ? "you" : shortAddr(p.addr)})` : "empty seat")).join("  vs  "),
+      rightError: !!this.netError,
+    };
+
+    // Replay: every character as the segment shown leaves it, the log, the timeline.
+    const pb = this.playback;
+    if (this.mode === "playback" && pb && view) {
+      const t = pb.turns[pb.index];
+      const chars = this.displayChars();
+      const rows: TimelineRow[] = players.map((p, seat) => {
+        let entries: PlanEntry[] = [];
+        try {
+          entries = decodePlan(t.plans[seat] ?? "");
+        } catch {
+          entries = [];
+        }
+        const cells = turnSegmentCells(entries.map((e) => getActionDef(e).cost), t.start[seat]?.delay ?? 0, t.events, seat);
+        return {
+          name: names[seat],
+          charKey: p.char,
+          cells: cells.map((c) => ({ fill: c.fill, exec: c.exec, label: c.fill === "delay" ? "delay" : c.action >= 0 ? shortAction(entries[c.action]) : "" })),
+        };
+      });
+      const pos = { index: pb.index, seg: pb.seg };
+      return {
+        ...base,
+        left: players.flatMap((_, i) => (chars[i] ? [this.charPanel(i, chars[i], "")] : [])),
+        tracker: null,
+        others: [],
+        plan: null,
+        hand: null,
+        replay: {
+          logTitle: pb.seg === 0 ? `Turn ${t.turn}: the plans` : `Segment ${pb.seg}`,
+          log: this.logLines(),
+          seg: pb.seg,
+          rows,
+          prevTurn: pb.index > 0,
+          nextTurn: pb.index < pb.turns.length - 1,
+          prevSeg: !!stepBack(pos),
+          nextSeg: !!stepForward(pos, pb.turns.length),
+          playing: !!pb.auto,
+          closeLabel: pb.live ? "End turn" : "Close",
+        },
+      };
+    }
+
+    // Planning layout: my character (or everyone, for a spectator) on the left, the others and my plan on the right, the hand below.
+    const committed = this.committed;
+    const planning = view?.phase === "planning";
+    const badge = (i: number) => (planning && players[i]?.addr ? (players[i].submitted ? "PLAN SENT" : "PLANNING") : "");
+    const mine = this.myIndex >= 0 && committed[this.myIndex] ? this.charPanel(this.myIndex, committed[this.myIndex], "") : null;
+    const everyone = players.flatMap((p, i) => (p.addr && committed[i] ? [this.charPanel(i, committed[i], badge(i))] : []));
+    const left = mine ? [mine] : everyone;
+    const others = mine ? everyone.filter((c) => c.seat !== this.myIndex) : [];
+
+    const me = this.myIndex >= 0 ? players[this.myIndex] : null;
+    let trackerPlan: PlanEntry[] | null = null;
+    if (this.mode === "select" || this.mode === "submitting") trackerPlan = this.currentPlan();
+    else if (this.mode === "waiting" && planning) {
       const sent = this.sentPlanString();
-      if (sent !== null) plan = decodePlan(sent);
-    }
-    if (!me || plan === null) {
-      tracker.hide();
-      return;
-    }
-    tracker.show(segmentFills(plan.map((e) => getActionDef(e).cost), me.delay));
-  }
-
-  private buildInfoPanel() {
-    const w = this.cw;
-    const y = this.panelY;
-    this.infoContainer = this.add.container(0, 0).setVisible(false);
-    this.infoContainer.add(this.add.rectangle(0, y, w, PANEL_H, 0x0d0704).setOrigin(0));
-    this.infoContainer.add(this.add.rectangle(0, y - 1, w, 1, 0x3a2510).setOrigin(0));
-    this.infoText = this.add
-      .text(w / 2, y + 60, "", { fontSize: "20px", color: GOLD_STR, align: "center", wordWrap: { width: w - 80 } })
-      .setOrigin(0.5);
-    this.infoContainer.add(this.infoText);
-  }
-
-  private refreshInfoPanel() {
-    this.refreshSegmentTracker();
-    const view = this.view;
-    if (!view) return;
-    // Rebuild the buttons each time: they depend on the mode.
-    this.infoContainer.each((o: Phaser.GameObjects.GameObject) => {
-      if (o.getData("button")) o.destroy();
-    });
-    this.infoText.setText(this.statusLine());
-    // "Plan sent" becomes a link to what was sent, when this session knows it.
-    if (this.mode === "waiting" && view.phase === "planning" && this.sentPlanString() !== null) {
-      const status = this.statusLine();
-      const linkLabel = "Plan sent";
-      const rest = status.startsWith(linkLabel) ? status.slice(linkLabel.length) : ` · ${status}`;
-      this.infoText.setText("");
-      const style = { fontSize: "20px", color: GOLD_STR };
-      const link = this.add.text(0, this.panelY + 60, linkLabel, { ...style, color: "#ffe2a0" }).setOrigin(0, 0.5).setInteractive({ useHandCursor: true }).setData("button", true);
-      const tail = this.add.text(0, this.panelY + 60, rest, style).setOrigin(0, 0.5).setData("button", true);
-      const underline = this.add.rectangle(0, this.panelY + 60 + 12, link.width, 1, 0xffe2a0, 1).setOrigin(0, 0.5).setData("button", true);
-      const left = this.cw / 2 - (link.width + tail.width) / 2;
-      link.setX(left);
-      underline.setX(left);
-      tail.setX(left + link.width);
-      link.on("pointerover", () => link.setColor("#ffffff"));
-      link.on("pointerout", () => link.setColor("#ffe2a0"));
-      link.on("pointerup", () => this.openPlanPopup());
-      this.infoContainer.add([link, underline, tail]);
-    }
-    const y = this.panelY + 130;
-    const buttons: { label: string; onClick: () => void }[] = [];
-    if (this.mode === "waiting" && this.myIndex >= 0) {
-      if (view.phase === "planning") buttons.push({ label: "Resign", onClick: () => void this.resign() });
-      if (view.timeoutAt > 0 && Date.now() / 1000 > view.timeoutAt) {
-        buttons.push({ label: view.phase === "waiting" ? "Cancel game" : "Claim timeout", onClick: () => void this.claimTimeout() });
+      if (sent !== null) {
+        try {
+          trackerPlan = decodePlan(sent);
+        } catch {
+          trackerPlan = null;
+        }
       }
-      if (view.phase === "waiting") buttons.push({ label: "Cancel game", onClick: () => void this.cancelGame() });
     }
-    if (view.lastTurn) buttons.push({ label: "Replay", onClick: () => void this.openReplay() });
-    buttons.push({ label: "Back to lobby", onClick: () => this.scene.start("LobbyScene", { splash: false }) });
-    const gap = 24;
-    const widths = buttons.map((b) => b.label.length * 9 + 40);
-    const total = widths.reduce((a, b) => a + b, 0) + gap * (buttons.length - 1);
-    let x = this.cw / 2 - total / 2;
-    buttons.forEach((b, i) => {
-      const t = this.add
-        .text(x + widths[i] / 2, y, b.label, BTN_STYLE)
-        .setOrigin(0.5)
-        .setInteractive({ useHandCursor: true })
-        .setData("button", true);
-      t.on("pointerup", b.onClick);
-      this.infoContainer.add(t);
-      x += widths[i] + gap;
-    });
-    if (this.mode === "waiting" && view.phase === "planning" && view.timeoutAt > 0) {
-      const t = this.add
-        .text(this.cw / 2, y + 60, `Timeout can be claimed after ${new Date(view.timeoutAt * 1000).toLocaleTimeString()}`, {
-          fontSize: "13px",
-          color: DIM_STR,
-        })
-        .setOrigin(0.5)
-        .setData("button", true);
-      this.infoContainer.add(t);
+    const tracker = me && trackerPlan ? segmentFills(trackerPlan.map((e) => getActionDef(e).cost), me.delay) : null;
+
+    return { ...base, left, tracker, others, plan: this.planPanel(names), hand: this.handModel(), replay: null };
+  }
+
+  /** The right column's plan panel: my plan while I pick it, the plan sent, or what the game waits for. */
+  private planPanel(names: string[]): ShowdownModel["plan"] {
+    const view = this.view;
+    if (!view) return { title: "Loading", points: "", lines: [], empty: "Reading the showdown from the chain…", note: "", warn: false, buttons: [] };
+    const lines = (plan: PlanEntry[]) => plan.map((e) => ({ name: getActionDef(e).name, detail: planDetail(e, names), cost: getActionDef(e).cost }));
+    const lobby = { id: "lobby", label: "Lobby", tone: "plain" as const };
+    const replay = { id: "replay", label: "Replay", tone: "plain" as const, disabled: !view.lastTurn };
+    const me = this.myIndex >= 0 ? view.players[this.myIndex] : null;
+    const opponents = view.players.filter((p, i) => i !== this.myIndex && p.addr).map((p) => charName(p.char)).join(", ") || "your opponent";
+
+    if (this.mode === "select" && this.outOfTime()) {
+      const sentBy = view.players.filter((p, i) => i !== this.myIndex && p.addr && p.submitted).map((p) => charName(p.char));
+      return {
+        title: "Out of time",
+        points: "",
+        lines: [],
+        empty: "Your plan did not come in time: the turn takes no more plans.",
+        note: sentBy.length
+          ? `${sentBy.join(", ")} sent a plan: closing the showdown makes you lose it.`
+          : "Nobody sent a plan: the showdown ends without a winner once closed.",
+        warn: true,
+        buttons: [{ id: "claim", label: "Close the showdown", tone: sentBy.length ? "danger" : "primary" }, replay, lobby],
+      };
     }
+    if (this.mode === "select" || this.mode === "submitting") {
+      const plan = this.currentPlan();
+      const budget = this.budget();
+      const problem = validatePlan(plan, budget, this.ranLastTurn(), this.myGuns(), this.groundHere());
+      const pending = this.choiceMode
+        ? choicePrompt(this.choiceMode.choiceType)
+        : this.optMenu
+          ? "Choose what to do with the gun, beside your token."
+          : this.aimMode
+            ? `Click the hex to ${this.pendingOpts.get(this.aimMode.card) === "shoot" ? "shoot at (chance of hitting, bullseye in red)" : "aim at"}.`
+            : "";
+      const carried = me && me.delay > 0 ? `${me.delay} delay carried from last turn: ${budget} of your ${MAX_ACTION_POINTS} points are left to plan.` : "";
+      const submitting = this.mode === "submitting";
+      return {
+        title: "Your plan",
+        points: `${planCost(plan)} / ${budget} points`,
+        lines: lines(plan),
+        empty: "Pick action cards in your hand, or send an empty plan to pass.",
+        note: submitting ? "Signing your plan in Adena…" : pending || (plan.length > 0 && problem ? problem : carried),
+        warn: !submitting && (!!pending || (plan.length > 0 && !!problem)),
+        buttons: [
+          { id: "send", label: submitting ? "SIGNING…" : plan.length === 0 ? "PASS THE TURN" : "SEND PLAN", tone: "primary", disabled: submitting || !!pending || !!problem },
+          { id: "clear", label: "Clear", tone: "plain", disabled: submitting || plan.length === 0 },
+          replay,
+          { id: "resign", label: "Resign", tone: "danger", disabled: submitting },
+        ],
+      };
+    }
+    if (this.mode === "waiting" && view.phase === "waiting") {
+      return {
+        title: "Waiting for a player",
+        points: "",
+        lines: [],
+        empty: "Your showdown is open: it starts when a second player joins.",
+        note: "",
+        warn: false,
+        buttons: [{ id: "cancel", label: "Cancel the showdown", tone: "danger" }, lobby],
+      };
+    }
+    if (this.mode === "waiting") {
+      let plan: PlanEntry[] = [];
+      const sent = this.sentPlanString();
+      try {
+        plan = sent ? decodePlan(sent) : [];
+      } catch {
+        plan = [];
+      }
+      const due = view.timeoutAt > 0 && Date.now() / 1000 > view.timeoutAt;
+      const passed = me && me.delay >= MAX_ACTION_POINTS;
+      const note = due
+        ? `Out of time for ${opponents}: you may claim the showdown.`
+        : `Waiting for ${opponents}. ${view.timeoutAt > 0 ? `After ${new Date(view.timeoutAt * 1000).toLocaleString()}, you may claim the showdown.` : ""}`;
+      return {
+        title: "Your plan",
+        points: "sent",
+        lines: lines(plan),
+        empty: passed ? `Too much delay to act this turn (${me!.delay}): you pass.` : sent === "" ? "You pass this turn." : "Your plan is in.",
+        note,
+        warn: due,
+        buttons: [
+          ...(due ? [{ id: "claim", label: "CLAIM THE SHOWDOWN", tone: "primary" as const }] : []),
+          replay,
+          { id: "resign", label: "Resign", tone: "danger" },
+        ],
+      };
+    }
+    if (this.mode === "ended") {
+      return { title: "Game over", points: "", lines: [], empty: this.statusLine(), note: "", warn: false, buttons: [replay, lobby] };
+    }
+    return { title: this.mode === "spectate" ? "Spectating" : "Loading", points: "", lines: [], empty: this.statusLine(), note: "", warn: false, buttons: [replay, lobby] };
+  }
+
+  /** The hand: each card's two sides, as they can be played right now. */
+  private handModel(): ShowdownModel["hand"] {
+    const selecting = this.mode === "select" && !this.outOfTime();
+    const plan = this.currentPlan();
+    const cost = planCost(plan);
+    const budget = this.budget();
+    const last = this.selectionOrder[this.selectionOrder.length - 1];
+    const pendingCard = this.choiceMode ?? this.optMenu ?? this.aimMode;
+    const cards: HandSide[][] = [];
+    for (let n = 1; n <= 12; n++) {
+      const card = n as CardNumber;
+      // Cards with no side in the game yet (brawling) are left out of the hand.
+      if (!isEnabled({ card, side: "front" }) && !isEnabled({ card, side: "back" })) continue;
+      cards.push(
+        (["front", "back"] as CardSide[]).map((side) => {
+          const def = getActionDef({ card, side });
+          const order = this.selectionOrder.findIndex((e) => e.card === card && e.side === side) + 1;
+          let state: HandSide["state"];
+          if (!isEnabled({ card, side })) state = "later";
+          else if (order > 0) {
+            const needsChoice =
+              def.choiceType !== "none" &&
+              !this.pendingChoices.has(card) &&
+              !this.pendingGuns.has(card) &&
+              !(this.pendingOpts.has(card) && (!["aim", "shoot"].includes(this.pendingOpts.get(card) ?? "") || this.pendingAims.has(card)));
+            const isLast = !!last && last.card === card && last.side === side;
+            state = needsChoice ? "choice" : isLast && selecting ? "last" : "picked";
+          } else {
+            const blocked = !!pendingCard || this.isSelected(card, side === "front" ? "back" : "front");
+            const usable = selecting && !blocked && cost + def.cost <= budget && canPlay({ card, side }, this.ranLastTurn(), this.plannedGuns(), this.groundHere());
+            state = usable ? "open" : "off";
+          }
+          return { card, side, name: def.name, cost: def.cost, tag: CATEGORY_TAGS[def.category], state, order, image: getActionCardAsset(card, side) };
+        }),
+      );
+    }
+    const note =
+      this.mode === "select"
+        ? selecting
+          ? "Play the top or the bottom of a card. Hover a side to see the whole card."
+          : "Out of time: the turn takes no more plans."
+        : this.mode === "submitting"
+          ? "Signing your plan in Adena…"
+          : this.mode === "waiting"
+            ? this.view?.phase === "waiting"
+              ? "Your hand, for when the showdown starts."
+              : "Your plan is sent."
+            : this.mode === "ended"
+              ? "The showdown is over."
+              : this.mode === "spectate"
+                ? "Spectating."
+                : "";
+    return { cards, note };
   }
 
   // ── Card strip ────────────────────────────────────────────────────────────
-
-  private buildCardStrip() {
-    const w = this.cw;
-    const stripY = this.panelY;
-    this.cardContainer = this.add.container(0, 0).setVisible(false);
-    this.cardContainer.add(this.add.rectangle(0, stripY, w, PANEL_H, 0x0d0704).setOrigin(0));
-    this.cardContainer.add(this.add.rectangle(0, stripY - 1, w, 1, 0x3a2510).setOrigin(0));
-
-    this.selectedDisplay = this.add.text(16, stripY + 8, "", { fontSize: "14px", color: "#888", wordWrap: { width: w - 260 } });
-    this.cardContainer.add(this.selectedDisplay);
-
-    this.sendBtn = this.add
-      .text(w - 16, stripY + 6, "Send plan", { fontSize: "15px", color: GOLD_STR, backgroundColor: "#2a1500", padding: { x: 12, y: 5 } })
-      .setOrigin(1, 0)
-      .setInteractive({ useHandCursor: true });
-    this.sendBtn.on("pointerup", () => void this.sendPlan());
-    this.cardContainer.add(this.sendBtn);
-
-    const resign = this.add
-      .text(w - 130, stripY + 6, "Resign", { fontSize: "13px", color: DIM_STR, backgroundColor: "#2a1500", padding: { x: 10, y: 6 } })
-      .setOrigin(1, 0)
-      .setInteractive({ useHandCursor: true });
-    resign.on("pointerup", () => void this.resign());
-    this.cardContainer.add(resign);
-
-    const replay = this.add
-      .text(w - 200, stripY + 6, "Replay", { fontSize: "13px", color: DIM_STR, backgroundColor: "#2a1500", padding: { x: 10, y: 6 } })
-      .setOrigin(1, 0)
-      .setInteractive({ useHandCursor: true });
-    replay.on("pointerup", () => void this.openReplay());
-    this.cardContainer.add(replay);
-
-    const totalCardsW = 12 * (CARD_W + CARD_GAP) - CARD_GAP;
-    const startX = (w - totalCardsW) / 2;
-    const frontY = stripY + 34;
-    const backY = frontY + CARD_H + CARD_ROW_GAP;
-    for (let row = 0; row < 2; row++) {
-      const side: CardSide = row === 0 ? "front" : "back";
-      const cardY = row === 0 ? frontY : backY;
-      for (let i = 0; i < 12; i++) {
-        const card = (i + 1) as CardNumber;
-        const x = startX + i * (CARD_W + CARD_GAP);
-        const hl = this.add
-          .rectangle(x + CARD_W / 2, cardY + CARD_H / 2, CARD_W + 4, CARD_H + 4, 0x000000, 0)
-          .setStrokeStyle(2, GOLD, 0);
-        this.cardContainer.add(hl);
-        this.cardHighlights.push(hl);
-        const texKey = side === "front" ? `action_card_a${card}` : `action_card_a${card}_back`;
-        const img = this.add.image(x + CARD_W / 2, cardY + CARD_H / 2, texKey).setDisplaySize(CARD_W, CARD_H).setInteractive({ useHandCursor: true });
-        img.setData("card", card);
-        img.setData("side", side);
-        img.on("pointerup", () => {
-          this.previewSuppressed = true;
-          this.hideCardPreview();
-          if (this.mode === "select") this.toggleCard(card, side);
-        });
-        img.on("pointerover", () => this.showCardPreview(img));
-        img.on("pointerout", () => this.hideCardPreview());
-        this.cardContainer.add(img);
-        this.cardImages.push(img);
-      }
-    }
-  }
-
-  /**
-   * Shows the hovered card at its full image size just above it (the preview's
-   * bottom sits on the card's top edge), shrunk only if the window is too short.
-   */
-  private showCardPreview(card: Phaser.GameObjects.Image) {
-    this.hideCardPreview();
-    if (!this.cardContainer.visible || this.previewSuppressed) return;
-    const src = card.texture.getSourceImage() as { width: number; height: number };
-    const top = card.y - card.displayHeight / 2;
-    const h = Math.min(src.height, top - HUD_H - 8);
-    const w = (h * src.width) / src.height;
-    const x = Phaser.Math.Clamp(card.x, w / 2 + 4, this.cw - w / 2 - 4);
-    this.cardPreview = this.add.image(x, top - 2, card.texture.key).setOrigin(0.5, 1).setDepth(900);
-    this.cardPreview.setDisplaySize(w, h);
-  }
-
-  private hideCardPreview() {
-    this.cardPreview?.destroy();
-    this.cardPreview = null;
-  }
-
-  private cardIdx(card: CardNumber, side: CardSide): number {
-    return side === "front" ? card - 1 : 12 + card - 1;
-  }
 
   private isSelected(card: CardNumber, side: CardSide): boolean {
     return this.selectionOrder.some((e) => e.card === card && e.side === side);
@@ -1620,6 +1642,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private toggleCard(card: CardNumber, side: CardSide) {
+    if (this.outOfTime()) return this.renderView();
     // While a choice is pending, only that card can be touched (to deselect it).
     if (this.choiceMode && !(card === this.choiceMode.card && side === this.choiceMode.side)) return;
     if (this.optMenu && !(card === this.optMenu.card && side === this.optMenu.side)) return;
@@ -1651,94 +1674,7 @@ export class GameScene extends Phaser.Scene {
       else if (def.choiceType !== "none") this.enterChoiceMode(card, side, def.choiceType);
     }
     this.updatePreview();
-    this.refreshSelectionDisplay();
-    this.refreshCardHighlights();
-  }
-
-  private refreshSelectionDisplay() {
-    this.refreshSegmentTracker();
-    if (!this.selectedDisplay) return;
-    const plan = this.currentPlan();
-    const cost = planCost(plan);
-    const budget = this.budget();
-    const me = this.myIndex >= 0 ? this.view?.players[this.myIndex] : null;
-    const name = me ? charName(me.char) : "";
-    if (this.mode === "submitting") {
-      this.selectedDisplay.setText("Signing your plan in Adena…").setColor(GOLD_STR);
-    } else if (this.choiceMode) {
-      this.selectedDisplay.setText(`${name}: ${choicePrompt(this.choiceMode.choiceType)}`).setColor("#ff9944");
-    } else if (this.optMenu) {
-      this.selectedDisplay.setText(`${name}: choose what to do with the gun`).setColor("#ff9944");
-    } else if (this.aimMode) {
-      const verb = this.pendingOpts.get(this.aimMode.card) === "shoot" ? "shoot" : "aim";
-      const odds = verb === "shoot" ? " (chance of hitting, bullseye in red)" : "";
-      this.selectedDisplay.setText(`${name}: click the hex to ${verb} at${odds}`).setColor("#ff9944");
-    } else if (plan.length === 0) {
-      const carry = me && me.delay > 0 ? ` (${me.delay} carried delay)` : "";
-      this.selectedDisplay.setText(`${name}: select action cards, or send an empty plan to pass (0/${budget} points${carry})`).setColor("#888");
-    } else {
-      const guns = this.myGuns();
-      const names = plan.map((e) => {
-        const def = getActionDef(e);
-        if (e.gun !== undefined) return `${def.name}(${def.cost})→${guns.find((g) => g.id === e.gun)?.name ?? "gun"}`;
-        return e.dir ? `${def.name}(${def.cost})→${e.dir.replace(/_/g, " ")}` : `${def.name}(${def.cost})`;
-      });
-      const problem = validatePlan(plan, budget, this.ranLastTurn(), guns);
-      this.selectedDisplay.setText(`${name}: ${names.join(" + ")} = ${cost}/${budget} points${problem ? `  ⚠ ${problem}` : ""}`);
-      this.selectedDisplay.setColor(problem ? "#ff9944" : GOLD_STR);
-    }
-    const canSend = this.mode === "select" && !this.choiceMode && validatePlan(plan, budget, this.ranLastTurn(), this.myGuns(), this.groundHere()) === null;
-    this.sendBtn.setColor(canSend ? GOLD_STR : "#555");
-  }
-
-  private refreshCardHighlights() {
-    const plan = this.currentPlan();
-    const cost = planCost(plan);
-    const budget = this.budget();
-    const last = this.selectionOrder[this.selectionOrder.length - 1];
-    for (let i = 0; i < this.cardImages.length; i++) {
-      const img = this.cardImages[i];
-      const hl = this.cardHighlights[i];
-      const card = img.getData("card") as CardNumber;
-      const side = img.getData("side") as CardSide;
-      // Actions the realm does not play yet are not shown at all; the ones
-      // it plays but that cannot be picked right now are greyed out below.
-      if (!isEnabled({ card, side })) {
-        img.setVisible(false);
-        hl.setVisible(false);
-        continue;
-      }
-      const def = getActionDef({ card, side });
-      const selected = this.isSelected(card, side);
-      const otherSelected = this.isSelected(card, side === "front" ? "back" : "front");
-      const needsChoice =
-        def.choiceType !== "none" &&
-        !this.pendingChoices.has(card) &&
-        !this.pendingGuns.has(card) &&
-        !(this.pendingOpts.has(card) && (!["aim", "shoot"].includes(this.pendingOpts.get(card) ?? "") || this.pendingAims.has(card)));
-      const wouldExceed = !selected && cost + def.cost > budget;
-      const pendingCard = this.choiceMode ?? this.optMenu ?? this.aimMode;
-      const blockedByChoice = !!pendingCard && !(card === pendingCard.card && side === pendingCard.side);
-      const isLast = selected && !!last && last.card === card && last.side === side;
-      hl.setFillStyle(0x000000, 0);
-      if (selected && needsChoice) {
-        hl.setStrokeStyle(3, 0xff6600, 1);
-        hl.setFillStyle(0xff6600, 0.15);
-        img.setAlpha(1);
-      } else if (selected && isLast) {
-        hl.setStrokeStyle(3, GOLD, 1);
-        hl.setFillStyle(GOLD, 0.15);
-        img.setAlpha(blockedByChoice ? 0.5 : 1);
-      } else if (selected) {
-        hl.setStrokeStyle(2, GOLD, 0.5);
-        hl.setFillStyle(GOLD, 0.1);
-        img.setAlpha(0.6);
-      } else {
-        hl.setStrokeStyle(2, GOLD, 0);
-        const usable = !blockedByChoice && !otherSelected && !wouldExceed && canPlay({ card, side }, this.ranLastTurn(), this.plannedGuns(), this.groundHere());
-        img.setAlpha(usable ? 1 : 0.3);
-      }
-    }
+    this.renderView();
   }
 
   // ── Choice mode ───────────────────────────────────────────────────────────
@@ -1770,8 +1706,7 @@ export class GameScene extends Phaser.Scene {
           picked = true;
           this.pendingGuns.set(card, { ...pick, hand });
           this.updatePreview(); // the gun icon joins the token right away
-          this.refreshSelectionDisplay();
-          this.refreshCardHighlights();
+          this.renderView();
         },
       },
       () => {
@@ -1781,8 +1716,7 @@ export class GameScene extends Phaser.Scene {
             this.selectionOrder.pop();
             this.playCues([{ group: "unpickCard", delayMs: 0 }]);
           }
-          this.refreshSelectionDisplay();
-          this.refreshCardHighlights();
+          this.renderView();
         }
       },
     );
@@ -1863,8 +1797,7 @@ export class GameScene extends Phaser.Scene {
     this.pendingChoices.set(this.choiceMode.card, rel);
     this.exitChoiceMode();
     this.updatePreview();
-    this.refreshSelectionDisplay();
-    this.refreshCardHighlights();
+    this.renderView();
   }
 
   private exitChoiceMode() {
@@ -1957,8 +1890,7 @@ export class GameScene extends Phaser.Scene {
     if (this.pendingOpts.get(this.aimMode.card) === "shoot") this.playCues([{ group: "planShoot", delayMs: 0 }]);
     this.closeAimMode();
     this.updatePreview();
-    this.refreshSelectionDisplay();
-    this.refreshCardHighlights();
+    this.renderView();
   }
 
   /** Draws the AIM markers on aimed hexes; markers following the opponent ride on its token (setTargetAim). */
@@ -2101,7 +2033,8 @@ export class GameScene extends Phaser.Scene {
     const len = Math.hypot(along.x, along.y) || 1;
     const nx = -along.y / len;
     const ny = along.x / len;
-    const room = (x: number, y: number) => Math.min(x, this.cw - x, y - HUD_H, this.panelY - y);
+    const b = this.board;
+    const room = (x: number, y: number) => Math.min(x - b.x, b.x + b.w - x, y - b.y, b.y + b.h - y);
     const side = room(at.sx + nx * d, at.sy + ny * d) >= room(at.sx - nx * d, at.sy - ny * d) ? 1 : -1;
     const img = this.add
       .image(at.sx + nx * d * 1.1 * side, at.sy + ny * d * 1.1 * side, key)
@@ -2114,16 +2047,17 @@ export class GameScene extends Phaser.Scene {
     this.tweens.add({ targets: img, alpha: 0, y: img.y - d * 0.3, duration: 450, delay: 900, ease: "Cubic.easeIn", onComplete: () => img.destroy() });
   }
 
-  /** Where the ray from one point through another leaves the board area (the arena between the HUD and the panel). */
+  /** Where the ray from one point through another leaves the board area (the overlay's centre cell). */
   private beyondTheBoard(from: { sx: number; sy: number }, through: { sx: number; sy: number }): { sx: number; sy: number } {
     const dx = through.sx - from.sx;
     const dy = through.sy - from.sy;
     if (Math.abs(dx) < 1e-6 && Math.abs(dy) < 1e-6) return through;
+    const b = this.board;
     let t = Infinity;
-    if (dx > 0) t = Math.min(t, (this.cw - from.sx) / dx);
-    if (dx < 0) t = Math.min(t, (0 - from.sx) / dx);
-    if (dy > 0) t = Math.min(t, (this.panelY - from.sy) / dy);
-    if (dy < 0) t = Math.min(t, (HUD_H - from.sy) / dy);
+    if (dx > 0) t = Math.min(t, (b.x + b.w - from.sx) / dx);
+    if (dx < 0) t = Math.min(t, (b.x - from.sx) / dx);
+    if (dy > 0) t = Math.min(t, (b.y + b.h - from.sy) / dy);
+    if (dy < 0) t = Math.min(t, (b.y - from.sy) / dy);
     if (!Number.isFinite(t) || t < 1) return through;
     return { sx: from.sx + dx * t, sy: from.sy + dy * t };
   }
@@ -2228,7 +2162,7 @@ export class GameScene extends Phaser.Scene {
     const enabled = (o: ShootOption) => !gun || (o === "cock" ? !gun.cocked && !gun.jammed : o === "nothing" ? true : gun.cocked);
     const labels: Record<ShootOption, string> = { cock: "Cock", uncock: "Uncock", aim: "Aim", shoot: "Shoot", nothing: "Do nothing" };
     const objects: Phaser.GameObjects.GameObject[] = [];
-    const center = me ? this.tokenScreenPos(chars, this.myIndex) : { sx: this.cw / 2, sy: HUD_H + this.arrH / 2 };
+    const center = me ? this.tokenScreenPos(chars, this.myIndex) : { sx: this.board.x + this.board.w / 2, sy: this.board.y + this.board.h / 2 };
     const x = center.sx + this.tokenDiameter() * 0.8;
     const gap = 6;
     const texts = opts.map((o) =>
@@ -2279,8 +2213,7 @@ export class GameScene extends Phaser.Scene {
     if (opt === "aim" || opt === "shoot") this.enterAimMode(card, side);
     this.updatePreview();
     if (opt === "cock") this.tokens[this.myIndex]?.cockGun(this.tweens);
-    this.refreshSelectionDisplay();
-    this.refreshCardHighlights();
+    this.renderView();
   }
 
   /**
@@ -2318,6 +2251,7 @@ export class GameScene extends Phaser.Scene {
 
   private async sendPlan() {
     if (this.mode !== "select" || this.choiceMode || this.optMenu || this.aimMode || !this.view) return;
+    if (this.outOfTime()) return this.renderView();
     const plan = this.currentPlan();
     const problem = validatePlan(plan, this.budget(), this.ranLastTurn(), this.myGuns(), this.groundHere());
     if (problem) {
@@ -2332,8 +2266,7 @@ export class GameScene extends Phaser.Scene {
     }
     this.passWarnedAt = 0;
     this.mode = "submitting";
-    this.refreshPanels();
-    this.refreshHUD();
+    this.renderView();
     try {
       const encoded = encodePlan(plan);
       await this.chain.realm.submitPlan(this.gameID, encoded);
@@ -2346,8 +2279,7 @@ export class GameScene extends Phaser.Scene {
         this.clearSelection();
         this.mode = "waiting";
         this.refreshTokens(true);
-        this.refreshPanels();
-        this.refreshHUD();
+        this.renderView();
       }
       await this.poller?.pokeNow();
     } catch (e) {
@@ -2355,8 +2287,7 @@ export class GameScene extends Phaser.Scene {
       showToast(this, userMessage(e), "error");
       if (!this.playback) {
         this.mode = "select";
-        this.refreshPanels();
-        this.refreshHUD();
+        this.renderView();
       }
       void this.poller?.pokeNow();
     }
@@ -2386,56 +2317,6 @@ export class GameScene extends Phaser.Scene {
 
   // ── Replay of resolved turns ──────────────────────────────────────────────
 
-  private buildSequencePanel() {
-    const w = this.cw;
-    const y = this.panelY;
-    this.sequenceContainer = this.add.container(0, 0).setVisible(false);
-    this.sequenceContainer.add(this.add.rectangle(0, y, w, PANEL_H, 0x0d0704).setOrigin(0));
-    this.sequenceContainer.add(this.add.rectangle(0, y - 1, w, 1, 0x3a2510).setOrigin(0));
-    this.seqTitle = this.add.text(w / 2, y + 26, "", { fontSize: "22px", color: GOLD_STR, fontStyle: "bold" }).setOrigin(0.5);
-    // One dot per segment; clicking a dot jumps to the state after that segment.
-    this.seqDots = [];
-    for (let i = 0; i < SEGMENTS; i++) {
-      const dot = this.add
-        .text(w / 2 + (i - (SEGMENTS - 1) / 2) * 36, y + 62, "○", { fontSize: "30px", color: GOLD_STR })
-        .setOrigin(0.5)
-        .setInteractive({ useHandCursor: true });
-      dot.on("pointerup", () => {
-        if (this.playback) this.stepTo({ index: this.playback.index, seg: i + 1 });
-      });
-      this.seqDots.push(dot);
-    }
-    const row1 = y + PANEL_H - 96;
-    const row2 = y + PANEL_H - 46;
-    // The log lives between the dots and the buttons, clipped and scrollable.
-    this.seqLogArea = { top: y + 92, bottom: row1 - 22 };
-    const logH = this.seqLogArea.bottom - this.seqLogArea.top;
-    this.seqLog = this.add
-      .text(w / 2, this.seqLogArea.top, "", { fontSize: "14px", color: "#e8d5b0", align: "center", wordWrap: { width: w - 100 } })
-      .setOrigin(0.5, 0)
-      .setInteractive({ useHandCursor: true })
-      .on("pointerup", () => this.openLogPopup())
-      .setMask(this.make.graphics({ x: 0, y: 0 }, false).fillRect(0, this.seqLogArea.top, w, logH).createGeometryMask());
-    this.seqScrollbar = {
-      track: this.add.rectangle(w - 30, this.seqLogArea.top, 6, logH, 0x3a2510, 1).setOrigin(0.5, 0).setVisible(false),
-      thumb: this.add.rectangle(w - 30, this.seqLogArea.top, 6, 20, GOLD, 0.8).setOrigin(0.5, 0).setVisible(false),
-    };
-    this.sequenceContainer.add([this.seqTitle, ...this.seqDots, this.seqLog, this.seqScrollbar.track, this.seqScrollbar.thumb]);
-
-    const btn = (x: number, by: number, label: string, onClick: () => void) => {
-      const t = this.add.text(x, by, label, BTN_STYLE).setOrigin(0.5).setInteractive({ useHandCursor: true });
-      t.on("pointerup", onClick);
-      this.sequenceContainer.add(t);
-      return t;
-    };
-    this.prevTurnBtn = btn(w / 2 - 150, row1, "◀ Turn", () => this.jumpTurn(-1));
-    this.playBtn = btn(w / 2, row1, "Play", () => this.toggleAuto());
-    this.nextTurnBtn = btn(w / 2 + 150, row1, "Turn ▶", () => this.jumpTurn(1));
-    this.prevSeqBtn = btn(w / 2 - 150, row2, "Previous", () => this.stepPlayback(-1));
-    this.nextSeqBtn = btn(w / 2, row2, "Next", () => this.stepPlayback(1));
-    this.closeReplayBtn = btn(w / 2 + 150, row2, "Close", () => this.finishPlayback());
-  }
-
   /**
    * Shows the given turns from the start of the first one. live is a turn
    * that just resolved: closing it re-syncs the board and moves on.
@@ -2446,8 +2327,7 @@ export class GameScene extends Phaser.Scene {
     this.playback = { turns, index: 0, seg: 0, cut: null, anim: 0, live, auto: null };
     this.mode = "playback";
     this.refreshTokens(true);
-    this.refreshPanels();
-    this.refreshHUD();
+    this.renderView();
   }
 
   /** Replays the whole showdown so far, from the chain's history. */
@@ -2483,7 +2363,7 @@ export class GameScene extends Phaser.Scene {
     const all = pb.turns[pos.index].events;
     const events = eventsForSegment(all, pos.seg);
     const parts = opts.stepwise && events.length > 0 ? splitSteps(events) : [events];
-    this.refreshSequencePanel();
+    this.renderView();
     const play = (k: number) => {
       if (!same()) return;
       // Shown up to this step: the next one's first event and all that follows wait.
@@ -2692,7 +2572,7 @@ export class GameScene extends Phaser.Scene {
     const pos = { index: pb.index, seg: pb.seg };
     const to = delta > 0 ? stepForward(pos, pb.turns.length) : stepBack(pos);
     if (to) this.stepTo(to, { stepwise: delta > 0 });
-    else this.refreshSequencePanel();
+    else this.renderView();
   }
 
   private jumpTurn(delta: 1 | -1) {
@@ -2712,7 +2592,7 @@ export class GameScene extends Phaser.Scene {
     } else {
       pb.auto = this.time.delayedCall(AUTO_GAP_MS, () => this.autoStep(pb));
     }
-    this.refreshSequencePanel();
+    this.renderView();
   }
 
   /** Auto play: the next segment, then a pause once all its steps have played. */
@@ -2722,7 +2602,7 @@ export class GameScene extends Phaser.Scene {
     const next = stepForward({ index: pb.index, seg: pb.seg }, pb.turns.length);
     if (!next) {
       this.stopAuto();
-      this.refreshSequencePanel();
+      this.renderView();
       return;
     }
     this.stepTo(next, {
@@ -2737,23 +2617,6 @@ export class GameScene extends Phaser.Scene {
     if (this.playback?.auto) {
       this.playback.auto.remove();
       this.playback.auto = null;
-    }
-  }
-
-  /** Scrolls the resolution log by dy pixels, clamped to its overflow, and lays out the scrollbar. */
-  private scrollLog(dy: number) {
-    const { top, bottom } = this.seqLogArea;
-    const areaH = bottom - top;
-    const overflow = Math.max(0, this.seqLog.height - areaH);
-    this.seqScroll = Phaser.Math.Clamp(this.seqScroll + dy, 0, overflow);
-    this.seqLog.setY(top - this.seqScroll);
-    if (!this.seqScrollbar) return;
-    const show = overflow > 0;
-    this.seqScrollbar.track.setVisible(show);
-    this.seqScrollbar.thumb.setVisible(show);
-    if (show) {
-      const thumbH = Math.max(16, (areaH * areaH) / this.seqLog.height);
-      this.seqScrollbar.thumb.setSize(6, thumbH).setY(top + (areaH - thumbH) * (this.seqScroll / overflow));
     }
   }
 
@@ -2776,7 +2639,7 @@ export class GameScene extends Phaser.Scene {
       const p = await this.chain.realm.getPlan(this.gameID, this.chain.wallet.address);
       if (!this.scene.isActive() || !p.submitted || p.turn !== turn || this.view?.turn !== turn) return;
       this.sentPlan = { turn, plan: p.plan };
-      if (this.mode === "waiting") this.refreshInfoPanel();
+      if (this.mode === "waiting") this.renderView();
     } catch {
       // the status stays plain text
     }
@@ -2810,102 +2673,11 @@ export class GameScene extends Phaser.Scene {
     return lines;
   }
 
-  /**
-   * The resolution log in a wide popup over the board, scrollable with the
-   * wheel; closed by its × button, a click outside or Escape.
-   */
-  private openLogPopup() {
-    this.openPopup(this.seqTitle.text, this.logLines(), "log");
-  }
-
-  /** The plan sent this turn, entry by entry, in a popup. */
-  private openPlanPopup() {
-    const sent = this.sentPlanString();
-    if (sent === null) return;
-    const names = this.view?.players.map((p) => charName(p.char)) ?? [];
-    let entries: PlanEntry[];
-    try {
-      entries = decodePlan(sent);
-    } catch {
-      entries = [];
-    }
-    const lines = entries.length === 0 ? ["You passed: no action this turn."] : entries.map((e, i) => `${i + 1}. ${describePlanEntry(e, names)}`);
-    this.openPopup(`Your plan for turn ${this.view?.turn ?? ""}`, lines, "plan");
-  }
-
-  private openPopup(title: string, lines: string[], kind: "log" | "plan") {
-    this.closeLogPopup();
-    const pw = Math.min(this.cw - 80, 900);
-    const ph = Math.min(this.ch - 120, 560);
-    const px = (this.cw - pw) / 2;
-    const py = (this.ch - ph) / 2;
-    const backdrop = this.add.rectangle(0, 0, this.cw, this.ch, 0x000000, 0.6).setOrigin(0).setDepth(900).setInteractive();
-    backdrop.on("pointerup", () => this.closeLogPopup());
-    const panel = this.add.rectangle(px, py, pw, ph, 0x1a0f07, 1).setOrigin(0).setStrokeStyle(3, GOLD, 1).setDepth(901).setInteractive();
-    const titleText = this.add.text(px + pw / 2, py + 26, title, { fontSize: "22px", color: GOLD_STR, fontStyle: "bold" }).setOrigin(0.5).setDepth(902);
-    const close = this.add.text(px + pw - 22, py + 22, "✕", { fontSize: "22px", color: GOLD_STR }).setOrigin(0.5).setDepth(902).setInteractive({ useHandCursor: true });
-    close.on("pointerup", () => this.closeLogPopup());
-    const area = { top: py + 56, bottom: py + ph - 24 };
-    const text = this.add
-      .text(px + 28, area.top, lines.join("\n"), { fontSize: "17px", color: "#e8d5b0", lineSpacing: 6, wordWrap: { width: pw - 80 } })
-      .setOrigin(0, 0)
-      .setDepth(902)
-      .setMask(this.make.graphics({ x: 0, y: 0 }, false).fillRect(px, area.top, pw, area.bottom - area.top).createGeometryMask());
-    const track = this.add.rectangle(px + pw - 20, area.top, 6, area.bottom - area.top, 0x3a2510, 1).setOrigin(0.5, 0).setDepth(902);
-    const thumb = this.add.rectangle(px + pw - 20, area.top, 6, 20, GOLD, 0.8).setOrigin(0.5, 0).setDepth(903);
-    this.logPopup = { kind, objects: [backdrop, panel, titleText, close, text, track, thumb], text, area, scroll: 0, track, thumb };
-    this.scrollPopup(0);
-  }
-
-  private closeLogPopup() {
-    if (!this.logPopup) return;
-    for (const o of this.logPopup.objects) o.destroy();
-    this.logPopup = null;
-  }
-
-  private scrollPopup(dy: number) {
-    const pop = this.logPopup;
-    if (!pop) return;
-    const areaH = pop.area.bottom - pop.area.top;
-    const overflow = Math.max(0, pop.text.height - areaH);
-    pop.scroll = Phaser.Math.Clamp(pop.scroll + dy, 0, overflow);
-    pop.text.setY(pop.area.top - pop.scroll);
-    const show = overflow > 0;
-    pop.track.setVisible(show);
-    pop.thumb.setVisible(show);
-    if (show) {
-      const thumbH = Math.max(16, (areaH * areaH) / pop.text.height);
-      pop.thumb.setSize(6, thumbH).setY(pop.area.top + (areaH - thumbH) * (pop.scroll / overflow));
-    }
-  }
-
-  private refreshSequencePanel() {
-    this.refreshSegmentTracker();
-    const pb = this.playback;
-    if (!pb || !this.seqTitle) return;
-    const t = pb.turns[pb.index];
-    const which = pb.turns.length > 1 ? `Turn ${t.turn} of ${pb.turns[pb.turns.length - 1].turn}` : `Turn ${t.turn}`;
-    this.seqTitle.setText(pb.seg === 0 ? `${which}: start` : `${which}: segment ${pb.seg} of ${SEGMENTS}`);
-    this.seqDots.forEach((dot, i) => dot.setText(i < pb.seg ? "●" : "○").setAlpha(i + 1 === pb.seg ? 1 : 0.7));
-    this.seqLog.setText(this.logLines().join("\n"));
-    this.seqScroll = 0;
-    this.scrollLog(0);
-    if (this.logPopup?.kind === "log") this.openLogPopup(); // keep an open log popup on the segment shown
-    const pos = { index: pb.index, seg: pb.seg };
-    this.prevSeqBtn.setAlpha(stepBack(pos) ? 1 : 0.3);
-    this.nextSeqBtn.setAlpha(stepForward(pos, pb.turns.length) ? 1 : 0.3);
-    this.prevTurnBtn.setAlpha(pb.index > 0 ? 1 : 0.3);
-    this.nextTurnBtn.setAlpha(pb.index < pb.turns.length - 1 ? 1 : 0.3);
-    this.playBtn.setText(pb.auto ? "Pause" : "Play");
-    this.closeReplayBtn.setText(pb.live ? "End turn" : "Close");
-  }
-
   /** Leaves the replay: a live turn is marked as shown, then the board re-syncs. */
   private finishPlayback() {
     const pb = this.playback;
     if (!pb) return;
     this.stopAuto();
-    this.closeLogPopup();
     if (pb.live) this.shownResultTurn = pb.turns[pb.turns.length - 1].turn;
     // The end of turn halves the delay: the re-synced board shows it.
     const delays = this.displayChars().map((c) => c?.delay ?? 0);
@@ -2924,21 +2696,13 @@ export class GameScene extends Phaser.Scene {
 
   private setupInput() {
     this.input.on("wheel", (pointer: Phaser.Input.Pointer, _o: unknown, _dx: number, dy: number) => {
-      if (this.logPopup) {
-        this.scrollPopup(dy > 0 ? 48 : -48);
-        return;
-      }
-      if (this.mode === "playback" && pointer.y >= this.seqLogArea.top && pointer.y <= this.seqLogArea.bottom) {
-        this.scrollLog(dy > 0 ? 40 : -40);
-        return;
-      }
-      if (pointer.y <= HUD_H || pointer.y >= this.panelY) return;
+      if (!this.inBoard(pointer.x, pointer.y)) return;
       const dir = dy > 0 ? -1 : 1;
       const oldZoom = this.zoom;
       this.zoom = Phaser.Math.Clamp(this.zoom * (1 + dir * ZOOM_FACTOR), MIN_ZOOM, MAX_ZOOM);
       const factor = this.zoom / oldZoom;
-      const cx = this.cw / 2;
-      const cy = HUD_H + this.arrH / 2;
+      const cx = this.board.x + this.board.w / 2;
+      const cy = this.board.y + this.board.h / 2;
       if (this.zoom <= MIN_ZOOM) {
         this.panX = 0;
         this.panY = 0;
@@ -2949,10 +2713,8 @@ export class GameScene extends Phaser.Scene {
       this.refreshView();
     });
     this.input.on("pointermove", (pointer: Phaser.Input.Pointer) => {
-      // Leaving the card panel re-arms the hover preview after a click.
-      if (pointer.y < this.panelY) this.previewSuppressed = false;
       this.updateStackHover(pointer);
-      if (this.zoom > MIN_ZOOM && pointer.isDown && pointer.y > HUD_H && pointer.y < this.panelY) {
+      if (this.zoom > MIN_ZOOM && pointer.isDown && this.inBoard(pointer.x, pointer.y)) {
         const dx = pointer.x - this.dragStartX;
         const dy = pointer.y - this.dragStartY;
         if (!this.isDragging && Math.abs(dx) + Math.abs(dy) > DRAG_THRESHOLD) this.isDragging = true;
@@ -2964,7 +2726,7 @@ export class GameScene extends Phaser.Scene {
       }
     });
     this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
-      if (pointer.y > HUD_H && pointer.y < this.panelY) {
+      if (this.inBoard(pointer.x, pointer.y)) {
         this.dragStartX = pointer.x;
         this.dragStartY = pointer.y;
         this.panStartX = this.panX;
@@ -2976,11 +2738,50 @@ export class GameScene extends Phaser.Scene {
       this.isDragging = false;
     });
     this.input.on("gameout", () => this.setSpreadHex(null));
-    this.input.keyboard?.on("keydown-ESC", () => this.closeLogPopup());
   }
 }
 
-/** One plan entry in words, for the plan popup. */
+const DIR_NAMES = ["N", "NE", "SE", "S", "SW", "NW"];
+
+/** The tag printed on a card side's half in the hand. */
+const CATEGORY_TAGS: Record<string, string> = { foot: "FOOT", hand: "GUN", attack: "BRAWL", defense: "BRAWL", strength: "STRENGTH" };
+
+const LOCATION_NAMES: Record<string, string> = { holstered: "holstered", gun_hand: "gun hand", other_hand: "other hand", both_hands: "both hands" };
+
+/** Where a gun is and its state, for the character panels: "gun hand · cocked". */
+function gunState(g: GunView): string {
+  const where = LOCATION_NAMES[g.location] ?? g.location;
+  if (g.exploded) return `${where} · exploded`;
+  if (g.jammed) return `${where} · jammed`;
+  return g.location === "holstered" ? where : `${where} · ${g.cocked ? "cocked" : "uncocked"}`;
+}
+
+/** What an entry of the plan does, beside its name in the plan panel ("" when the name says it all). */
+function planDetail(e: PlanEntry, names: string[]): string {
+  const def = getActionDef(e);
+  const target = e.target !== undefined ? (names[e.target] ?? `seat ${e.target}`) : (e.hex ?? "");
+  if (def.name === "Draw & Cock") {
+    if (e.groundGun === undefined && e.gun === undefined) return "pick the gun…";
+    return e.groundGun !== undefined ? `from the ground to the ${HAND_NAMES[e.hand ?? 0]}` : `gun ${e.gun} to the ${HAND_NAMES[e.hand ?? 0]}`;
+  }
+  if (e.opt === "aim" || e.opt === "shoot") return target ? `${e.opt} at ${target}` : `${e.opt} at…`;
+  if (e.opt === "nothing") return "do nothing";
+  if (e.opt) return `${e.opt} the gun`;
+  if (def.choiceType !== "none" && def.choiceType !== "gun" && !e.dir && !isShooting(e)) return "choose…";
+  if (isShooting(e)) return "choose…";
+  return e.dir ? e.dir.replace(/_/g, " ") : "";
+}
+
+/** An action's name in a replay timeline cell: the gun option for Cock/Aim/Shoot and Shoot. */
+function shortAction(e: PlanEntry | undefined): string {
+  if (!e) return "";
+  const def = getActionDef(e);
+  if (isShooting(e)) return e.opt === "nothing" ? "Nothing" : e.opt ? e.opt.charAt(0).toUpperCase() + e.opt.slice(1) : def.name;
+  if (def.name === "Draw & Cock") return "Draw";
+  return def.name;
+}
+
+/** One plan entry in words, for the replay log of the plans. */
 function describePlanEntry(e: PlanEntry, names: string[]): string {
   const def = getActionDef(e);
   const target = e.target !== undefined ? (names[e.target] ?? `seat ${e.target}`) : e.hex ?? "";

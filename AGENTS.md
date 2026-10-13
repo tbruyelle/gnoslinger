@@ -124,9 +124,9 @@ their cards) add a few hundred bytes. A 20-turn game is roughly 40–55 KB
 | Function | Notes |
 |---|---|
 | `CreateGame(cur, charKey, maxTurns, timeoutMinutes) string` | seat 0; 10 to 30 turns (the client sends 20); 0 timeout = 2 days (5 min to 30 days); phase `waiting` |
-| `JoinGame(cur, id, charKey)` | seat 1; phase `planning` |
+| `JoinGame(cur, id, charKey)` | seat 1; phase `planning`; refused once the game's timeout has passed |
 | `CancelGame(cur, id)` | creator, while waiting |
-| `SubmitPlan(cur, id, plan) int` | validates, stores; the **second** plan resolves the turn in the same tx; returns Rev. A player with 5 or more delay cannot play anything and is passed automatically (`autoPass`, event `PlanPassed`), so the other plan alone resolves the turn; with both passed, turns resolve by themselves until someone can act |
+| `SubmitPlan(cur, id, plan) int` | refused once the turn's timeout has passed (`assertInTime`: the game can only be claimed then, so a late plan cannot win it by claiming right after); validates, stores; the **second** plan resolves the turn in the same tx; returns Rev. A player with 5 or more delay cannot play anything and is passed automatically (`autoPass`, event `PlanPassed`), so the other plan alone resolves the turn; with both passed, turns resolve by themselves until someone can act |
 | `Resign(cur, id)` | forfeit |
 | `ClaimTimeout(cur, id)` | anyone, after the game's timeout without progress (`time.Now()`, lazy: no timers on chain); waiting → `expired`, one plan in → `timeout` (other forfeits), none → `abandoned` |
 
@@ -347,13 +347,28 @@ calls; `testing.SkipHeights(n)` advances block time 5 s per height.
   `json/games/{addr}`. Characters are fixed for now: the creator plays
   `marshal`, the joiner `the_kid` (`CREATOR_CHAR`/`JOINER_CHAR`); the realm
   still takes any character key.
-- `GameScene`: renders `committed` state from the chain; card strip builds an
+- `GameScene`: renders `committed` state from the chain. The board (Phaser)
+  sits in the centre cell of an HTML overlay, `ui/showdownView.ts` after the
+  Design canvas's game mockups, laid out by `showdownLayout` (the scene's
+  board transform, mask, zoom/pan and input bounds use the same rectangle)
+  and rendered from the scene's state (`viewModel`) on every change: the
+  header (Lobby, turn, status, players); while planning, waiting or once
+  over, my character (endurance boxes, delay, AIM, wounds, guns) and the
+  segment tracker (`game/segments.ts`) on the left, the other characters
+  ("plan sent") and **Your plan** (entries, points, Send / Clear / Replay /
+  Resign, or the plan sent, Claim, Cancel) on the right, and the hand along
+  the bottom: one double-sided card per column, top or bottom half picked,
+  the whole card shown on hover; in a replay, every character on the left,
+  the resolution log on the right, and a timeline (one row per character,
+  `turnSegmentCells`, the blue pointer over the segment shown, a click on a
+  segment jumps there) with the controls along the bottom. Clicking a
+  character panel opens its sheet. The hand builds an
   ordered plan with a live preview (`replayPlan`) and relative-direction hex
   picks (move choices and the aim zone highlight whole hexes,
   `GameScene.hexHighlight` over `BoardMap.outline`: a regular hexagon of
   `hexRadius`, measured from the grid, or the traced outline of a half-hex,
-  `shapes` in `board_A.json`; turn choices use a regular hexagon that way); sides the realm does not play yet (`isEnabled`) are not shown at
-  all, sides that cannot be picked right now are greyed out; **Send plan** → `SubmitPlan`; when `lastTurn.turn` changes, the
+  `shapes` in `board_A.json`; turn choices use a regular hexagon that way); sides the realm does not play yet (`isEnabled`) are hatched
+  (cards with none, brawling, are left out), sides that cannot be picked right now are greyed out; **Send plan** → `SubmitPlan`; when `lastTurn.turn` changes, the
   resolution log is played back segment by segment (`playback.ts`) from the
   turn's stored starting state, then the state re-syncs. Moving forward, a
   segment plays its steps one after the other (`splitSteps`; the playback's

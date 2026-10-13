@@ -214,7 +214,7 @@ export class LobbyView {
         const left = secondsLeft(g, now);
         const late = runningOut(left, g.timeout);
         const pill = `<span class="gl-pill${late ? " late" : ""}">${left > 0 ? esc(formatLeft(left)) + " left" : "out of time"}</span>`;
-        return row("gl-card", g, versus(g), `${gameLabel(g)} · Turn ${g.turn} of ${g.maxTurns}`, pill + `<button type="button" class="gl-play" data-act="open" data-id="${esc(g.id)}"${dis}>PLAY</button>`);
+        return row("gl-card", g, versus(g), `${gameLabel(g)} · Turn ${g.turn} of ${g.maxTurns}`, pill + `<button type="button" class="gl-play" data-act="open" data-id="${esc(g.id)}"${dis}>${left > 0 ? "PLAY" : "OPEN"}</button>`);
       })
       .join("");
     const count = s.yourMove.length;
@@ -235,7 +235,9 @@ export class LobbyView {
     const panel = (id: string, title: string, body: string) =>
       `<section class="gl-panel" aria-labelledby="${id}"><div class="gl-head"><h2 id="${id}" class="gl-h2">${title}</h2></div>${body}</section>`;
 
+    // A showdown nobody joined in time can only be claimed: not offered.
     const open = s.open
+      .filter((g) => secondsLeft(g, now) > 0)
       .map((g) => {
         const c = g.players[0];
         return (
