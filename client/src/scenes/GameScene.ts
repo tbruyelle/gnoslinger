@@ -20,10 +20,12 @@ import {
 } from "../game/playback";
 import { MAX_ACTION_POINTS, canPlay, drawDestinations, drawableGuns, encodePlan, planCost, validatePlan, type PlanEntry, isEnabled, decodePlan } from "../game/plan";
 import { firingGun, gunInHand, replayPlan, type CharView } from "../game/replay";
+import { SEGMENTS, segmentFills } from "../game/segments";
 import { COCK_AIM_SHOOT_AIM_TIME, SHOOT_AIM_TIME, shotOdds } from "../game/shotOdds";
 import { SOUND_FILES, SOUND_VOLUME, soundKey, soundsForDelay, soundsForEvents, soundsForPreview, type SoundCue, type SoundGroup } from "../game/sounds";
 import { SHOOT_OPTIONS, isShooting, type ShootOption } from "../game/plan";
 import { closeCharacterSheet, openCharacterSheet, type GunPick } from "../ui/characterSheet";
+import { SegmentTracker } from "../ui/segmentTracker";
 import { showToast } from "../ui/toast";
 import { charName } from "./LobbyScene";
 
@@ -42,7 +44,6 @@ const MAX_ZOOM = 5;
 const ZOOM_FACTOR = 0.12;
 const DRAG_THRESHOLD = 4;
 const HEX_SPACING = 185; // approximate centre-to-centre distance in board pixels
-const SEGMENTS = 5;
 const GOLD = 0xd4a044;
 const GOLD_STR = "#d4a044";
 const DIM_STR = "#8a7150";
@@ -659,6 +660,7 @@ export class GameScene extends Phaser.Scene {
   private sequenceContainer!: Phaser.GameObjects.Container;
   private seqTitle!: Phaser.GameObjects.Text;
   private seqDots: Phaser.GameObjects.Text[] = [];
+  private segTracker: SegmentTracker | null = null;
   private seqLog!: Phaser.GameObjects.Text;
   /** The resolution log scrolls inside its area when it overflows (wheel over it). */
   private seqLogArea = { top: 0, bottom: 0 };
@@ -754,6 +756,7 @@ export class GameScene extends Phaser.Scene {
 
   create() {
     this.chain = getChain();
+    this.segTracker = new SegmentTracker();
     this.buildAll();
     this.setupInput();
 
@@ -781,6 +784,8 @@ export class GameScene extends Phaser.Scene {
 
     this.events.once("shutdown", () => {
       closeCharacterSheet();
+      this.segTracker?.destroy();
+      this.segTracker = null;
       this.scale.off("resize", onResize);
       this.poller?.stop();
       this.poller = null;
@@ -903,6 +908,7 @@ export class GameScene extends Phaser.Scene {
     this.buildCardStrip();
     this.buildInfoPanel();
     this.buildSequencePanel();
+    this.placeSegmentTracker();
     this.refreshPanels();
     this.refreshHUD();
     if (this.choiceMode) this.showChoiceOverlays();
@@ -1309,6 +1315,35 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  /** The segment tracker sits in the top left corner of the board area, shrunk to fit beside the board. */
+  private placeSegmentTracker() {
+    const room = this.baseTransform().ox - 32;
+    this.segTracker?.place(16, HUD_H + 12, Phaser.Math.Clamp(room / SegmentTracker.WIDTH, 0.6, 1));
+  }
+
+  /**
+   * The segment tracker, while planning only: my plan laid out on the turn's
+   * segments as I pick it and once sent. A replay keeps its dots: the tracker
+   * cannot show both characters' actions and delay at once.
+   */
+  private refreshSegmentTracker() {
+    const tracker = this.segTracker;
+    if (!tracker) return;
+    const view = this.view;
+    const me = view && this.myIndex >= 0 ? view.players[this.myIndex] : null;
+    let plan: PlanEntry[] | null = null;
+    if (this.mode === "select" || this.mode === "submitting") plan = this.currentPlan();
+    else if (this.mode === "waiting" && view?.phase === "planning") {
+      const sent = this.sentPlanString();
+      if (sent !== null) plan = decodePlan(sent);
+    }
+    if (!me || plan === null) {
+      tracker.hide();
+      return;
+    }
+    tracker.show(segmentFills(plan.map((e) => getActionDef(e).cost), me.delay));
+  }
+
   private buildInfoPanel() {
     const w = this.cw;
     const y = this.panelY;
@@ -1322,6 +1357,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private refreshInfoPanel() {
+    this.refreshSegmentTracker();
     const view = this.view;
     if (!view) return;
     // Rebuild the buttons each time: they depend on the mode.
@@ -1621,6 +1657,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private refreshSelectionDisplay() {
+    this.refreshSegmentTracker();
     if (!this.selectedDisplay) return;
     const plan = this.currentPlan();
     const cost = planCost(plan);
@@ -2847,6 +2884,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private refreshSequencePanel() {
+    this.refreshSegmentTracker();
     const pb = this.playback;
     if (!pb || !this.seqTitle) return;
     const t = pb.turns[pb.index];
