@@ -52,6 +52,7 @@ func JoinGame(cur realm, id string, charKey string) {
 	if g.Phase != PhaseWaiting {
 		panic("gnoslinger: game is not open")
 	}
+	g.assertInTime()
 	if g.Players[0].Addr == caller {
 		panic("gnoslinger: you cannot join your own game")
 	}

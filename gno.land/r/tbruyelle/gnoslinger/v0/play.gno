@@ -22,6 +22,7 @@ func SubmitPlan(cur realm, id string, plan string) int {
 	if g.Phase != PhasePlanning {
 		panic("gnoslinger: game is not accepting plans")
 	}
+	g.assertInTime()
 	p := g.mustSeat(caller)
 	if g.Submitted[p] {
 		panic("gnoslinger: plan already submitted for this turn")

@@ -313,6 +313,30 @@ func TestClaimTimeout(cur realm, t *testing.T) {
 	uassert.Equal(t, "alive", g.State.Chars[0].Status.String())
 }
 
+func TestLateMoves(cur realm, t *testing.T) {
+	// Past the timeout a waiting game takes no player.
+	testing.SetRealm(testing.NewUserRealm(alice))
+	id := CreateGame(cross(cur), "marshal", 10, 30)
+	testing.SkipHeights(361)
+	testing.SetRealm(testing.NewUserRealm(bob))
+	uassert.AbortsWithMessage(t, cur, "gnoslinger: out of time: the game can only be claimed now", func() {
+		JoinGame(cross(cur), id, "dude")
+	})
+
+	// Nor a running game a plan: it can only be claimed.
+	testing.SetRealm(testing.NewUserRealm(alice))
+	id = CreateGame(cross(cur), "marshal", 10, 30)
+	testing.SetRealm(testing.NewUserRealm(bob))
+	JoinGame(cross(cur), id, "dude")
+	testing.SkipHeights(361)
+	testing.SetRealm(testing.NewUserRealm(alice))
+	uassert.AbortsWithMessage(t, cur, "gnoslinger: out of time: the game can only be claimed now", func() {
+		SubmitPlan(cross(cur), id, "1f:ahead")
+	})
+	ClaimTimeout(cross(cur), id)
+	uassert.Equal(t, "abandoned", getGame(id).EndReason)
+}
+
 func TestRender(cur realm, t *testing.T) {
 	testing.SetRealm(testing.NewUserRealm(alice))
 	id := CreateGame(cross(cur), "marshal", 10, 0)

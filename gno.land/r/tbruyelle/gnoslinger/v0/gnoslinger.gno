@@ -151,6 +151,15 @@ func (g *Game) lastTurn() *TurnResult {
 // timeoutAt is when the game becomes claimable through ClaimTimeout.
 func (g *Game) timeoutAt() time.Time { return g.UpdatedAt.Add(g.Timeout) }
 
+// assertInTime refuses a move (a plan, a join) once the game is claimable:
+// past timeoutAt it can only be claimed (ClaimTimeout), so playing late
+// cannot turn a lost game around, nor win it by claiming right after.
+func (g *Game) assertInTime() {
+	if !time.Now().Before(g.timeoutAt()) {
+		panic("gnoslinger: out of time: the game can only be claimed now")
+	}
+}
+
 func (g *Game) finish(reason string, winner int) {
 	g.Phase = PhaseFinished
 	g.EndReason = reason
