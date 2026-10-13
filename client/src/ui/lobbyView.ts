@@ -198,6 +198,8 @@ export class LobbyView {
     const now = Date.now() / 1000;
     const dis = m.busy ? " disabled" : "";
     const others = (g: GameSummary) => g.players.filter((p) => p.addr && p.addr !== m.address);
+    // The creator holds seat 0.
+    const gameLabel = (g: GameSummary) => `Game ${g.id} · created by ${g.players[0]?.addr === m.address ? "you" : charName(g.players[0]?.char)}`;
     const versus = (g: GameSummary) => {
       const o = others(g);
       return o.length === 0 ? "Waiting for a second player" : "vs " + o.map((p) => `${charName(p.char)} · ${shortAddr(p.addr)}`).join(", ");
@@ -212,7 +214,7 @@ export class LobbyView {
         const left = secondsLeft(g, now);
         const late = runningOut(left, g.timeout);
         const pill = `<span class="gl-pill${late ? " late" : ""}">${left > 0 ? esc(formatLeft(left)) + " left" : "out of time"}</span>`;
-        return row("gl-card", g, versus(g), `Game ${g.id} · Turn ${g.turn} of ${g.maxTurns}`, pill + `<button type="button" class="gl-play" data-act="open" data-id="${esc(g.id)}"${dis}>PLAY</button>`);
+        return row("gl-card", g, versus(g), `${gameLabel(g)} · Turn ${g.turn} of ${g.maxTurns}`, pill + `<button type="button" class="gl-play" data-act="open" data-id="${esc(g.id)}"${dis}>PLAY</button>`);
       })
       .join("");
     const count = s.yourMove.length;
@@ -224,10 +226,10 @@ export class LobbyView {
     const openBtn = (g: GameSummary, label = "Open") => `<button type="button" class="gl-open" data-act="open" data-id="${esc(g.id)}"${dis}>${label}</button>`;
     const waiting = s.waiting
       .map((g) => {
-        if (g.phase === "waiting") return row("gl-line", g, versus(g), `Game ${g.id} · ${g.maxTurns} turns · ${formatDuration(g.timeout)} per turn`, openBtn(g));
+        if (g.phase === "waiting") return row("gl-line", g, versus(g), `${gameLabel(g)} · ${g.maxTurns} turns · ${formatDuration(g.timeout)} per turn`, openBtn(g));
         const left = secondsLeft(g, now);
         const time = left > 0 ? `${formatLeft(left)} left to play` : "out of time: you may claim the game";
-        return row("gl-line", g, versus(g), `Game ${g.id} · Turn ${g.turn} of ${g.maxTurns} · your plan is in · ${time}`, openBtn(g));
+        return row("gl-line", g, versus(g), `${gameLabel(g)} · Turn ${g.turn} of ${g.maxTurns} · your plan is in · ${time}`, openBtn(g));
       })
       .join("");
     const panel = (id: string, title: string, body: string) =>
@@ -246,7 +248,7 @@ export class LobbyView {
       .join("");
 
     const finished = s.finished
-      .map((g) => row("gl-line", g, versus(g), `Game ${g.id} · ${outcomeLine(g, m.address)}`, openBtn(g, "Replay")))
+      .map((g) => row("gl-line", g, versus(g), `${gameLabel(g)} · ${outcomeLine(g, m.address)}`, openBtn(g, "Replay")))
       .join("");
 
     return (
