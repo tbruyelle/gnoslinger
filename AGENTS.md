@@ -29,6 +29,14 @@ multi-board layouts and victory points come later.
   PHP implementation and `bga/doc/RULES.md`, the full rules transcription.
   Read the PHP code to understand how a rule was handled, but do not copy or
   port it; take the rules from `RULES.md`, not from git history.
+- **Design**: the Claude Design canvas
+  https://claude.ai/artifact/LeDyXGrNgMY8miYHV9MYF7 (private) is the visual
+  reference: the action cards, the character sheet, the segment tracker, the
+  HIT!/MISSED!/JAMMED!/EXPLODED! bursts and the screen mockups (splash,
+  lobby, game while planning, replay). Palette: ground `#1E1618`, ink
+  `#2A1C14`, rule `#5A4636`, parchment `#F3E7CE`, cream `#FBF4E4`, brick
+  `#B5482A`/`#8E2F1A`, indigo `#33307F`, gold `#F2B544`, action green
+  `#4F7A3A`; fonts Rye (titles) and Zilla Slab (text), from Google Fonts.
 
 ## Key Commands
 
@@ -322,8 +330,12 @@ calls; `testing.SkipHeights(n)` advances block time 5 s per height.
   replace each other.
 - `chain/poller.ts`: polls `json/game/{id}` every `VITE_POLL_MS` (2 s) and
   fires on `rev` change; backs off on errors; pauses when the tab is hidden.
-- `LobbyScene`: splash screen with an **Enter** button (skipped when a game
-  hands back with `{ splash: false }`), then connect Adena (switching/adding
+- `LobbyScene`: splash screen as in the Design canvas (the cover framed like
+  a card in a double-ruled page, the tagline, **Connect with Adena**, the
+  Avalon Hill credit), animated (intro, slow zoom, blowing dust, gun smoke;
+  music kept off by `MUSIC_ENABLED`); `BootScene` waits up to 2 s for the
+  web fonts first, since Phaser draws a text once. A game handing back
+  `{ splash: false }` skips the splash. Then connect Adena (switching/adding
   the network from `VITE_CHAIN_ID`/`VITE_RPC_URL`), create / join / open games. Characters are
   fixed for now: the creator plays `marshal`, the joiner `the_kid`
   (`CREATOR_CHAR`/`JOINER_CHAR`); the realm still takes any character key.

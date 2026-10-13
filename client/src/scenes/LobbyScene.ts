@@ -40,6 +40,21 @@ const SUBTITLE = "showdowns on the gno.land chain";
 const CREDIT =
   "Based on GUNSLINGER © 1982 The Avalon Hill Game Company, cover art included. " +
   "Gnoslinger is a fan project, not affiliated with Avalon Hill or Hasbro.";
+/** The splash's palette and fonts, from the design canvas (AGENTS.md, Design). */
+const SPLASH_GROUND = 0x1e1618;
+const SPLASH_RULE = 0x5a4636;
+const SPLASH_INK = 0x2a1c14;
+const SPLASH_INK_STR = "#2A1C14";
+const SPLASH_PAPER = 0xf3e7ce;
+const SPLASH_PAPER_STR = "#F3E7CE";
+const SPLASH_CREAM = 0xfbf4e4;
+const SPLASH_RED = 0xb5482a;
+const SPLASH_DARK_RED = 0x8e2f1a;
+const RYE = "Rye, Georgia, serif";
+const ZILLA = "'Zilla Slab', Rockwell, Georgia, serif";
+const SPLASH_LINE = "Two gunfighters, five segments a turn, one hand of cards. Every turn is settled on chain.";
+/** Room the lines under the cover need: tagline, the line on the game, the button, and a gap above the credit. */
+const SPLASH_BELOW_COVER = 215;
 /** Music looping on the splash and in the lobby, loaded on demand. */
 const MUSIC_ENABLED = false; // off for now; flip to play it again
 const MUSIC_KEY = "music_splash";
@@ -308,30 +323,97 @@ export class LobbyScene extends Phaser.Scene {
     }, 30);
   }
 
+  /**
+   * The splash, after the design canvas (AGENTS.md, Design): on dark ink in a
+   * double-ruled frame, the cover framed like an action card, the tagline, a
+   * line on the game, the Connect button and the credit.
+   */
   private buildSplash() {
     const w = this.scale.width;
     const h = this.scale.height;
-    let subtitleY = h * 0.6;
     const intro = !this.splashIntroPlayed;
     this.splashIntroPlayed = true;
+    this.add.rectangle(0, 0, w, h, SPLASH_GROUND).setOrigin(0);
+    this.add
+      .graphics()
+      .lineStyle(2, SPLASH_RULE)
+      .strokeRoundedRect(18, 18, w - 36, h - 36, 22)
+      .strokeRoundedRect(26, 26, w - 52, h - 52, 16);
+
+    const creditY = h - 40;
+    let y = 64;
     if (this.textures.exists("splash")) {
-      const img = this.add.image(w / 2, h * 0.42, "splash");
-      const scale = Math.min((h * 0.7) / img.height, (w - 40) / img.width);
-      img.setScale(scale);
-      subtitleY = img.y + (img.height * scale) / 2 + 22;
+      const src = this.textures.get("splash").getSourceImage() as { width: number; height: number };
+      const pad = 12;
+      // The cover takes the height left by the lines below it, within the frame's width.
+      const room = Math.max(180, creditY - 30 - SPLASH_BELOW_COVER - y - 2 * pad);
+      const scale = Math.min(room / src.height, (w - 100 - 2 * pad) / src.width);
+      const cw = src.width * scale;
+      const ch = src.height * scale;
+      const box = this.add.graphics();
+      box.fillStyle(0x000000, 0.45).fillRoundedRect(w / 2 - cw / 2 - pad - 4, y + 14, cw + 2 * pad + 8, ch + 2 * pad + 8, 28);
+      box.fillStyle(SPLASH_RULE).fillRoundedRect(w / 2 - cw / 2 - pad - 3, y - 3, cw + 2 * pad + 6, ch + 2 * pad + 6, 28);
+      box.fillStyle(SPLASH_INK).fillRoundedRect(w / 2 - cw / 2 - pad, y, cw + 2 * pad, ch + 2 * pad, 26);
+      const img = this.add.image(w / 2, y + pad + ch / 2, "splash").setScale(scale);
+      if (intro) this.splashFx.push(this.tweens.add({ targets: box, alpha: { from: 0, to: 1 }, duration: SPLASH_INTRO_MS * 0.6 }));
       this.animateCover(img, scale, intro);
+      y += ch + 2 * pad;
     } else {
-      this.add.text(w / 2, h * 0.4, "GNOSLINGER", { fontSize: "48px", color: GOLD_STR, fontStyle: "bold" }).setOrigin(0.5);
+      this.add.text(w / 2, y, "GNOSLINGER", { fontFamily: RYE, fontSize: "56px", color: SPLASH_PAPER_STR }).setOrigin(0.5, 0);
+      y += 80;
     }
+
     const first = this.children.length;
-    this.add.text(w / 2, subtitleY + 6, SUBTITLE.toUpperCase(), { fontSize: "24px", color: GOLD_STR, letterSpacing: 6 }).setOrigin(0.5);
-    this.makeButton(w / 2, subtitleY + 70, 260, 52, "Connect with Adena", () => this.enter(), "adena_icon");
-    this.add.text(w / 2, h - 14, CREDIT, { fontSize: "12px", color: DIM_STR, align: "center", wordWrap: { width: w - 32 } }).setOrigin(0.5, 1);
+    const tagline = this.add
+      .text(w / 2, y + 26, SUBTITLE.toUpperCase(), { fontFamily: RYE, fontSize: "22px", color: SPLASH_PAPER_STR, letterSpacing: 6 })
+      .setOrigin(0.5, 0);
+    const line = this.add
+      .text(w / 2, tagline.y + tagline.height + 8, SPLASH_LINE, {
+        fontFamily: ZILLA,
+        fontStyle: "italic",
+        fontSize: "18px",
+        color: "#D9C9A8",
+        align: "center",
+        wordWrap: { width: w - 100 },
+      })
+      .setOrigin(0.5, 0);
+    this.makeSplashButton(w / 2, line.y + line.height + 26 + 29, "Connect with Adena", () => this.enter());
+    this.add
+      .text(w / 2, creditY, CREDIT, { fontFamily: ZILLA, fontSize: "14px", color: "#B9A88A", align: "center", lineSpacing: 4, wordWrap: { width: Math.min(832, w - 100) } })
+      .setOrigin(0.5, 1);
     if (intro) {
       const rest = this.children.list.slice(first);
       this.splashFx.push(this.tweens.add({ targets: rest, alpha: { from: 0, to: 1 }, delay: SPLASH_INTRO_MS * 0.7, duration: 600 }));
     }
   }
+
+  /** The splash's big button: parchment ringed in ink and brick red, sitting on a dark red edge; lighter under the pointer. */
+  private makeSplashButton(cx: number, cy: number, label: string, onClick: () => void) {
+    const text = this.add.text(0, 0, label, { fontFamily: ZILLA, fontStyle: "bold", fontSize: "22px", color: SPLASH_INK_STR }).setOrigin(0, 0.5);
+    const icon = this.textures.exists("adena_icon") ? 30 : 0;
+    const gap = icon ? 12 : 0;
+    const bw = 28 + icon + gap + text.width + 28;
+    const bh = 58;
+    const x = cx - bw / 2;
+    const y = cy - bh / 2;
+    const bg = this.add.graphics();
+    const draw = (fill: number) => {
+      bg.clear();
+      bg.fillStyle(SPLASH_DARK_RED).fillRoundedRect(x - 3, y - 3, bw + 6, bh + 12, 14); // the edge below
+      bg.fillStyle(SPLASH_RED).fillRoundedRect(x - 3, y - 3, bw + 6, bh + 6, 14); // the red ring
+      bg.fillStyle(fill).fillRoundedRect(x, y, bw, bh, 12);
+      bg.lineStyle(3, SPLASH_INK).strokeRoundedRect(x + 1.5, y + 1.5, bw - 3, bh - 3, 11);
+    };
+    draw(SPLASH_PAPER);
+    bg.setDepth(1);
+    text.setPosition(x + 28 + icon + gap, cy).setDepth(2);
+    if (icon) this.add.image(x + 28 + icon / 2, cy, "adena_icon").setDisplaySize(icon, icon).setDepth(2);
+    const zone = this.add.zone(cx, cy, bw, bh).setInteractive({ useHandCursor: true }).setDepth(2);
+    zone.on("pointerover", () => draw(SPLASH_CREAM));
+    zone.on("pointerout", () => draw(SPLASH_PAPER));
+    zone.on("pointerup", onClick);
+  }
+
 
   /**
    * Smoke curling up from the gunman's muzzle to the porch roof, over the
@@ -389,7 +471,7 @@ export class LobbyScene extends Phaser.Scene {
   private animateCover(img: Phaser.GameObjects.Image, scale: number, intro: boolean) {
     const bounds = img.getBounds();
     const shape = this.make.graphics({}, false);
-    shape.fillStyle(0xffffff).fillRect(bounds.x, bounds.y, bounds.width, bounds.height);
+    shape.fillStyle(0xffffff).fillRoundedRect(bounds.x, bounds.y, bounds.width, bounds.height, 16);
     const mask = shape.createGeometryMask();
     img.setMask(mask);
     this.splashFx.push({ remove: () => { mask.destroy(); shape.destroy(); } });
