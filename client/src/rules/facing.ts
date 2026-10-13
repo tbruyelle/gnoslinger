@@ -48,6 +48,16 @@ export const CHAR_ARROW_DIR: Record<string, number> = {
   u_s_scout: 5, veteran: 5, woman: 5, yankee: 5,
 };
 
+/**
+ * Rotation in degrees that stands a token's figure upright, an orientation the
+ * board never uses (its facings are 60° apart): the art leans 30° toward the
+ * arrow's side, so tokens whose arrow points NE turn clockwise, those pointing
+ * NW counter-clockwise. For the character sheet and the lobby.
+ */
+export function uprightTokenAngle(charKey: string): number {
+  return CHAR_ARROW_DIR[charKey] === 5 ? -30 : 30;
+}
+
 /** Facing (0–5) of a token drawn at a rotation angle in degrees (multiples of 60). */
 export function angleToDirIndex(angle: number, charKey?: string): number {
   const baseDir = charKey ? (CHAR_ARROW_DIR[charKey] ?? 1) : 1;

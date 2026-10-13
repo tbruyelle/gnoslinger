@@ -1,4 +1,5 @@
 import { shortAddr, type GameSummary, type GamesView } from "../chain/types";
+import { uprightTokenAngle } from "../rules";
 import { charName, formatDuration, formatLeft, lobbySections, outcomeLine, runningOut, secondsLeft } from "../game/lobby";
 
 /**
@@ -112,8 +113,9 @@ function esc(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 }
 
-function tokenSrc(char: string): string {
-  return `char_${char}.png`;
+/** A character's token, turned upright as on the character sheet. */
+function tokenImg(char: string, cls = "gl-token"): string {
+  return `<img class="${cls}" src="char_${esc(char)}.png" alt="" style="transform: rotate(${uprightTokenAngle(char)}deg)">`;
 }
 
 export class LobbyView {
@@ -200,9 +202,9 @@ export class LobbyView {
       const o = others(g);
       return o.length === 0 ? "Waiting for a second player" : "vs " + o.map((p) => `${charName(p.char)} · ${shortAddr(p.addr)}`).join(", ");
     };
-    const token = (g: GameSummary) => tokenSrc(others(g)[0]?.char ?? g.players.find((p) => p.addr === m.address)?.char ?? m.creatorChar);
+    const token = (g: GameSummary) => others(g)[0]?.char ?? g.players.find((p) => p.addr === m.address)?.char ?? m.creatorChar;
     const row = (cls: string, g: GameSummary, title: string, detail: string, extra: string) =>
-      `<div class="${cls}"><img class="gl-token" src="${esc(token(g))}" alt=""><div class="gl-what">` +
+      `<div class="${cls}">${tokenImg(token(g))}<div class="gl-what">` +
       `<span class="gl-title">${esc(title)}</span><span class="gl-detail">${esc(detail)}</span></div>${extra}</div>`;
 
     const yourMove = s.yourMove
@@ -235,7 +237,7 @@ export class LobbyView {
       .map((g) => {
         const c = g.players[0];
         return (
-          `<div class="gl-line"><img class="gl-token" src="${esc(tokenSrc(c?.char ?? ""))}" alt=""><div class="gl-what">` +
+          `<div class="gl-line">${tokenImg(c?.char ?? "")}<div class="gl-what">` +
           `<span class="gl-title">${esc(`${charName(c?.char)} · ${shortAddr(c?.addr ?? "")}`)}</span>` +
           `<span class="gl-detail">${esc(`Game ${g.id} · ${g.maxTurns} turns · ${formatDuration(g.timeout)} per turn`)}</span></div>` +
           `<button type="button" class="gl-join" data-act="join" data-id="${esc(g.id)}"${dis}>Join as ${esc(charName(m.joinerChar))}</button></div>`
@@ -264,7 +266,7 @@ export class LobbyView {
     return (
       '<aside class="gl-aside" aria-labelledby="gl-new"><form class="gl-form">' +
       '<h2 id="gl-new" class="gl-h2">New showdown</h2>' +
-      `<div class="gl-you"><img src="${esc(tokenSrc(m.creatorChar))}" alt=""><div><small>YOU PLAY</small><span>${esc(charName(m.creatorChar))}</span></div></div>` +
+      `<div class="gl-you">${tokenImg(m.creatorChar, "")}<div><small>YOU PLAY</small><span>${esc(charName(m.creatorChar))}</span></div></div>` +
       `<div class="gl-field"><label for="gl-turns">Turns</label><select id="gl-turns">${turns}</select></div>` +
       `<div class="gl-field"><label for="gl-timeout">Time to play each turn</label><select id="gl-timeout">${timeouts}</select>` +
       '<span class="gl-note">Past it, anyone may claim the game: the player who did not play forfeits.</span></div>' +
