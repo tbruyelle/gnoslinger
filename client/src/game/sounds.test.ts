@@ -39,6 +39,20 @@ describe("soundsForEvents", () => {
     expect(groups([ev({ kind: "delay", reason: "obstacle" }), ev({ kind: "delay", reason: "obstacle" })])).toEqual(["obstacle"]);
   });
 
+  it("spaces out shots fired together, each ricochet after its own shot", () => {
+    const cues = soundsForEvents([ev({ kind: "shot", hit: "VITAL" }), ev({ kind: "shot", p: 1, hit: "-" })]);
+    const shots = cues.filter((c) => c.group === "gunshot");
+    const ricochet = cues.find((c) => c.group === "ricochet")!;
+    expect(shots[0].delayMs).toBe(0);
+    expect(shots[1].delayMs).toBeGreaterThan(0);
+    expect(ricochet.delayMs).toBeGreaterThan(shots[1].delayMs);
+  });
+
+  it("spaces out wounds taken together", () => {
+    const [a, b] = soundsForEvents([ev({ kind: "wound", result: "kill" }), ev({ kind: "wound", p: 1, result: "kill" })]);
+    expect(b.delayMs).toBeGreaterThan(a.delayMs);
+  });
+
   it("plays wounds after the gunshot", () => {
     const [shot, wound] = soundsForEvents([ev({ kind: "shot", hit: "vital" }), ev({ kind: "wound", result: "kill" })]);
     expect(shot.delayMs).toBeLessThan(wound.delayMs);

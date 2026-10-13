@@ -60,6 +60,12 @@ const WOUND_AFTER_SHOT_MS = 350;
 const RICOCHET_AFTER_SHOT_MS = 350;
 /** The token reaches the hexside it climbs over halfway through its move. */
 const OBSTACLE_AFTER_MOVE_MS = 200;
+/**
+ * Between shots fired in the same step (both characters shooting on the same
+ * segment), and between the wounds they cause: played at the same instant
+ * the sounds merge into one.
+ */
+const SIMULTANEOUS_GAP_MS = 220;
 
 /** Delay reasons of crossing an obstacle: a fence (rule 35.2), onto or off an obstacle hex (36.4). */
 const OBSTACLE_REASONS = new Set(["fence", "obstacle"]);
@@ -69,6 +75,8 @@ export function soundsForEvents(events: TurnEvent[]): SoundCue[] {
   const cues: SoundCue[] = [];
   const bled = new Set<number>();
   const climbed = new Set<number>();
+  let shots = 0;
+  let wounds = 0;
   for (const e of events) {
     switch (e.kind) {
       case "move":
@@ -97,14 +105,17 @@ export function soundsForEvents(events: TurnEvent[]): SoundCue[] {
         // A misfire sounds like a missed shot, as it shows, unless the second
         // MALFUNCTION jams or blows up the gun: no bullet then.
         if (e.reason === "misfire" && events.some((x) => x.kind === "malfunction" && x.p === e.p && (x.result === "jams" || x.result === "explodes"))) break;
-        cues.push({ group: "gunshot", delayMs: 0 });
-        if (e.hit === "-") cues.push({ group: "ricochet", delayMs: RICOCHET_AFTER_SHOT_MS });
+        {
+          const at = shots++ * SIMULTANEOUS_GAP_MS;
+          cues.push({ group: "gunshot", delayMs: at });
+          if (e.hit === "-") cues.push({ group: "ricochet", delayMs: at + RICOCHET_AFTER_SHOT_MS });
+        }
         break;
       case "wild_shot":
-        cues.push({ group: "gunshot", delayMs: 0 });
+        cues.push({ group: "gunshot", delayMs: shots++ * SIMULTANEOUS_GAP_MS });
         break;
       case "wound":
-        cues.push({ group: e.result === "kill" ? "dead" : "wounded", delayMs: WOUND_AFTER_SHOT_MS });
+        cues.push({ group: e.result === "kill" ? "dead" : "wounded", delayMs: WOUND_AFTER_SHOT_MS + wounds++ * SIMULTANEOUS_GAP_MS });
         break;
       case "delay":
         // Crossing an obstacle draws its delay cards: one sound per character.
