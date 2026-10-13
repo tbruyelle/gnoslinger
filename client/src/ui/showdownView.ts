@@ -193,10 +193,10 @@ const CSS = `
 .gv-boxes span{height:12px;border:2px solid #2A1C14;border-radius:3px;background:#4F7A3A}
 .gv-boxes span.x{background:repeating-linear-gradient(135deg,#F3E7CE 0 3px,#2A1C14 3px 5px)}
 .gv-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;text-align:center}
-.gv-stats div{background:#FBF4E4;border:2px solid #2A1C14;border-radius:9px;padding:3px}
+.gv-stats div{min-width:0;background:#FBF4E4;border:2px solid #2A1C14;border-radius:9px;padding:3px}
 .gv-stats div.hot{background:#B5482A;color:#FBF4E4;border-color:#B5482A}
 .gv-stats b{display:block;font-family:Rye,Georgia,serif;font-weight:400;font-size:20px;line-height:1.1}
-.gv-stats small{font-size:11px;font-weight:700;letter-spacing:1px}
+.gv-stats small{display:block;font-size:10px;font-weight:700;letter-spacing:.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .gv-gun{display:flex;align-items:center;gap:8px;background:#FBF4E4;border:2px solid #2A1C14;border-radius:9px;padding:6px 8px}
 .gv-gun img{width:40px;height:auto;flex-shrink:0}
 .gv-gun.broken img{filter:grayscale(1)}
@@ -373,7 +373,7 @@ export class ShowdownView {
       this.bottom.innerHTML = this.replayHtml(m);
     } else {
       this.left.innerHTML = m.left.map((c) => this.charHtml(c, false)).join("") + this.trackerHtml(m.tracker);
-      this.right.innerHTML = m.others.map((c) => this.charHtml(c, true)).join("") + this.planHtml(m);
+      this.right.innerHTML = m.others.map((c) => this.charHtml(c, false)).join("") + this.planHtml(m);
       this.bottom.innerHTML = this.handHtml(m);
     }
   }
