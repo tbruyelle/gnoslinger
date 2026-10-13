@@ -6,6 +6,7 @@ import { subscribeAccountChanged, subscribeNetworkChanged, subscribeWalletLocked
 import { userMessage } from "../chain/errors";
 import { formatCoins } from "../chain/rpc";
 import type { GamesView } from "../chain/types";
+import { SOUND_FILES, SOUND_VOLUME, soundKey } from "../game/sounds";
 import { LobbyView } from "../ui/lobbyView";
 import { showToast } from "../ui/toast";
 import { installWalletNotices } from "../ui/walletNotices";
@@ -50,12 +51,14 @@ const ZILLA = "'Zilla Slab', Rockwell, Georgia, serif";
 const SPLASH_LINE = "Two gunfighters, five segments a turn, one hand of cards. Every turn is settled on chain.";
 /** Room the lines under the cover need: tagline, the line on the game, the button, and a gap above the credit. */
 const SPLASH_BELOW_COVER = 215;
-/** Music looping on the splash and in the lobby, loaded on demand. */
+/** Western music played once on entering the lobby (not on the splash), loaded on demand. */
 const MUSIC_ENABLED = false; // off for now; flip to play it again
 const MUSIC_KEY = "music_splash";
 const MUSIC_FILE = "sounds/music-splash.mp3";
 const MUSIC_VOLUME = 0.5;
 const MUSIC_FADE_MS = 800;
+/** After Connect with Adena, the music waits for the gunshot to ring out. */
+const MUSIC_AFTER_SHOT_MS = 700;
 /** Splash animation: the intro the first time, then the slow zoom and the dust. */
 const SPLASH_INTRO_MS = 1400;
 const SPLASH_ZOOM = 1.03;
@@ -120,7 +123,8 @@ export class LobbyScene extends Phaser.Scene {
       setTurns: (turns) => (this.turns = turns),
       setTimeout: (index) => (this.timeoutIndex = index),
     });
-    this.playMusic();
+    if (this.screen === "lobby") this.playMusic();
+    this.loadGunshots();
     this.buildAll();
     const onResize = () => this.buildAll();
     this.scale.on("resize", onResize);
@@ -141,8 +145,24 @@ export class LobbyScene extends Phaser.Scene {
   }
 
   private enter() {
+    this.playGunshot();
+    this.time.delayedCall(MUSIC_AFTER_SHOT_MS, () => this.screen === "lobby" && this.playMusic());
     this.screen = "lobby";
     void this.connect();
+  }
+
+  /** Loads the gunshots in the background, for the splash's Connect button (the game scene then finds them loaded). */
+  private loadGunshots() {
+    const missing = SOUND_FILES.gunshot.map((file, i) => ({ key: soundKey("gunshot", i), file })).filter((s) => !this.cache.audio.exists(s.key));
+    if (missing.length === 0 || this.load.isLoading()) return;
+    for (const s of missing) this.load.audio(s.key, `sounds/${s.file}`);
+    this.load.start();
+  }
+
+  /** A random gunshot, if one is loaded yet. */
+  private playGunshot() {
+    const keys = SOUND_FILES.gunshot.map((_, i) => soundKey("gunshot", i)).filter((k) => this.cache.audio.exists(k));
+    if (keys.length > 0) this.sound.play(Phaser.Utils.Array.GetRandom(keys), { volume: SOUND_VOLUME.gunshot });
   }
 
   /** Forgets the connection in the app (Adena itself stays connected to the site) and shows the splash again. */
@@ -153,6 +173,7 @@ export class LobbyScene extends Phaser.Scene {
     this.games = null;
     this.gamesKey = "";
     this.screen = "splash";
+    this.fadeOutMusic();
     this.buildAll();
   }
 
@@ -304,27 +325,35 @@ export class LobbyScene extends Phaser.Scene {
   }
 
   /**
-   * Plays the music on the splash and in the lobby, fading in once loaded.
-   * Browsers hold audio back until the first click or key press, so on a first
-   * visit it starts then.
+   * Plays the western music in the lobby, fading in once loaded. The lobby is
+   * reached by a click (Connect with Adena) or from a game, so the browser
+   * already lets the page play sound.
    */
   private playMusic() {
-    if (!MUSIC_ENABLED || this.music || this.shutDown) return;
+    if (!MUSIC_ENABLED || this.music || this.shutDown || this.screen !== "lobby") return;
     if (!this.cache.audio.exists(MUSIC_KEY)) {
-      if (!this.load.isLoading()) {
-        this.load.audio(MUSIC_KEY, MUSIC_FILE);
-        this.load.once(`filecomplete-audio-${MUSIC_KEY}`, () => this.playMusic());
-        this.load.start();
+      if (this.load.isLoading()) {
+        // The gunshots are still loading: the music comes once they are in.
+        this.load.once("complete", () => this.playMusic());
+        return;
       }
+      this.load.audio(MUSIC_KEY, MUSIC_FILE);
+      this.load.once(`filecomplete-audio-${MUSIC_KEY}`, () => this.playMusic());
+      this.load.start();
       return;
     }
-    const music = this.sound.add(MUSIC_KEY, { loop: true, volume: 0 });
+    const music = this.sound.add(MUSIC_KEY, { volume: 0 });
     this.music = music;
+    // Played once, not looped.
+    music.once("complete", () => {
+      if (this.music === music) this.music = null;
+      music.destroy();
+    });
     music.play();
     this.tweens.add({ targets: music, volume: MUSIC_VOLUME, duration: MUSIC_FADE_MS });
   }
 
-  /** Fades the music out when a game opens; the scene's tweens stop with it, so plain timers do it. */
+  /** Fades the music out when a game opens or on Quit back to the splash; plain timers, as the scene's tweens stop when a game opens. */
   private fadeOutMusic() {
     const music = this.music;
     if (!music) return;

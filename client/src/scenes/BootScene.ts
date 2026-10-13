@@ -14,6 +14,14 @@ export class BootScene extends Phaser.Scene {
   }
 
   create() {
+    // Phaser pauses every sound when the page loses focus, which Adena's
+    // popup takes: the music stopped while the wallet was open. Pause only
+    // when the tab is hidden (another tab, the window minimised).
+    const sound = this.sound;
+    sound.pauseOnBlur = false;
+    this.game.events.on(Phaser.Core.Events.HIDDEN, () => sound.pauseAll());
+    this.game.events.on(Phaser.Core.Events.VISIBLE, () => sound.resumeAll());
+
     // Phaser draws a text once: the splash's web fonts (Google Fonts, linked
     // in index.html) must be there first, or it keeps the fallback. A slow
     // font server never holds the game more than FONTS_WAIT_MS.
