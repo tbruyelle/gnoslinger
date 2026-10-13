@@ -62,7 +62,7 @@
 
 ## Showdown
 - Victory points (required for more than 2 players)
-- make reaming points more visible
+- make renaiming plan points more visible
 - add winning/losing burst
 - show tips (or highlight a card with some text)
   - when no gun: show need to draw and cock
