@@ -20,8 +20,8 @@ const (
 	EvUncock       = "uncock"        // Gun uncocked
 	EvAim          = "aim"           // N = AIM points after aiming, To = the hex they sit on, Target = the seat they follow (-1 for a hex)
 	EvLoseAim      = "lose_aim"      // Reason
-	EvNothing      = "nothing"       // a Shoot used to do nothing (keeps the aim)
-	EvShot         = "shot"          // Card, Target (-1 for a shot at a hex nobody stands in), To = the hex shot at, Hit (final location or Miss), Range, N = aim time, Reason "" | out_of_zone | misfire | empty_hex
+	EvNothing      = "nothing"       // a Shoot used to do nothing, or a shot held at a hex nobody stands in (Reason empty_hex, To = the hex): keeps the aim
+	EvShot         = "shot"          // Card, Target, To = the hex shot at, Hit (final location or Miss), Range, N = aim time, Reason "" | out_of_zone | misfire (older records: Target -1 and empty_hex for a shot wasted on an empty hex)
 	EvMalfunction  = "malfunction"   // Card, Result (no_effect, misfire, jams, explodes, no_penalty), Gun, GunID
 	EvWildShot     = "wild_shot"     // Gun went off without hitting anything: uncocked, one shell less
 	EvWound        = "wound"         // Player hit: Result = penalty kind (Kill, Stun...), N
@@ -62,7 +62,7 @@ const (
 	ReasonShot      = "shot"        // aim spent by a shot (12.43)
 	ReasonStagger   = "stagger"     // thrown by a STAGGER penalty
 	ReasonMisfire   = "misfire"     // the shot was cancelled by a MALFUNCTION
-	ReasonEmptyHex  = "empty_hex"   // the shot went at a hex nobody stood in
+	ReasonEmptyHex  = "empty_hex"   // a shot at a hex nobody stood in: held (EvNothing)
 )
 
 // Malfunction results.
@@ -431,13 +431,28 @@ func fireHarmlessly(p int, g *Gun, seg int, evs *[]Event) {
 // the aim zone, a shot out of it still draws its card and misses (11.32,
 // 13.1, 13.2). A MALFUNCTION with no effect is replaced; a
 // misfire cancels the shot and a second draw may jam or blow up the gun.
-// The shooter then uncocks, spends a shell and loses the aim (13.9). It
+// The shooter then uncocks, spends a shell and loses the aim (13.9). A shot
+// at a hex nobody stands in when it comes up is held, as a Shoot doing
+// nothing: no card, no shell, the gun stays cocked and the aim is kept. It
 // returns the IMPACT TABLE results of a hit, inflicted at the end of the
 // segment.
 func shoot(board *hex.Board, p int, c *Character, target int, t *Character, a Action, seg int, d Drawer, evs *[]Event) []Penalty {
 	cancel := func(reason string) []Penalty {
 		*evs = append(*evs, Event{Seg: seg, Player: p, Kind: EvCancel, Action: a.Code, Reason: reason})
 		return nil
+	}
+	// The target: the opponent, or the hex named, where the opponent may or
+	// may not stand when the shot comes up; nobody there, the shot is held.
+	at := t.Hex
+	if a.Target < 0 {
+		if !board.Has(a.Hex) {
+			return cancel(ReasonNoHex)
+		}
+		at = a.Hex
+		if t.Status != Alive || t.Hex != at {
+			*evs = append(*evs, Event{Seg: seg, Player: p, Kind: EvNothing, Action: a.Code, To: at, Reason: ReasonEmptyHex})
+			return nil
+		}
 	}
 	slot := c.Guns.Firing()
 	if slot < 0 {
@@ -456,16 +471,6 @@ func shoot(board *hex.Board, p int, c *Character, target int, t *Character, a Ac
 	case a.Target >= 0 && (a.Target == p || t.Status != Alive):
 		return cancel(ReasonNoTarget)
 	}
-	// The target: the opponent, or the hex named, where the opponent may or
-	// may not stand when the shot goes off.
-	at := t.Hex
-	if a.Target < 0 {
-		if !board.Has(a.Hex) {
-			return cancel(ReasonNoHex)
-		}
-		at = a.Hex
-	}
-	onTarget := t.Status == Alive && t.Hex == at
 	spec := g.Type.Spec()
 	aim := a.AimTime(spec.OneHanded) + c.Aim
 	if g.Location == GunHand || g.Location == BothHands {
@@ -510,17 +515,12 @@ func shoot(board *hex.Board, p int, c *Character, target int, t *Character, a Ac
 		break
 	}
 	hit := Miss
-	ev := Event{Seg: seg, Player: p, Kind: EvShot, Action: a.Code, Card: card.N, Target: -1, To: at, Range: rng, N: aim, Gun: g.Type, GunID: g.ID}
-	if onTarget {
-		ev.Target = target
-	}
+	ev := Event{Seg: seg, Player: p, Kind: EvShot, Action: a.Code, Card: card.N, Target: target, To: at, Range: rng, N: aim, Gun: g.Type, GunID: g.ID}
 	switch {
 	case misfire:
 		ev.Reason = ReasonMisfire
 	case !inZone:
 		ev.Reason = ReasonOutOfZone
-	case !onTarget:
-		ev.Reason = ReasonEmptyHex
 	default:
 		prelim := card.Fire.Lookup(aim, rng)
 		ev.Chart = string(prelim)

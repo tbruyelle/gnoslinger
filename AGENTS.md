@@ -160,8 +160,9 @@ the option: Cock/Aim/Shoot `5f:cock|uncock`, `5f:aim:<target>` or
 `5f:shoot:<target>`, Shoot `7f:shoot:<target>` or a bare `7f` (does nothing,
 keeps the aim); a target is a hex of the aim zone (`A-F6`) or a character
 by seat (`@1`; the client turns a click on an occupied hex into this). A
-shot at a hex hits the character standing there when it goes off and is
-wasted otherwise (`empty_hex`).
+shot at a hex hits the character standing there when it comes up; with
+nobody there it is held, like a Shoot doing nothing: no card, no shell, the
+gun stays cocked and the aim is kept (a `nothing` event, Reason `empty_hex`).
 At most 5 entries, empty = pass. Example `1f:ahead_left,2f:ahead,3f`. Rules
 (engine `Plan.Validate`): one side per card, dir required for move/turn
 cards and in the right set, no choice otherwise, Draw & Cock needs a gun of

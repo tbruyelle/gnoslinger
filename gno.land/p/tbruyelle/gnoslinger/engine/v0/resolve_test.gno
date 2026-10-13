@@ -1004,26 +1004,29 @@ func TestShotAtHex(t *testing.T) {
 	if sh := ofKind(evs, 0, EvShot); len(sh) != 1 || sh[0].Target != 1 || sh[0].To != "A-F6" || sh[0].Hit != string(SideHit) {
 		t.Errorf("shot = %v", sh)
 	}
-	// A shot at an empty hex is wasted: card drawn, shell spent, aim lost, nobody hit.
+	// A shot at an empty hex is held, as a Shoot doing nothing: no card, no
+	// shell, the gun still cocked, the aim kept.
 	st = armed(0)
-	st.Chars[0].Aim = 2
+	st.Chars[0].Aim, st.Chars[0].AimHex = 2, "A-F6" // the markers on that hex: the reveal keeps them
 	seq = Sequence{6}
 	st, evs = resolveWith(t, st, "7f:shoot:A-F6", "", &seq)
-	sh := ofKind(evs, 0, EvShot)
-	if len(sh) != 1 || sh[0].Target != -1 || sh[0].To != "A-F6" || sh[0].Reason != ReasonEmptyHex || sh[0].Hit != string(Miss) || sh[0].Card != 6 {
+	if sh := ofKind(evs, 0, EvShot); len(sh) != 0 {
 		t.Errorf("shot = %v", sh)
 	}
-	if g := st.Chars[0].Guns[0]; g.Cocked || g.Shells != 5 || st.Chars[0].Aim != 0 || len(ofKind(evs, 1, EvWound)) != 0 {
+	if n := ofKind(evs, 0, EvNothing); len(n) != 1 || n[0].To != "A-F6" || n[0].Reason != ReasonEmptyHex {
+		t.Errorf("nothing = %v", n)
+	}
+	if g := st.Chars[0].Guns[0]; !g.Cocked || g.Shells != 6 || st.Chars[0].Aim != 2 || len(ofKind(evs, 0, EvDelay)) != 0 {
 		t.Errorf("gun = %+v, aim %d", g, st.Chars[0].Aim)
 	}
-	// The Kid walks into the hex shot at before the shot goes off: hit.
+	// The shot comes up before the Kid walks into the hex: held as well.
 	st = armed(0)
 	st.Chars[0].Hex, st.Chars[1].Hex = "A-F5", "A-F7"
 	st.Chars[0].Aim = 6
 	seq = Sequence{1, 19, 19, 61, 65, 37}
-	st, evs = resolveWith(t, st, "5f:shoot:A-F6", "1f:ahead", &seq) // the Kid advances at seg 2, the shot goes off at seg 2 first... at the Kid still in F7
-	if sh := ofKind(evs, 0, EvShot); len(sh) != 1 || sh[0].Target != -1 || sh[0].Reason != ReasonEmptyHex {
-		t.Errorf("shot = %v", sh)
+	st, evs = resolveWith(t, st, "5f:shoot:A-F6", "1f:ahead", &seq) // shots first at seg 2: the Kid still stands in F7
+	if n := ofKind(evs, 0, EvNothing); len(ofKind(evs, 0, EvShot)) != 0 || len(n) != 1 || n[0].Reason != ReasonEmptyHex {
+		t.Errorf("events = %v", evs)
 	}
 	st = armed(0)
 	st.Chars[0].Hex, st.Chars[1].Hex = "A-F5", "A-F7"
