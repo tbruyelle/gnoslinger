@@ -622,7 +622,6 @@ export class GameScene extends Phaser.Scene {
   /** The plan being built when a history replay was opened, restored on close. */
   /** The plan sent this turn, shown while waiting: known from sending it, else read back from the chain. */
   private sentPlan: { turn: number; plan: string } | null = null;
-  private stashedPlan: { turn: number; order: PlanEntry[]; choices: Map<number, RelativeDirection>; guns: Map<number, { gun?: number; ground?: number; hand: number }>; opts: Map<number, ShootOption>; aims: Map<number, { hex?: string; target?: number }> } | null = null;
 
   // Zoom & pan
   private zoom = 1;
@@ -2461,9 +2460,6 @@ export class GameScene extends Phaser.Scene {
         showToast(this, "No turn has been played yet", "info");
         return;
       }
-      if (this.mode === "select" && this.selectionOrder.length > 0) {
-        this.stashedPlan = { turn: this.view.turn, order: [...this.selectionOrder], choices: new Map(this.pendingChoices), guns: new Map(this.pendingGuns), opts: new Map(this.pendingOpts), aims: new Map(this.pendingAims) };
-      }
       this.startPlayback(history.turns, false);
     } catch (e) {
       if (this.scene.isActive()) showToast(this, userMessage(e), "error");
@@ -2917,24 +2913,11 @@ export class GameScene extends Phaser.Scene {
     const view = this.view;
     // A turn resolved while the history was open: show it live now.
     if (!pb.live && view?.lastTurn && view.lastTurn.turn !== this.shownResultTurn) {
-      this.stashedPlan = null;
       this.startPlayback([view.lastTurn], true);
       return;
     }
     this.applyState(false);
     if (pb.live) this.playCues(soundsForDelay(delays, this.displayChars()));
-    const stash = this.stashedPlan;
-    this.stashedPlan = null;
-    if (stash && this.mode === "select" && view && stash.turn === view.turn) {
-      this.selectionOrder = stash.order;
-      this.pendingChoices = stash.choices;
-      this.pendingGuns = stash.guns;
-      this.pendingOpts = stash.opts;
-      this.pendingAims = stash.aims;
-      this.updatePreview(false);
-      this.refreshSelectionDisplay();
-      this.refreshCardHighlights();
-    }
   }
 
   // ── Input (zoom, pan) ─────────────────────────────────────────────────────
