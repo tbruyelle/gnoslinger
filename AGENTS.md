@@ -336,9 +336,17 @@ calls; `testing.SkipHeights(n)` advances block time 5 s per height.
   music kept off by `MUSIC_ENABLED`); `BootScene` waits up to 2 s for the
   web fonts first, since Phaser draws a text once. A game handing back
   `{ splash: false }` skips the splash. Then connect Adena (switching/adding
-  the network from `VITE_CHAIN_ID`/`VITE_RPC_URL`), create / join / open games. Characters are
-  fixed for now: the creator plays `marshal`, the joiner `the_kid`
-  (`CREATOR_CHAR`/`JOINER_CHAR`); the realm still takes any character key.
+  the network from `VITE_CHAIN_ID`/`VITE_RPC_URL`) and show the lobby: an
+  HTML overlay (`ui/lobbyView.ts`, after the Design canvas's lobby mockup)
+  rendered from the scene's state on every change, with the account (copy,
+  Quit), **Your move** (running games without my plan, the time left before
+  a timeout can be claimed, red when running out), **Waiting on others**,
+  **Open showdowns** to join, **Finished** (Replay) and the **New showdown**
+  form (turns 10 to 30, time per turn). `game/lobby.ts` sorts the games into
+  those sections from the `submitted` flag each player carries in
+  `json/games/{addr}`. Characters are fixed for now: the creator plays
+  `marshal`, the joiner `the_kid` (`CREATOR_CHAR`/`JOINER_CHAR`); the realm
+  still takes any character key.
 - `GameScene`: renders `committed` state from the chain; card strip builds an
   ordered plan with a live preview (`replayPlan`) and relative-direction hex
   picks (move choices and the aim zone highlight whole hexes,

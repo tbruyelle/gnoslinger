@@ -173,7 +173,8 @@ export interface GameSummary {
   endReason: string;
   createdAt: number;
   updatedAt: number;
-  players: { addr: string; char: string }[];
+  /** submitted: the seat's plan for the turn in progress is in. */
+  players: { addr: string; char: string; submitted?: boolean }[];
 }
 
 export interface GamesView {

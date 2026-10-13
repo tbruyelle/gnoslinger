@@ -27,7 +27,7 @@ import { SHOOT_OPTIONS, isShooting, type ShootOption } from "../game/plan";
 import { closeCharacterSheet, openCharacterSheet, type GunPick } from "../ui/characterSheet";
 import { SegmentTracker } from "../ui/segmentTracker";
 import { showToast } from "../ui/toast";
-import { charName } from "./LobbyScene";
+import { charName } from "../game/lobby";
 
 // ── Layout constants ────────────────────────────────────────────────────────
 
