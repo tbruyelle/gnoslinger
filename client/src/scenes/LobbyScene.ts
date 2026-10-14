@@ -372,6 +372,7 @@ export class LobbyScene extends Phaser.Scene {
       error: this.errorMsg,
       chainId: this.chain?.config.chainId ?? "",
       address: this.chain?.wallet.address ?? "",
+      name: this.games?.name ?? "",
       balance: this.balance ?? "",
       locked: walletLocked(),
       busy: this.busy,

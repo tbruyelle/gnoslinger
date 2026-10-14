@@ -11,6 +11,8 @@ export const END_OF_TURN_SEG = 6;
 
 export interface PlayerView {
   addr: string;
+  /** Registered name (namereg, in gno.land/r/sys/users), "" if none. */
+  name?: string;
   char: string;
   hex: string;
   /** Absolute facing 0=N 1=NE 2=SE 3=S 4=SW 5=NW. */
@@ -133,7 +135,7 @@ export interface HistoryView {
   id: string;
   turn: number;
   phase: Phase;
-  players: { addr: string; char: string }[];
+  players: { addr: string; name?: string; char: string }[];
   turns: TurnResult[];
 }
 
@@ -174,10 +176,13 @@ export interface GameSummary {
   createdAt: number;
   updatedAt: number;
   /** submitted: the seat's plan for the turn in progress is in. */
-  players: { addr: string; char: string; submitted?: boolean }[];
+  /** name: the registered name, "" if none. */
+  players: { addr: string; name?: string; char: string; submitted?: boolean }[];
 }
 
 export interface GamesView {
+  /** The registered name of the address listed, "" if none. */
+  name?: string;
   open: GameSummary[];
   mine: GameSummary[];
 }
@@ -290,7 +295,7 @@ export function parsePlayersView(json: string): PlayersView {
 }
 
 /** A player as shown in lists: the registered name, else the short address. */
-export function playerLabel(p: { addr: string; name: string }): string {
+export function playerLabel(p: { addr: string; name?: string }): string {
   return p.name || shortAddr(p.addr);
 }
 

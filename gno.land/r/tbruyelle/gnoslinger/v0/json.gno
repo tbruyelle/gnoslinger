@@ -97,7 +97,7 @@ func HistoryJSON(id string) string {
 		if i > 0 {
 			b.WriteByte(',')
 		}
-		b.WriteString(`{"addr":` + quote(p.Addr.String()) + `,"char":` + quote(p.Char) + `}`)
+		b.WriteString(`{"addr":` + quote(p.Addr.String()) + `,"name":` + quote(registeredName(p.Addr)) + `,"char":` + quote(p.Char) + `}`)
 	}
 	b.WriteString(`],"turns":[`)
 	for i, r := range g.Turns {
@@ -113,6 +113,7 @@ func HistoryJSON(id string) string {
 func writePlayer(b *strings.Builder, g *Game, i int) {
 	p, c := g.Players[i], g.State.Chars[i]
 	b.WriteString(`{"addr":` + quote(p.Addr.String()))
+	b.WriteString(`,"name":` + quote(registeredName(p.Addr)))
 	b.WriteString(`,"char":` + quote(p.Char))
 	b.WriteString(`,"hex":` + quote(c.Hex))
 	b.WriteString(`,"facing":` + strconv.Itoa(int(c.Facing)))
@@ -253,13 +254,15 @@ func writeEvent(b *strings.Builder, e engine.Event) {
 }
 
 // GamesJSON lists, for an address, the games waiting for an opponent and
-// the games it plays or played, newest first (at most 50 each):
+// the games it plays or played, newest first (at most 50 each), with the
+// address's registered name ("" if none):
 //
-//	{"open":[summary...],"mine":[summary...]}
-//	summary = {"id","rev","phase","turn","maxTurns","timeout","winner","endReason","createdAt","updatedAt","players":[{"addr","char","submitted"}]}
+//	{"name","open":[summary...],"mine":[summary...]}
+//	summary = {"id","rev","phase","turn","maxTurns","timeout","winner","endReason","createdAt","updatedAt","players":[{"addr","name","char","submitted"}]}
 func GamesJSON(addr string) string {
 	var b strings.Builder
-	b.WriteString(`{"open":[`)
+	b.WriteString(`{"name":` + quote(registeredName(address(addr))))
+	b.WriteString(`,"open":[`)
 	n := 0
 	openGames.ReverseIterate("", "", func(_ string, v any) bool {
 		if n > 0 {
@@ -301,7 +304,7 @@ func writeSummary(b *strings.Builder, g *Game) {
 		if i > 0 {
 			b.WriteByte(',')
 		}
-		b.WriteString(`{"addr":` + quote(p.Addr.String()) + `,"char":` + quote(p.Char) + `,"submitted":` + strconv.FormatBool(g.Submitted[i]) + `}`)
+		b.WriteString(`{"addr":` + quote(p.Addr.String()) + `,"name":` + quote(registeredName(p.Addr)) + `,"char":` + quote(p.Char) + `,"submitted":` + strconv.FormatBool(g.Submitted[i]) + `}`)
 	}
 	b.WriteString("]}")
 }

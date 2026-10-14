@@ -26,5 +26,5 @@ func main(cur realm) {
 }
 
 // Output:
-// {"open":[{"id":"0000002","rev":1,"phase":"waiting","turn":1,"maxTurns":10,"timeout":172800,"winner":-1,"endReason":"","createdAt":1234567890,"updatedAt":1234567890,"players":[{"addr":"g1alice00000000000000000000000000000000","char":"marshal","submitted":false},{"addr":"","char":"","submitted":false}]}],"mine":[{"id":"0000002","rev":1,"phase":"waiting","turn":1,"maxTurns":10,"timeout":172800,"winner":-1,"endReason":"","createdAt":1234567890,"updatedAt":1234567890,"players":[{"addr":"g1alice00000000000000000000000000000000","char":"marshal","submitted":false},{"addr":"","char":"","submitted":false}]}]}
-// {"open":[],"mine":[]}
+// {"name":"","open":[{"id":"0000002","rev":1,"phase":"waiting","turn":1,"maxTurns":10,"timeout":172800,"winner":-1,"endReason":"","createdAt":1234567890,"updatedAt":1234567890,"players":[{"addr":"g1alice00000000000000000000000000000000","name":"","char":"marshal","submitted":false},{"addr":"","name":"","char":"","submitted":false}]}],"mine":[{"id":"0000002","rev":1,"phase":"waiting","turn":1,"maxTurns":10,"timeout":172800,"winner":-1,"endReason":"","createdAt":1234567890,"updatedAt":1234567890,"players":[{"addr":"g1alice00000000000000000000000000000000","name":"","char":"marshal","submitted":false},{"addr":"","name":"","char":"","submitted":false}]}]}
+// {"name":"","open":[],"mine":[]}

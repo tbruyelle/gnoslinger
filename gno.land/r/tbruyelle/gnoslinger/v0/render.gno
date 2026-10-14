@@ -338,7 +338,11 @@ func phaseLabel(g *Game) string {
 	return l
 }
 
+// addr shows an address by its registered name when it has one.
 func addr(a address) string {
+	if name := registeredName(a); name != "" {
+		return md.Bold(sanitize.InlineText(name))
+	}
 	return md.InlineCode(sanitize.InlineText(a.String()))
 }
 

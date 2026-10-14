@@ -6,7 +6,7 @@ import { getChain, type Chain } from "../chain";
 import { subscribeAccountChanged, subscribeNetworkChanged } from "../chain/adena";
 import { userMessage } from "../chain/errors";
 import { GamePoller } from "../chain/poller";
-import { seatOf, shortAddr, type GameView, type TurnResult, type PlayerStatus, type TurnEvent, type GunView, type GroundGunView } from "../chain/types";
+import { playerLabel, seatOf, type GameView, type TurnResult, type PlayerStatus, type TurnEvent, type GunView, type GroundGunView } from "../chain/types";
 import {
   describeEvents,
   endOfTurnEvents,
@@ -1318,7 +1318,7 @@ export class GameScene extends Phaser.Scene {
       statusTone: tone,
       right: this.netError
         ? `RPC offline: ${this.netError}`
-        : players.map((p, i) => (p.addr ? `${charName(p.char)} (${i === this.myIndex ? "you" : shortAddr(p.addr)})` : "empty seat")).join("  vs  "),
+        : players.map((p, i) => (p.addr ? `${charName(p.char)} (${i === this.myIndex ? "you" : playerLabel(p)})` : "empty seat")).join("  vs  "),
       rightError: !!this.netError,
     };
 

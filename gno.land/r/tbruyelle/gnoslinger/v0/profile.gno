@@ -72,8 +72,12 @@ func rankOf(p *Profile) int {
 	return rank
 }
 
-// registeredName is addr's name in gno.land/r/sys/users, or "".
+// registeredName is addr's name in gno.land/r/sys/users (where namereg
+// registers them), or "".
 func registeredName(addr address) string {
+	if addr == "" {
+		return ""
+	}
 	if u := users.ResolveAddress(addr); u != nil {
 		return u.Name()
 	}

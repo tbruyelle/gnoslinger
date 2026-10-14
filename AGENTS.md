@@ -149,8 +149,11 @@ turn in progress, shown by the client while waiting),
 `Render("json/profile/{addr}")` (`null` before the address's first game) and
 `Render("json/players/{offset}/{count}")` (a page of the ranking, at most
 50, `{total, offset, players}`; each profile carries its `rank` and `name`,
-the address's name in `gno.land/r/sys/users`, resolved when the JSON is
-built, "" if none) return raw JSON through `vm/qrender`
+the address's name in `gno.land/r/sys/users`, where `r/sys/namereg`
+registers them, resolved when the JSON is built, "" if none; every player of
+`json/game`, `json/games` and `json/history` carries that `name` too, and
+`json/games/{addr}` the listed address's own: the client and the gnoweb pages
+show a player by name, else by address, `playerLabel`) return raw JSON through `vm/qrender`
 (`vm/qeval` would Go-quote the string). `Render("")`, `game/{id}`, `help` are
 gnoweb pages. `GameJSON`, `GamesJSON`, `HistoryJSON`, `ProfileJSON`, `PlayersJSON`, `GameRev` are plain
 getters for tests and gnokey.

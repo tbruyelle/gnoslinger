@@ -1,4 +1,4 @@
-import { playerLabel, shortAddr, type GameSummary, type GamesView, type PlayersView, type Profile } from "../chain/types";
+import { playerLabel, type GameSummary, type GamesView, type PlayersView, type Profile } from "../chain/types";
 import { uprightTokenAngle } from "../rules";
 import { charName, formatDuration, formatLeft, lobbySections, outcomeLine, runningOut, secondsLeft } from "../game/lobby";
 
@@ -28,6 +28,8 @@ export interface LobbyModel {
   chainId: string;
   /** My address, "" until connected. */
   address: string;
+  /** My registered name, "" if none. */
+  name: string;
   /** "" while loading. */
   balance: string;
   locked: boolean;
@@ -242,7 +244,7 @@ export class LobbyView {
         `<span class="gl-net">${esc(m.chainId)} network</span>` +
         (m.locked ? '<span class="gl-locked">Adena locked</span>' : "") +
         `<div class="gl-account"><button type="button" class="gl-account-btn" data-act="profile" data-id="${esc(m.address)}" title="My profile · ${esc(m.address)}">` +
-        `<b>${esc(shortAddr(m.address))}</b><span>${esc(m.balance || "…")}</span></button>` +
+        `<b>${esc(playerLabel({ addr: m.address, name: m.name }))}</b><span>${esc(m.balance || "…")}</span></button>` +
         `<button type="button" class="gl-icon" data-act="copy" aria-label="Copy my address">${COPY_ICON}</button>` +
         '<button type="button" class="gl-quit" data-act="quit">Quit</button></div>';
     } else if (m.status === "connecting") {
@@ -266,7 +268,7 @@ export class LobbyView {
     const gameLabel = (g: GameSummary) => `Game ${g.id} · created by ${g.players[0]?.addr === m.address ? "you" : charName(g.players[0]?.char)}`;
     const versus = (g: GameSummary) => {
       const o = others(g);
-      return o.length === 0 ? "Waiting for a second player" : "vs " + o.map((p) => `${charName(p.char)} · ${shortAddr(p.addr)}`).join(", ");
+      return o.length === 0 ? "Waiting for a second player" : "vs " + o.map((p) => `${charName(p.char)} · ${playerLabel(p)}`).join(", ");
     };
     const token = (g: GameSummary) => others(g)[0]?.char ?? g.players.find((p) => p.addr === m.address)?.char ?? m.creatorChar;
     const row = (cls: string, g: GameSummary, title: string, detail: string, extra: string) =>
@@ -306,7 +308,7 @@ export class LobbyView {
         const c = g.players[0];
         return (
           `<div class="gl-line">${tokenImg(c?.char ?? "")}<div class="gl-what">` +
-          `<span class="gl-title">${esc(`${charName(c?.char)} · ${shortAddr(c?.addr ?? "")}`)}</span>` +
+          `<span class="gl-title">${esc(`${charName(c?.char)} · ${c ? playerLabel(c) : ""}`)}</span>` +
           `<span class="gl-detail">${esc(`Game ${g.id} · ${g.maxTurns} turns · ${formatDuration(g.timeout)} per turn`)}</span></div>` +
           `<button type="button" class="gl-join" data-act="join" data-id="${esc(g.id)}"${dis}>Join as ${esc(charName(m.joinerChar))}</button></div>`
         );
