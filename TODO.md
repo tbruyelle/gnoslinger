@@ -4,14 +4,6 @@
 - Encode boards so they took less space
 
 ## UI
-- segment tracker
-  - replace the 5 dots of replay tracker
-  - add 5 squares reprenting each fragment
-  - fill them in red when there is delay
-  - highlight current segment by surrounding it with red lines
-  - animate highlight with replay
-  - fill the segment with light green color when planning
-- highlight full hex rather than drawing a circle for selection
 - change window size to see how things fit
 - use gnotiff
 - Session keys (`MsgCreateSession`) so Adena signs once per game.
@@ -43,8 +35,6 @@
 ## Lobby
 - add last turn replay when player goes back to a game
 - allow winner to remove replay to be refunded for the deposit
-- Check game list order (sort by most recent)
-  - highlight almost timeouted game (display remaining time)
 - Top players list leaderboard
 - Create game options
   - Allow create game with pot
@@ -86,12 +76,12 @@
     - cant shoot if both players are down and there is a window between
       them
     - check case https://youtu.be/WGQbh6coUQI?t=2704
+    - Check LOS behind the horse trough
   - fanfire
   - keep smoke until end of next turn
   - hit
     - add more detailed burst that just hit (vital, critical, ...)
     - keep blood on the ground?
-  - Check LOS behind the horse trough
   - when shooting empty hex, indicate this is only if a target go in the hex
 - Obstacles
   - walls 
