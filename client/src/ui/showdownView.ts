@@ -144,6 +144,7 @@ export interface ShowdownModel {
     prevSeg: boolean;
     nextSeg: boolean;
     playing: boolean;
+    /** Names the panel's close cross: what closing does. */
     closeLabel: string;
   } | null;
 }
@@ -173,6 +174,8 @@ const CSS = `
 .gv-status.over{background:#F3E7CE;color:#2A1C14}
 .gv-hright{margin-left:auto;font-size:15px;color:#D9C9A8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .gv-hright.err{color:#F2B544}
+.gv-x{position:absolute;top:4px;right:6px;width:44px;height:44px;display:flex;align-items:center;justify-content:center;background:transparent;border:0;border-radius:8px;color:#F2B544;cursor:pointer}
+.gv-x:hover{color:#FBF4E4;background:#5A4636}
 .gv-left,.gv-right{background:#1E1618;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:12px}
 .gv-left{grid-area:left}
 .gv-right{grid-area:right}
@@ -235,7 +238,7 @@ const CSS = `
 .gv-btn.danger{color:#8E2F1A;border-color:#8E2F1A}
 .gv-btn.primary{flex:1 1 100%;min-height:54px;background:#B5482A;color:#FBF4E4;border:3px solid #2A1C14;border-radius:12px;box-shadow:0 5px 0 #2A1C14;font-family:Rye,Georgia,serif;font-size:21px;font-weight:400;letter-spacing:1.5px}
 .gv-btn.primary:hover:not(:disabled){background:#C65634}
-.gv-bottom{grid-area:bottom;background:#2A1C14;border-top:3px solid #5A4636;padding:8px 18px 12px;color:#F3E7CE;min-width:0;overflow:hidden;display:flex;flex-direction:column}
+.gv-bottom{grid-area:bottom;position:relative;background:#2A1C14;border-top:3px solid #5A4636;padding:8px 18px 12px;color:#F3E7CE;min-width:0;overflow:hidden;display:flex;flex-direction:column}
 .gv-hand-head{display:flex;align-items:baseline;gap:14px;margin-bottom:6px}
 .gv-hand-head h2{margin:0;font-family:Rye,Georgia,serif;font-weight:400;font-size:18px}
 .gv-hand-head span{font-size:14px;color:#D9C9A8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -290,6 +293,9 @@ const CHECK_SVG =
 const HOURGLASS_SVG =
   '<svg width="18" height="22" viewBox="0 0 52 62" aria-hidden="true"><rect x="6" y="2" width="40" height="7" rx="2" fill="#F3E7CE"></rect><rect x="6" y="53" width="40" height="7" rx="2" fill="#F3E7CE"></rect>' +
   '<path d="M11,9 H41 Q41,24 26,31 Q11,24 11,9 Z M11,53 H41 Q41,38 26,31 Q11,38 11,53 Z" fill="none" stroke="#F3E7CE" stroke-width="4" stroke-linejoin="round"></path><path d="M17,48 Q26,40 35,48 Z" fill="#F3E7CE"></path></svg>';
+const CLOSE_SVG =
+  '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M6 6 L18 18 M18 6 L6 18"></path></svg>';
+
 const BACK_SVG =
   '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5 L8 12 L15 19"></path></svg>';
 
@@ -500,13 +506,14 @@ export class ShowdownView {
       `<div class="gv-rp"><div class="gv-tl"><span></span>${heads}${rows}</div>` +
       '<div class="gv-ctl"><div class="gv-ctl-row">' +
       `<button type="button" class="gv-ghost" data-act="btn" data-id="prevTurn"${dis(r.prevTurn)}>◀ Turn</button>` +
-      `<button type="button" class="gv-ghost" data-act="btn" data-id="nextTurn"${dis(r.nextTurn)}>Turn ▶</button>` +
-      `<button type="button" class="gv-ghost" data-act="btn" data-id="close">${esc(r.closeLabel)}</button></div>` +
+      `<button type="button" class="gv-ghost" data-act="btn" data-id="nextTurn"${dis(r.nextTurn)}>Turn ▶</button></div>` +
       '<div class="gv-ctl-row">' +
       `<button type="button" class="gv-icon" data-act="btn" data-id="prevSeg" aria-label="Previous segment"${dis(r.prevSeg)}><svg width="20" height="20" viewBox="0 0 24 24" fill="#2A1C14" aria-hidden="true"><path d="M17 5 L7 12 L17 19 Z"></path></svg></button>` +
       `<button type="button" class="gv-play" data-act="btn" data-id="play">${r.playing ? "PAUSE" : "PLAY"}</button>` +
       `<button type="button" class="gv-icon" data-act="btn" data-id="nextSeg" aria-label="Next segment"${dis(r.nextSeg)}><svg width="20" height="20" viewBox="0 0 24 24" fill="#2A1C14" aria-hidden="true"><path d="M7 5 L17 12 L7 19 Z"></path></svg></button>` +
-      "</div></div></div>"
+      "</div></div></div>" +
+      // The replay, or a turn's playback, closes from the panel's top-right cross.
+      `<button type="button" class="gv-x" data-act="btn" data-id="close" aria-label="${esc(r.closeLabel)}" title="${esc(r.closeLabel)}">${CLOSE_SVG}</button>`
     );
   }
 
