@@ -5,9 +5,9 @@ import { initChain, resetChain, type Chain } from "../chain";
 import { subscribeAccountChanged, subscribeNetworkChanged, subscribeWalletLocked, walletLocked } from "../chain/adena";
 import { userMessage } from "../chain/errors";
 import { formatCoins } from "../chain/rpc";
-import type { GamesView } from "../chain/types";
+import type { GamesView, PlayersView } from "../chain/types";
 import { SOUND_FILES, SOUND_VOLUME, soundKey } from "../game/sounds";
-import { LobbyView } from "../ui/lobbyView";
+import { LobbyView, PLAYERS_PAGE, type LobbyDialog } from "../ui/lobbyView";
 import { showToast } from "../ui/toast";
 import { installWalletNotices } from "../ui/walletNotices";
 
@@ -26,6 +26,8 @@ const DEFAULT_TIMEOUT_INDEX = 3;
 /** Game lengths offered for a new game (the realm takes 10 to 30). */
 const TURN_OPTIONS = [10, 15, 20, 25, 30];
 const DEFAULT_TURNS = 20;
+/** Players shown in the lobby's top players panel. */
+const TOP_PLAYERS = 5;
 
 /** Default characters until players can pick their own: creator and joiner. */
 export const CREATOR_CHAR = "marshal";
@@ -79,6 +81,11 @@ export class LobbyScene extends Phaser.Scene {
   private errorMsg = "";
   private games: GamesView | null = null;
   private gamesKey = "";
+  private topPlayers: PlayersView | null = null;
+  private topKey = "";
+  private dialog: LobbyDialog | null = null;
+  /** Bumped by each dialog request, so a late answer cannot replace a newer dialog. */
+  private dialogSeq = 0;
   private busy = false;
   private balance: string | null = null;
   private turns = DEFAULT_TURNS;
@@ -104,6 +111,9 @@ export class LobbyScene extends Phaser.Scene {
     this.status = "connecting";
     this.games = null;
     this.gamesKey = "";
+    this.topPlayers = null;
+    this.topKey = "";
+    this.dialog = null;
     this.busy = false;
   }
 
@@ -122,6 +132,13 @@ export class LobbyScene extends Phaser.Scene {
       },
       setTurns: (turns) => (this.turns = turns),
       setTimeout: (index) => (this.timeoutIndex = index),
+      openProfile: (addr, fromPage) => void this.openProfile(addr, fromPage),
+      openPlayers: (page) => void this.openPlayers(page),
+      closeDialog: () => {
+        this.dialogSeq++;
+        this.dialog = null;
+        this.renderView();
+      },
     });
     if (this.screen === "lobby") this.playMusic();
     this.loadGunshots();
@@ -235,16 +252,60 @@ export class LobbyScene extends Phaser.Scene {
   private async refreshGames() {
     if (!this.chain || !this.scene.isActive()) return;
     try {
-      const games = await this.chain.realm.listGames(this.chain.wallet.address);
+      const [games, top] = await Promise.all([
+        this.chain.realm.listGames(this.chain.wallet.address),
+        this.chain.realm.listPlayers(0, TOP_PLAYERS),
+      ]);
       const key = JSON.stringify(games);
-      if (key !== this.gamesKey) {
+      const topKey = JSON.stringify(top);
+      if (key !== this.gamesKey || topKey !== this.topKey) {
         this.gamesKey = key;
         this.games = games;
+        this.topKey = topKey;
+        this.topPlayers = top;
         this.buildAll();
       }
     } catch (e) {
       showToast(this, userMessage(e), "error");
     }
+  }
+
+  /** Shows a player's profile; fromPage is the ranking page it was picked from. */
+  private async openProfile(addr: string, fromPage: number | null) {
+    if (!this.chain) return;
+    const seq = ++this.dialogSeq;
+    this.dialog = { kind: "profile", addr, profile: null, loading: true, error: "", fromPage };
+    this.renderView();
+    let profile = null;
+    let error = "";
+    try {
+      profile = await this.chain.realm.getProfile(addr);
+    } catch (e) {
+      error = userMessage(e);
+    }
+    if (seq !== this.dialogSeq || !this.dialog || !this.scene.isActive()) return;
+    this.dialog = { kind: "profile", addr, profile, loading: false, error, fromPage };
+    this.renderView();
+  }
+
+  /** Shows a page (0-based) of the whole ranking; the page on screen stays until the next one loads. */
+  private async openPlayers(page: number) {
+    if (!this.chain) return;
+    const seq = ++this.dialogSeq;
+    if (this.dialog?.kind !== "players") {
+      this.dialog = { kind: "players", page, players: null, error: "" };
+      this.renderView();
+    }
+    let players = null;
+    let error = "";
+    try {
+      players = await this.chain.realm.listPlayers(page * PLAYERS_PAGE, PLAYERS_PAGE);
+    } catch (e) {
+      error = userMessage(e);
+    }
+    if (seq !== this.dialogSeq || !this.dialog || !this.scene.isActive()) return;
+    this.dialog = { kind: "players", page, players, error };
+    this.renderView();
   }
 
   /** Runs a wallet action; a returned game id opens the game. */
@@ -321,6 +382,8 @@ export class LobbyScene extends Phaser.Scene {
       turnOptions: TURN_OPTIONS,
       timeoutIndex: this.timeoutIndex,
       timeoutOptions: TIMEOUT_OPTIONS,
+      topPlayers: this.topPlayers,
+      dialog: this.dialog,
     });
   }
 

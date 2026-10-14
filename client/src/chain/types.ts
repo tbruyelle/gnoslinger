@@ -250,6 +250,50 @@ export function parseGamesView(json: string): GamesView {
   return v as unknown as GamesView;
 }
 
+/** A player's record (json/profile/{addr}, json/players/{offset}/{count}). */
+export interface Profile {
+  addr: string;
+  /** Registered name in gno.land/r/sys/users, "" if none. */
+  name: string;
+  /** 1-based position in the ranking. */
+  rank: number;
+  gamesPlayed: number;
+  victoryPoints: number;
+  createdAt: number;
+}
+
+/** One page of the ranking, best first. */
+export interface PlayersView {
+  total: number;
+  offset: number;
+  players: Profile[];
+}
+
+function checkProfile(v: unknown): Profile {
+  if (!isRecord(v) || typeof v.addr !== "string" || typeof v.name !== "string" || typeof v.rank !== "number" || typeof v.gamesPlayed !== "number" || typeof v.victoryPoints !== "number") {
+    bad("profile");
+  }
+  return v as unknown as Profile;
+}
+
+/** null: the address has no profile yet (it never created or joined a game). */
+export function parseProfile(json: string): Profile | null {
+  const v: unknown = JSON.parse(json);
+  return v === null ? null : checkProfile(v);
+}
+
+export function parsePlayersView(json: string): PlayersView {
+  const v: unknown = JSON.parse(json);
+  if (!isRecord(v) || typeof v.total !== "number" || typeof v.offset !== "number" || !Array.isArray(v.players)) bad("players");
+  v.players.forEach(checkProfile);
+  return v as unknown as PlayersView;
+}
+
+/** A player as shown in lists: the registered name, else the short address. */
+export function playerLabel(p: { addr: string; name: string }): string {
+  return p.name || shortAddr(p.addr);
+}
+
 /** Seat of an address in a game, or -1. */
 export function seatOf(game: { players: { addr: string }[] }, addr: string): number {
   return game.players.findIndex((p) => p.addr !== "" && p.addr === addr);

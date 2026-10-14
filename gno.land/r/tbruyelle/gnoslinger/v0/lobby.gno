@@ -38,6 +38,7 @@ func CreateGame(cur realm, charKey string, maxTurns int, timeoutMinutes int) str
 	g.Players[0] = Player{Addr: caller, Char: charKey}
 	openGames.Set(id, g)
 	index(caller, id)
+	ensureProfile(caller)
 	save(g)
 	emit("GameCreated", "id", id, "creator", caller.String(), "char", charKey, "maxTurns", strconv.Itoa(maxTurns),
 		"timeoutMinutes", strconv.Itoa(int(timeout/time.Minute)))
@@ -61,6 +62,10 @@ func JoinGame(cur realm, id string, charKey string) {
 	g.Phase = PhasePlanning
 	openGames.Remove(id)
 	index(caller, id)
+	// The game starts: it counts as played for both seats.
+	for _, p := range g.Players {
+		updateProfile(p.Addr, func(pr *Profile) { pr.GamesPlayed++ })
+	}
 	save(g)
 	emit("PlayerJoined", "id", id, "player", caller.String(), "char", charKey)
 }

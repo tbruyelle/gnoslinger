@@ -1,9 +1,11 @@
 package gnoslinger
 
 import (
-	"gno.land/p/tbruyelle/gnoslinger/engine/v0"
+	"strconv"
 	"strings"
 	"testing"
+
+	"gno.land/p/tbruyelle/gnoslinger/engine/v0"
 
 	"gno.land/p/nt/testutils/v0"
 	"gno.land/p/nt/uassert/v0"
@@ -475,4 +477,44 @@ func TestAutoPass(cur realm, t *testing.T) {
 	uassert.Equal(t, 2, g.State.Chars[1].Delay) // 5 -> 2
 	uassert.Equal(t, 2, len(g.Turns))
 	uassert.Equal(t, "planning", g.Phase.String())
+}
+
+func TestProfiles(cur realm, t *testing.T) {
+	dave := testutils.TestAddress("dave")
+	erin := testutils.TestAddress("erin")
+	uassert.Equal(t, "null", ProfileJSON(dave.String()))
+
+	// Creating a game makes the profile; the game counts once it starts.
+	testing.SetRealm(testing.NewUserRealm(dave))
+	id := CreateGame(cross(cur), "marshal", 10, 0)
+	uassert.Equal(t, 0, profiles.Get(dave.String()).(*Profile).GamesPlayed)
+	CancelGame(cross(cur), id)
+	uassert.Equal(t, 0, profiles.Get(dave.String()).(*Profile).GamesPlayed)
+
+	id = CreateGame(cross(cur), "marshal", 10, 0)
+	testing.SetRealm(testing.NewUserRealm(erin))
+	JoinGame(cross(cur), id, "dude")
+	uassert.Equal(t, 1, profiles.Get(dave.String()).(*Profile).GamesPlayed)
+	uassert.Equal(t, 1, profiles.Get(erin.String()).(*Profile).GamesPlayed)
+	uassert.Equal(t, profiles.Size(), ranking.Size())
+
+	// A second game puts dave ahead of erin.
+	testing.SetRealm(testing.NewUserRealm(dave))
+	CreateGame(cross(cur), "marshal", 10, 0)
+	id = CreateGame(cross(cur), "marshal", 10, 0)
+	testing.SetRealm(testing.NewUserRealm(alice))
+	JoinGame(cross(cur), id, "dude")
+	d := profiles.Get(dave.String()).(*Profile)
+	e := profiles.Get(erin.String()).(*Profile)
+	uassert.Equal(t, 2, d.GamesPlayed)
+	uassert.True(t, rankOf(d) < rankOf(e))
+	uassert.Equal(t, profiles.Size(), ranking.Size())
+
+	// Pages follow the ranking and give each player its rank.
+	all := PlayersJSON(0, maxPlayersPage)
+	uassert.True(t, strings.Contains(all, `"total":`+strconv.Itoa(ranking.Size())))
+	uassert.True(t, strings.Index(all, dave.String()) < strings.Index(all, erin.String()))
+	uassert.True(t, strings.Contains(ProfileJSON(dave.String()), `"rank":`+strconv.Itoa(rankOf(d))))
+	uassert.True(t, strings.Contains(PlayersJSON(rankOf(d)-1, 1), `"addr":"`+dave.String()+`"`))
+	uassert.Equal(t, `{"total":`+strconv.Itoa(ranking.Size())+`,"offset":0,"players":[]}`, PlayersJSON(0, 0))
 }

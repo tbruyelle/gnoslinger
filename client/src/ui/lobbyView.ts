@@ -1,4 +1,4 @@
-import { shortAddr, type GameSummary, type GamesView } from "../chain/types";
+import { playerLabel, shortAddr, type GameSummary, type GamesView, type PlayersView, type Profile } from "../chain/types";
 import { uprightTokenAngle } from "../rules";
 import { charName, formatDuration, formatLeft, lobbySections, outcomeLine, runningOut, secondsLeft } from "../game/lobby";
 
@@ -7,8 +7,20 @@ import { charName, formatDuration, formatLeft, lobbySections, outcomeLine, runni
  * the "Screen · Lobby" mockup of the Design canvas (AGENTS.md, Design): the top
  * bar with the account, then "Your move", the games waiting on someone else,
  * the open showdowns to join and the finished ones, beside the New showdown
- * form. The scene owns the state and renders it again on every change.
+ * form, and under the form the top players. My address opens my profile, the
+ * top players panel the whole ranking, a page at a time, in a dialog. The
+ * scene owns the state and renders it again on every change.
  */
+
+/** Players per page of the ranking dialog. */
+export const PLAYERS_PAGE = 20;
+
+/** The dialog over the lobby, if any. */
+export type LobbyDialog =
+  /** fromPage: the ranking page the profile was opened from, to go back to. */
+  | { kind: "profile"; addr: string; profile: Profile | null; loading: boolean; error: string; fromPage: number | null }
+  /** page: 0-based; players null while loading. */
+  | { kind: "players"; page: number; players: PlayersView | null; error: string };
 
 export interface LobbyModel {
   status: "connecting" | "ready" | "error";
@@ -29,6 +41,9 @@ export interface LobbyModel {
   turnOptions: number[];
   timeoutIndex: number;
   timeoutOptions: { minutes: number; label: string }[];
+  /** The first players of the ranking, null while loading. */
+  topPlayers: PlayersView | null;
+  dialog: LobbyDialog | null;
 }
 
 export interface LobbyActions {
@@ -40,6 +55,10 @@ export interface LobbyActions {
   create(): void;
   setTurns(turns: number): void;
   setTimeout(index: number): void;
+  openProfile(addr: string, fromPage: number | null): void;
+  /** Opens the ranking dialog at a page (0-based). */
+  openPlayers(page: number): void;
+  closeDialog(): void;
 }
 
 const CSS = `
@@ -55,9 +74,6 @@ const CSS = `
 .gl-net{font-size:15px;font-weight:700;border:2px solid #5A4636;border-radius:999px;padding:4px 12px}
 .gl-locked{font-size:15px;font-weight:700;background:#B5482A;color:#FBF4E4;border-radius:999px;padding:4px 12px}
 .gl-account{display:flex;align-items:center;gap:8px;background:#F3E7CE;color:#2A1C14;border-radius:12px;padding:4px 6px 4px 12px}
-.gl-account-id{display:flex;flex-direction:column;line-height:1.15}
-.gl-account-id b{font-size:16px}
-.gl-account-id span{font-size:14px;color:#5A4636}
 .gl-icon{width:44px;height:44px;display:flex;align-items:center;justify-content:center;background:transparent;border:0;border-radius:8px;cursor:pointer;color:#2A1C14}
 .gl-icon:hover{background:#E9DCC0}
 .gl-quit{min-height:44px;padding:0 14px;background:#2A1C14;color:#F3E7CE;border:0;border-radius:8px;font-size:16px;font-weight:700;cursor:pointer}
@@ -103,6 +119,36 @@ const CSS = `
 .gl-note{font-size:15px;font-style:italic;color:#5A4636}
 .gl-create{min-height:56px;background:#B5482A;color:#FBF4E4;border:3px solid #2A1C14;border-radius:12px;box-shadow:0 5px 0 #2A1C14;font-family:Rye,Georgia,serif;font-size:22px;letter-spacing:1.5px;cursor:pointer}
 .gl-create:hover:not(:disabled){background:#C65634}
+.gl-account-btn{display:flex;flex-direction:column;align-items:flex-start;line-height:1.15;background:transparent;border:0;border-radius:8px;padding:2px 6px;margin-left:-6px;color:inherit;text-align:left;cursor:pointer}
+.gl-account-btn:hover{background:#E9DCC0}
+.gl-account-btn b{font-size:16px}
+.gl-account-btn span{font-size:14px;color:#5A4636}
+.gl-ranks{margin-top:12px;background:#F3E7CE;border:3px solid #2A1C14;border-radius:18px;box-shadow:inset 0 0 0 5px #F3E7CE,inset 0 0 0 7px #2A1C14;padding:20px 22px 18px;display:flex;flex-direction:column;gap:10px;cursor:pointer}
+.gl-ranks:hover{box-shadow:inset 0 0 0 5px #F3E7CE,inset 0 0 0 7px #B5482A}
+.gl-ranks:focus-visible{outline:3px solid #F2B544;outline-offset:2px}
+.gl-ranks .gl-h2{color:#33307F}
+.gl-more{font-size:15px;font-style:italic;color:#5A4636;text-align:right}
+.gl-table{width:100%;border-collapse:collapse;font-size:17px}
+.gl-table th{font-size:13px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#8E2F1A;text-align:right;padding:0 6px 4px;border-bottom:2px solid #2A1C14}
+.gl-table th.l,.gl-table td.l{text-align:left}
+.gl-table td{padding:7px 6px;text-align:right;border-bottom:2px dashed #CBB892;white-space:nowrap}
+.gl-table tr:last-child td{border-bottom:0}
+.gl-table td.who{max-width:0;width:100%;overflow:hidden;text-overflow:ellipsis;font-weight:700}
+.gl-table td.rank{font-family:Rye,Georgia,serif;color:#5A4636;width:1%}
+.gl-table tr.me td.who::after{content:" (you)";font-weight:400;font-style:italic;color:#5A4636}
+.gl-table tbody tr[data-act]{cursor:pointer}
+.gl-table tbody tr[data-act]:hover td{background:#FBF4E4}
+.gl-back{position:fixed;inset:0;z-index:410;background:rgba(30,22,24,.72);display:flex;align-items:flex-start;justify-content:center;padding:72px 16px 24px;overflow-y:auto}
+.gl-dialog{width:100%;max-width:34rem;background:#F3E7CE;border:3px solid #2A1C14;border-radius:18px;box-shadow:inset 0 0 0 5px #F3E7CE,inset 0 0 0 7px #2A1C14,0 10px 0 #1E1618;padding:22px 24px 24px;display:flex;flex-direction:column;gap:14px}
+.gl-dialog .gl-head{align-items:center}
+.gl-close{width:44px;height:44px;background:transparent;border:0;border-radius:8px;font-size:28px;line-height:1;color:#2A1C14;cursor:pointer}
+.gl-close:hover{background:#E9DCC0}
+.gl-addr{font-size:15px;color:#5A4636;word-break:break-all}
+.gl-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
+.gl-stat{background:#FBF4E4;border:2px solid #2A1C14;border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:2px}
+.gl-stat b{font-family:Rye,Georgia,serif;font-weight:400;font-size:28px;color:#33307F}
+.gl-stat span{font-size:13px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#8E2F1A}
+.gl-pager{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:16px;color:#5A4636}
 `;
 
 const COPY_ICON =
@@ -135,7 +181,14 @@ export class LobbyView {
       const el = (e.target as Element).closest<HTMLElement>("[data-act]");
       if (!el || (el as HTMLButtonElement).disabled) return;
       const id = el.dataset.id ?? "";
+      const page = el.dataset.page === undefined ? null : Number(el.dataset.page);
       switch (el.dataset.act) {
+        case "profile":
+          return this.actions.openProfile(id, page);
+        case "players":
+          return this.actions.openPlayers(page ?? 0);
+        case "close":
+          return this.actions.closeDialog();
         case "retry":
           return this.actions.retry();
         case "quit":
@@ -150,6 +203,17 @@ export class LobbyView {
           return this.actions.create();
       }
     });
+    this.root.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && this.root.querySelector(".gl-back")) {
+        this.actions.closeDialog();
+        return;
+      }
+      // The top players panel is a button.
+      if ((e.key === "Enter" || e.key === " ") && (e.target as Element).classList.contains("gl-ranks")) {
+        e.preventDefault();
+        this.actions.openPlayers(0);
+      }
+    });
     this.root.addEventListener("change", (e) => {
       const el = e.target as HTMLSelectElement;
       if (el.id === "gl-turns") this.actions.setTurns(Number(el.value));
@@ -159,7 +223,7 @@ export class LobbyView {
   }
 
   render(m: LobbyModel) {
-    this.root.innerHTML = this.top(m) + `<main class="gl-main">${this.lists(m)}${this.form(m)}</main>`;
+    this.root.innerHTML = this.top(m) + `<main class="gl-main">${this.lists(m)}${this.form(m)}</main>` + this.dialog(m);
     this.root.style.display = "block";
   }
 
@@ -177,8 +241,8 @@ export class LobbyView {
       right =
         `<span class="gl-net">${esc(m.chainId)} network</span>` +
         (m.locked ? '<span class="gl-locked">Adena locked</span>' : "") +
-        `<div class="gl-account"><div class="gl-account-id"><b title="${esc(m.address)}">${esc(shortAddr(m.address))}</b>` +
-        `<span>${esc(m.balance || "…")}</span></div>` +
+        `<div class="gl-account"><button type="button" class="gl-account-btn" data-act="profile" data-id="${esc(m.address)}" title="My profile · ${esc(m.address)}">` +
+        `<b>${esc(shortAddr(m.address))}</b><span>${esc(m.balance || "…")}</span></button>` +
         `<button type="button" class="gl-icon" data-act="copy" aria-label="Copy my address">${COPY_ICON}</button>` +
         '<button type="button" class="gl-quit" data-act="quit">Quit</button></div>';
     } else if (m.status === "connecting") {
@@ -275,7 +339,86 @@ export class LobbyView {
       `<div class="gl-field"><label for="gl-timeout">Time to play each turn</label><select id="gl-timeout">${timeouts}</select>` +
       '<span class="gl-note">Past it, anyone may claim the game: the player who did not play forfeits.</span></div>' +
       `<button type="button" class="gl-create" data-act="create"${disabled}>${m.busy ? "SIGNING…" : "CALL A SHOWDOWN"}</button>` +
-      "</form></aside>"
+      "</form>" +
+      this.topPlayers(m) +
+      "</aside>"
+    );
+  }
+
+  /** The first players of the ranking; a click anywhere on it opens the whole list. */
+  private topPlayers(m: LobbyModel): string {
+    if (m.status !== "ready") return "";
+    const top = m.topPlayers;
+    let body: string;
+    if (!top) body = '<p class="gl-empty">Loading the players…</p>';
+    else if (top.players.length === 0) body = '<p class="gl-empty">Nobody has drawn yet.</p>';
+    else body = this.playersTable(top.players, m.address, null) + `<span class="gl-more">All ${top.total} player${top.total > 1 ? "s" : ""} ›</span>`;
+    return (
+      '<section class="gl-ranks" data-act="players" role="button" tabindex="0" aria-labelledby="gl-top-guns">' +
+      `<div class="gl-head"><h2 id="gl-top-guns" class="gl-h2">Top guns</h2></div>${body}</section>`
+    );
+  }
+
+  /** fromPage: each row opens its player's profile, which can go back to that page; null leaves the rows inert. */
+  private playersTable(players: Profile[], me: string, fromPage: number | null): string {
+    const rows = players
+      .map((p) => {
+        const act = fromPage === null ? "" : ` data-act="profile" data-id="${esc(p.addr)}" data-page="${fromPage}"`;
+        return (
+          `<tr${p.addr === me ? ' class="me"' : ""}${act}><td class="rank">${p.rank}</td>` +
+          `<td class="who l" title="${esc(p.addr)}">${esc(playerLabel(p))}</td>` +
+          `<td>${p.gamesPlayed}</td><td>${p.victoryPoints}</td></tr>`
+        );
+      })
+      .join("");
+    return `<table class="gl-table"><thead><tr><th>#</th><th class="l">Player</th><th>Games</th><th>VP</th></tr></thead><tbody>${rows}</tbody></table>`;
+  }
+
+  private dialog(m: LobbyModel): string {
+    const d = m.dialog;
+    if (!d) return "";
+    const title = d.kind === "players" ? "All players" : d.profile?.name || (d.addr === m.address ? "My profile" : "Player");
+    const body = d.kind === "players" ? this.playersBody(d, m.address) : this.profileBody(d, m.address);
+    return (
+      '<div class="gl-back" data-act="close">' +
+      '<section class="gl-dialog" role="dialog" aria-modal="true" aria-labelledby="gl-dialog-title" data-act="none">' +
+      `<div class="gl-head"><h2 id="gl-dialog-title" class="gl-h2">${esc(title)}</h2>` +
+      '<button type="button" class="gl-close" data-act="close" aria-label="Close">×</button></div>' +
+      body +
+      "</section></div>"
+    );
+  }
+
+  private profileBody(d: Extract<LobbyDialog, { kind: "profile" }>, me: string): string {
+    const p = d.profile;
+    let body = `<span class="gl-addr">${esc(d.addr)}</span>`;
+    if (d.loading) body += '<p class="gl-empty">Loading…</p>';
+    else if (d.error) body += `<p class="gl-empty">${esc(d.error)}</p>`;
+    else if (!p) body += `<p class="gl-empty">No profile yet: it comes with the first showdown ${d.addr === me ? "you call or join" : "this player calls or joins"}.</p>`;
+    else {
+      const since = new Date(p.createdAt * 1000).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+      body +=
+        '<div class="gl-stats">' +
+        `<div class="gl-stat"><b>#${p.rank}</b><span>Rank</span></div>` +
+        `<div class="gl-stat"><b>${p.gamesPlayed}</b><span>Games played</span></div>` +
+        `<div class="gl-stat"><b>${p.victoryPoints}</b><span>Victory points</span></div>` +
+        `</div><span class="gl-note">Riding since ${esc(since)}.</span>`;
+    }
+    if (d.fromPage !== null) body += `<div class="gl-pager"><button type="button" class="gl-open" data-act="players" data-page="${d.fromPage}">‹ All players</button></div>`;
+    return body;
+  }
+
+  private playersBody(d: Extract<LobbyDialog, { kind: "players" }>, me: string): string {
+    const v = d.players;
+    if (d.error) return `<p class="gl-empty">${esc(d.error)}</p>`;
+    if (!v) return '<p class="gl-empty">Loading…</p>';
+    if (v.players.length === 0) return '<p class="gl-empty">Nobody has drawn yet.</p>';
+    const pages = Math.max(1, Math.ceil(v.total / PLAYERS_PAGE));
+    const btn = (page: number, label: string, off: boolean) =>
+      `<button type="button" class="gl-open" data-act="players" data-page="${page}"${off ? " disabled" : ""}>${label}</button>`;
+    return (
+      this.playersTable(v.players, me, d.page) +
+      `<div class="gl-pager">${btn(d.page - 1, "‹ Prev", d.page <= 0)}<span>Page ${d.page + 1} of ${pages}</span>${btn(d.page + 1, "Next ›", d.page + 1 >= pages)}</div>`
     );
   }
 }

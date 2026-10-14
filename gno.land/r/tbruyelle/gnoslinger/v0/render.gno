@@ -34,11 +34,23 @@ func init() {
 	router.HandleFunc("json/plan/{id}/{addr}", func(res *mux.ResponseWriter, req *mux.Request) {
 		res.Write(PlanJSON(req.GetVar("id"), req.GetVar("addr")))
 	})
+	router.HandleFunc("json/profile/{addr}", func(res *mux.ResponseWriter, req *mux.Request) {
+		res.Write(ProfileJSON(req.GetVar("addr")))
+	})
+	router.HandleFunc("json/players/{offset}/{count}", func(res *mux.ResponseWriter, req *mux.Request) {
+		offset, err1 := strconv.Atoi(req.GetVar("offset"))
+		count, err2 := strconv.Atoi(req.GetVar("count"))
+		if err1 != nil || err2 != nil {
+			panic("gnoslinger: invalid page")
+		}
+		res.Write(PlayersJSON(offset, count))
+	})
 }
 
 // Render serves the gnoweb pages ("", "help", "game/{id}") and the raw JSON
 // views the web client reads ("json/game/{id}", "json/games/{addr}",
-// "json/history/{id}", "json/plan/{id}/{addr}").
+// "json/history/{id}", "json/plan/{id}/{addr}", "json/profile/{addr}",
+// "json/players/{offset}/{count}").
 func Render(path string) string {
 	return router.Render(path)
 }

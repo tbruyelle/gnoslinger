@@ -2,7 +2,21 @@ import type { Wallet, VmCall } from "./adena";
 import { WALLET_TIMEOUT_MS } from "./adena";
 import { ChainError } from "./errors";
 import { Rpc, unwrapQevalString, type TxResult } from "./rpc";
-import { parseGameView, parseGamesView, parseHistoryView, seatOf, type GameView, type GamesView, type HistoryView, parsePlanView, type PlanView } from "./types";
+import {
+  parseGameView,
+  parseGamesView,
+  parseHistoryView,
+  parsePlayersView,
+  parseProfile,
+  seatOf,
+  type GameView,
+  type GamesView,
+  type HistoryView,
+  parsePlanView,
+  type PlanView,
+  type PlayersView,
+  type Profile,
+} from "./types";
 
 const WATCH_INTERVAL_MS = 1500;
 
@@ -34,6 +48,16 @@ export class RealmClient {
   /** The plan addr submitted for the turn in progress (plans are plain on chain). */
   async getPlan(id: string, addr: string): Promise<PlanView> {
     return parsePlanView(await this.rpc.qrender(this.pkgPath, `json/plan/${id}/${addr}`));
+  }
+
+  /** addr's profile, null before its first game. */
+  async getProfile(addr: string): Promise<Profile | null> {
+    return parseProfile(await this.rpc.qrender(this.pkgPath, `json/profile/${addr}`));
+  }
+
+  /** count players of the ranking from offset (0-based), at most 50. */
+  async listPlayers(offset: number, count: number): Promise<PlayersView> {
+    return parsePlayersView(await this.rpc.qrender(this.pkgPath, `json/players/${offset}/${count}`));
   }
 
   async listGames(addr: string): Promise<GamesView> {

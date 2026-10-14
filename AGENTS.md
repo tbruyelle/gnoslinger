@@ -91,7 +91,12 @@ assets/                     served as the Vite public dir (boards, tokens, cards
 `Game{ID, Players[2]{Addr, Char}, State engine.State, Turn, MaxTurns, Phase,
 Plans[2], Submitted[2], LastTurn *TurnResult, Winner, EndReason, Rev,
 CreatedAt, UpdatedAt}` stored in an `avl.Tree` by zero-padded `seqid`;
-`byPlayer` (address → ids) and `openGames` indexes. `Rev` is bumped on every
+`byPlayer` (address → ids) and `openGames` indexes. Each address that creates
+or joins a game gets a `Profile{Addr, GamesPlayed, VictoryPoints, CreatedAt}`
+(`profile.gno`, `profiles` by address, `ranking` sorted by victory points then
+games played, both descending, then address): `GamesPlayed` goes up for both
+seats when a game starts (`JoinGame`), so a cancelled showdown does not count;
+victory points are not scored yet (always 0). `Rev` is bumped on every
 change and is what clients poll. Every resolved turn is kept in `Turns`
 (`TurnResult{Turn, Plans, Seed, StartEnc, CardsEnc, EventsEnc}`, at most
 MaxTurns; the start snapshot, the cards drawn and the events are stored in
@@ -140,9 +145,14 @@ the RPC, clients poll).
 `Render("json/history/{id}")` (every resolved turn with its starting state,
 plans, seed, drawn cards and events, for replays) and
 `Render("json/plan/{id}/{addr}")` (the plan an address submitted for the
-turn in progress, shown by the client while waiting) return raw JSON through `vm/qrender`
+turn in progress, shown by the client while waiting),
+`Render("json/profile/{addr}")` (`null` before the address's first game) and
+`Render("json/players/{offset}/{count}")` (a page of the ranking, at most
+50, `{total, offset, players}`; each profile carries its `rank` and `name`,
+the address's name in `gno.land/r/sys/users`, resolved when the JSON is
+built, "" if none) return raw JSON through `vm/qrender`
 (`vm/qeval` would Go-quote the string). `Render("")`, `game/{id}`, `help` are
-gnoweb pages. `GameJSON`, `GamesJSON`, `HistoryJSON`, `GameRev` are plain
+gnoweb pages. `GameJSON`, `GamesJSON`, `HistoryJSON`, `ProfileJSON`, `PlayersJSON`, `GameRev` are plain
 getters for tests and gnokey.
 
 ### Plan string
@@ -345,7 +355,12 @@ calls; `testing.SkipHeights(n)` advances block time 5 s per height.
   Quit), **Your move** (running games without my plan, the time left before
   a timeout can be claimed, red when running out), **Waiting on others**,
   **Open showdowns** to join, **Finished** (Replay) and the **New showdown**
-  form (turns 10 to 30, time per turn). `game/lobby.ts` sorts the games into
+  form (turns 10 to 30, time per turn). Under the form, **Top guns** lists the first 5 of the ranking (refreshed
+with the games every 5 s; a player shows as its registered name, else its
+short address, `playerLabel`); a click anywhere on it opens the whole
+ranking in a dialog, 20 a page (`PLAYERS_PAGE`), whose rows open a
+player's profile; my address in the top bar opens mine (rank, games
+played, victory points, since). `game/lobby.ts` sorts the games into
   those sections from the `submitted` flag each player carries in
   `json/games/{addr}`. Characters are fixed for now: the creator plays
   `marshal`, the joiner `the_kid` (`CREATOR_CHAR`/`JOINER_CHAR`); the realm
