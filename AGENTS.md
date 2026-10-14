@@ -61,8 +61,8 @@ Run one Gno package or test:
 ```bash
 go tool gno test -v ./gno.land/p/tbruyelle/gnoslinger/engine/v0
 go tool gno test -run TestResolve_Seg5Cancel ./gno.land/p/tbruyelle/gnoslinger/engine/v0
-# a filetest needs its full path in -run:
-go tool gno test -run ./gno.land/r/tbruyelle/gnoslinger/v0/filetests/z2_ ./gno.land/r/tbruyelle/gnoslinger/v0/
+# a filetest needs its full path in -run (without the filetests/ directory):
+go tool gno test -run ./gno.land/r/tbruyelle/gnoslinger/v0/z2_ ./gno.land/r/tbruyelle/gnoslinger/v0/
 go tool gno test -update-golden-tests ./gno.land/r/tbruyelle/gnoslinger/v0/   # refresh // Output: and // Events:
 ```
 
