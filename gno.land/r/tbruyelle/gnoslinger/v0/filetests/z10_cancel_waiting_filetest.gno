@@ -17,11 +17,14 @@ const (
 func main(cur realm) {
 	testing.SetRealm(testing.NewUserRealm(alice))
 	id := gnoslinger.CreateGame(cross(cur), "marshal", 10, 0)
+	other := gnoslinger.CreateGame(cross(cur), "marshal", 10, 0)
+	// A cancelled game is deleted: only the other one is left.
 	gnoslinger.CancelGame(cross(cur), id)
-	println(gnoslinger.GameJSON(id))
+	println(gnoslinger.GamesJSON(alice.String()))
+	gnoslinger.CancelGame(cross(cur), other)
 	println(gnoslinger.GamesJSON(alice.String()))
 }
 
 // Output:
-// {"id":"0000001","rev":2,"phase":"finished","turn":1,"maxTurns":10,"timeout":172800,"board":"A","players":[{"addr":"g1alice00000000000000000000000000000000","char":"marshal","hex":"A-F3","facing":3,"down":false,"delay":0,"status":"alive","submitted":false,"playedFoot":false,"playedRun":false,"ranLastTurn":false,"aim":0,"aimHex":"","endurance":20,"serious":0,"gunArm":0,"otherArm":0,"leg":0,"guns":[{"id":1,"type":"colt45","name":"Colt 45","location":"holstered","cocked":false,"shells":6,"capacity":6,"jammed":false,"exploded":false}]},{"addr":"","char":"","hex":"A-F9","facing":0,"down":false,"delay":0,"status":"alive","submitted":false,"playedFoot":false,"playedRun":false,"ranLastTurn":false,"aim":0,"aimHex":"","endurance":20,"serious":0,"gunArm":0,"otherArm":0,"leg":0,"guns":[{"id":1,"type":"colt45","name":"Colt 45","location":"holstered","cocked":false,"shells":6,"capacity":6,"jammed":false,"exploded":false}]}],"ground":[],"winner":-1,"endReason":"cancelled","createdAt":1234567890,"updatedAt":1234567890,"timeoutAt":0,"lastTurn":null}
-// {"open":[],"mine":[{"id":"0000001","rev":2,"phase":"finished","turn":1,"maxTurns":10,"timeout":172800,"winner":-1,"endReason":"cancelled","createdAt":1234567890,"updatedAt":1234567890,"players":[{"addr":"g1alice00000000000000000000000000000000","char":"marshal","submitted":false},{"addr":"","char":"","submitted":false}]}]}
+// {"open":[{"id":"0000002","rev":1,"phase":"waiting","turn":1,"maxTurns":10,"timeout":172800,"winner":-1,"endReason":"","createdAt":1234567890,"updatedAt":1234567890,"players":[{"addr":"g1alice00000000000000000000000000000000","char":"marshal","submitted":false},{"addr":"","char":"","submitted":false}]}],"mine":[{"id":"0000002","rev":1,"phase":"waiting","turn":1,"maxTurns":10,"timeout":172800,"winner":-1,"endReason":"","createdAt":1234567890,"updatedAt":1234567890,"players":[{"addr":"g1alice00000000000000000000000000000000","char":"marshal","submitted":false},{"addr":"","char":"","submitted":false}]}]}
+// {"open":[],"mine":[]}

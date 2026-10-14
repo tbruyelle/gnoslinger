@@ -258,15 +258,14 @@ func TestCancel(cur realm, t *testing.T) {
 	})
 	testing.SetRealm(testing.NewUserRealm(alice))
 	CancelGame(cross(cur), id)
-	g := getGame(id)
-	uassert.Equal(t, "finished", g.Phase.String())
-	uassert.Equal(t, "cancelled", g.EndReason)
+	uassert.False(t, games.Has(id))
 	uassert.False(t, openGames.Has(id))
-	uassert.AbortsWithMessage(t, cur, "gnoslinger: only a game waiting for an opponent can be cancelled", func() {
+	uassert.False(t, strings.Contains(GamesJSON(alice.String()), `"id":"`+id+`"`))
+	uassert.AbortsWithMessage(t, cur, "gnoslinger: game not found", func() {
 		CancelGame(cross(cur), id)
 	})
 	testing.SetRealm(testing.NewUserRealm(bob))
-	uassert.AbortsWithMessage(t, cur, "gnoslinger: game is not open", func() {
+	uassert.AbortsWithMessage(t, cur, "gnoslinger: game not found", func() {
 		JoinGame(cross(cur), id, "dude")
 	})
 }

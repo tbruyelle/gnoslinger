@@ -61,8 +61,9 @@ export class RealmClient {
     await this.send("JoinGame", [id, charKey], async () => ((await this.getGame(id)).players[1]?.addr === me ? true : null));
   }
 
+  /** Cancels a game nobody joined; the realm deletes it (refunding its storage deposit). */
   async cancelGame(id: string): Promise<void> {
-    await this.send("CancelGame", [id], () => this.finished(id));
+    await this.send("CancelGame", [id], () => this.gone(id));
   }
 
   /** Submits the ordered plan string, e.g. "1f:ahead_left,2f:ahead,3f" ("" passes). */
@@ -83,6 +84,16 @@ export class RealmClient {
 
   async claimTimeout(id: string): Promise<void> {
     await this.send("ClaimTimeout", [id], () => this.finished(id));
+  }
+
+  private async gone(id: string): Promise<true | null> {
+    try {
+      await this.getGame(id);
+      return null;
+    } catch (e) {
+      if (/game not found/.test(String((e as Error)?.message ?? e))) return true;
+      throw e;
+    }
   }
 
   private async finished(id: string): Promise<true | null> {

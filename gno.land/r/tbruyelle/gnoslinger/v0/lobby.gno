@@ -65,7 +65,9 @@ func JoinGame(cur realm, id string, charKey string) {
 	emit("PlayerJoined", "id", id, "player", caller.String(), "char", charKey)
 }
 
-// CancelGame withdraws a game nobody joined yet. Creator only.
+// CancelGame withdraws a game nobody joined yet. Creator only. The game is
+// deleted, not kept as finished, so the creator gets back the storage
+// deposit CreateGame paid.
 func CancelGame(cur realm, id string) {
 	caller := cur.Previous().Address()
 	g := getGame(id)
@@ -76,6 +78,7 @@ func CancelGame(cur realm, id string) {
 		panic("gnoslinger: only the creator can cancel the game")
 	}
 	openGames.Remove(id)
-	g.finish("cancelled", -1)
-	save(g)
+	games.Remove(id)
+	unindex(caller, id)
+	emit("GameEnded", "id", id, "reason", "cancelled", "winner", "")
 }

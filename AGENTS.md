@@ -125,7 +125,7 @@ their cards) add a few hundred bytes. A 20-turn game is roughly 40–55 KB
 |---|---|
 | `CreateGame(cur, charKey, maxTurns, timeoutMinutes) string` | seat 0; 10 to 30 turns (the client sends 20); 0 timeout = 2 days (5 min to 30 days); phase `waiting` |
 | `JoinGame(cur, id, charKey)` | seat 1; phase `planning`; refused once the game's timeout has passed |
-| `CancelGame(cur, id)` | creator, while waiting |
+| `CancelGame(cur, id)` | creator, while waiting; deletes the game (and its `byPlayer` entry) so the creator gets the CreateGame storage deposit back; the client returns to the lobby once the game view answers "game not found" |
 | `SubmitPlan(cur, id, plan) int` | refused once the turn's timeout has passed (`assertInTime`: the game can only be claimed then, so a late plan cannot win it by claiming right after); validates, stores; the **second** plan resolves the turn in the same tx; returns Rev. A player with 5 or more delay cannot play anything and is passed automatically (`autoPass`, event `PlanPassed`), so the other plan alone resolves the turn; with both passed, turns resolve by themselves until someone can act |
 | `Resign(cur, id)` | forfeit |
 | `ClaimTimeout(cur, id)` | anyone, after the game's timeout without progress (`time.Now()`, lazy: no timers on chain); waiting → `expired`, one plan in → `timeout` (other forfeits), none → `abandoned` |

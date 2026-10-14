@@ -186,6 +186,26 @@ func index(addr address, id string) {
 	byPlayer.Set(addr.String(), append([]string{id}, ids...))
 }
 
+// unindex removes id from addr's games, and addr from byPlayer once it has
+// none left.
+func unindex(addr address, id string) {
+	v := byPlayer.Get(addr.String())
+	if v == nil {
+		return
+	}
+	var ids []string
+	for _, x := range v.([]string) {
+		if x != id {
+			ids = append(ids, x)
+		}
+	}
+	if len(ids) == 0 {
+		byPlayer.Remove(addr.String())
+		return
+	}
+	byPlayer.Set(addr.String(), ids)
+}
+
 func assertCharKey(charKey string) {
 	if !engine.IsCharKey(charKey) {
 		panic("gnoslinger: unknown character " + charKey)

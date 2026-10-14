@@ -2301,8 +2301,17 @@ export class GameScene extends Phaser.Scene {
     await this.act(() => this.chain.realm.claimTimeout(this.gameID), "Timeout claimed");
   }
 
+  /** The realm deletes a cancelled game, so there is nothing left to show: back to the lobby. */
   private async cancelGame() {
-    await this.act(() => this.chain.realm.cancelGame(this.gameID), "Game cancelled");
+    try {
+      await this.chain.realm.cancelGame(this.gameID);
+    } catch (e) {
+      if (this.scene.isActive()) showToast(this, userMessage(e), "error");
+      return;
+    }
+    if (!this.scene.isActive()) return;
+    showToast(this, "Showdown cancelled", "info");
+    this.scene.start("LobbyScene", { splash: false });
   }
 
   private async act(fn: () => Promise<unknown>, done: string) {
