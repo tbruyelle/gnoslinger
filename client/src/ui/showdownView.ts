@@ -144,8 +144,8 @@ export interface ShowdownModel {
     prevSeg: boolean;
     nextSeg: boolean;
     playing: boolean;
-    /** Names the panel's close cross: what closing does. */
-    closeLabel: string;
+    /** Names the panel's close cross, what closing does; null: no cross (a finished game's replay). */
+    closeLabel: string | null;
   } | null;
 }
 
@@ -513,7 +513,7 @@ export class ShowdownView {
       `<button type="button" class="gv-icon" data-act="btn" data-id="nextSeg" aria-label="Next segment"${dis(r.nextSeg)}><svg width="20" height="20" viewBox="0 0 24 24" fill="#2A1C14" aria-hidden="true"><path d="M7 5 L17 12 L7 19 Z"></path></svg></button>` +
       "</div></div></div>" +
       // The replay, or a turn's playback, closes from the panel's top-right cross.
-      `<button type="button" class="gv-x" data-act="btn" data-id="close" aria-label="${esc(r.closeLabel)}" title="${esc(r.closeLabel)}">${CLOSE_SVG}</button>`
+      (r.closeLabel === null ? "" : `<button type="button" class="gv-x" data-act="btn" data-id="close" aria-label="${esc(r.closeLabel)}" title="${esc(r.closeLabel)}">${CLOSE_SVG}</button>`)
     );
   }
 

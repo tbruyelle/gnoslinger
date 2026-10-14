@@ -394,7 +394,10 @@ played, victory points, since). `game/lobby.ts` sorts the games into
   moves and an aim taken after a move waits for the token to get there;
   stepping back or jumping lands a segment in one go. **Replay** opens
   the whole history (`json/history/{id}`) with turn navigation and
-  play/pause. Only the last selected card can be deselected (choices are
+  play/pause; a cross at the replay panel's top right closes it (or ends a
+  live turn's playback). A finished game opens straight on its whole
+  replay, from the final turn when the game ends while watched, and that
+  replay has no cross (`finalReplay`); Lobby leaves it. Only the last selected card can be deselected (choices are
   relative to the state before it). Tokens sharing a hex are fanned out
   along a diagonal (`STACK_REST`), and spread fully while the pointer is
   over the stack (`updateStackHover`, animated) so each one can be clicked.

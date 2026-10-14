@@ -609,6 +609,8 @@ export class GameScene extends Phaser.Scene {
   // segment shown up to one of its steps), null for the whole segment;
   // anim counts the positions shown, so a step left over from one stops.
   private playback: { turns: TurnResult[]; index: number; seg: number; cut: number | null; anim: number; live: boolean; auto: Phaser.Time.TimerEvent | null } | null = null;
+  /** The game is over and its whole history was asked for: the replay stays on screen, with no way to close it. */
+  private finalReplay = false;
   /** The plan sent this turn, shown while waiting: known from sending it, else read back from the chain. */
   private sentPlan: { turn: number; plan: string } | null = null;
 
@@ -649,6 +651,7 @@ export class GameScene extends Phaser.Scene {
     this.netError = null;
     this.clearSelection();
     this.playback = null;
+    this.finalReplay = false;
     this.zoom = 1;
     this.panX = 0;
     this.panY = 0;
@@ -776,6 +779,15 @@ export class GameScene extends Phaser.Scene {
     if (first) {
       this.shownResultTurn = view.lastTurn?.turn ?? 0;
       this.applyState(true);
+      if (view.phase === "finished") void this.showFinalReplay(false);
+      return;
+    }
+    // The game just ended: its whole history replaces the board, from the
+    // final turn when one just resolved.
+    if (view.phase === "finished" && !this.finalReplay) {
+      const resolved = !!view.lastTurn && view.lastTurn.turn !== this.shownResultTurn;
+      if (!this.playback) this.applyState(false);
+      void this.showFinalReplay(resolved);
       return;
     }
     // A turn we have not shown yet resolved: replay it from the positions we
@@ -1262,7 +1274,7 @@ export class GameScene extends Phaser.Scene {
       case "play":
         return this.toggleAuto();
       case "close":
-        if (pb) this.finishPlayback();
+        if (pb && !this.finalReplay) this.finishPlayback();
         return;
     }
   }
@@ -1347,7 +1359,7 @@ export class GameScene extends Phaser.Scene {
           prevSeg: !!stepBack(pos),
           nextSeg: !!stepForward(pos, pb.turns.length),
           playing: !!pb.auto,
-          closeLabel: pb.live ? "End turn" : "Close",
+          closeLabel: this.finalReplay ? null : pb.live ? "End turn" : "Close",
         },
       };
     }
@@ -2330,13 +2342,32 @@ export class GameScene extends Phaser.Scene {
    * Shows the given turns from the start of the first one. live is a turn
    * that just resolved: closing it re-syncs the board and moves on.
    */
-  private startPlayback(turns: TurnResult[], live: boolean) {
+  private startPlayback(turns: TurnResult[], live: boolean, index = 0) {
     this.stopAuto();
     this.clearSelection();
-    this.playback = { turns, index: 0, seg: 0, cut: null, anim: 0, live, auto: null };
+    this.playback = { turns, index, seg: 0, cut: null, anim: 0, live, auto: null };
     this.mode = "playback";
     this.refreshTokens(true);
     this.renderView();
+  }
+
+  /**
+   * Shows the whole history of a finished game, from the first turn or the
+   * last one; it is not closed. Without any resolved turn the board stays.
+   */
+  private async showFinalReplay(atLast: boolean) {
+    this.finalReplay = true;
+    try {
+      const history = await this.chain.realm.getHistory(this.gameID);
+      if (!this.scene.isActive() || history.turns.length === 0) return;
+      const last = history.turns.length - 1;
+      this.shownResultTurn = history.turns[last].turn;
+      this.startPlayback(history.turns, false, atLast ? last : 0);
+    } catch (e) {
+      // Let a later poll try again.
+      this.finalReplay = false;
+      if (this.scene.isActive()) showToast(this, userMessage(e), "error");
+    }
   }
 
   /** Replays the whole showdown so far, from the chain's history. */
