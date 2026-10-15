@@ -24,7 +24,6 @@ import { firingGun, gunInHand, replayPlan, type CharView } from "../game/replay"
 import { SEGMENTS, segmentFills, turnSegmentCells } from "../game/segments";
 import { COCK_AIM_SHOOT_AIM_TIME, SHOOT_AIM_TIME, shotOdds } from "../game/shotOdds";
 import { canSee, standingOn } from "../game/sight";
-import { hatchSegments } from "../ui/hatch";
 import { SOUND_FILES, SOUND_VOLUME, soundKey, soundsForDelay, soundsForEvents, soundsForPreview, type SoundCue, type SoundGroup } from "../game/sounds";
 import { SHOOT_OPTIONS, isShooting, type ShootOption } from "../game/plan";
 import { closeCharacterSheet, openCharacterSheet, type GunPick } from "../ui/characterSheet";
@@ -92,10 +91,6 @@ const HEX_HIGHLIGHT_INSET = 4;
 /** The aim zone shown while the pointer is on a token: the palette's brick for an enemy, its action green for mine. */
 const ENEMY_ZONE_COLOR = 0xb5482a;
 const MY_ZONE_COLOR = 0x4f7a3a;
-/** Ink, for a hex of the aim zone out of sight (rule 31): hatched, not a target. */
-const HIDDEN_HEX_COLOR = 0x2a1c14;
-/** Pixels between the stripes of a hatched hex. */
-const HATCH_STEP = 7;
 /** How long a second click on Send plan confirms passing with an empty plan. */
 const PASS_CONFIRM_MS = 5000;
 /** The tracer a bullet leaves behind it. */
@@ -1856,43 +1851,6 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  /** Diagonal stripes over a hex outline (screen points around (sx, sy)), like the hand's hatched card sides. */
-  private hatch(points: Phaser.Math.Vector2[], sx: number, sy: number, color: number, alpha: number, depth: number): Phaser.GameObjects.Graphics {
-    const g = this.add.graphics({ x: sx, y: sy }).setMask(this.arrMask).setDepth(depth);
-    g.lineStyle(2, color, alpha);
-    for (const [a, b] of hatchSegments(points, HATCH_STEP)) g.lineBetween(a.x, a.y, b.x, b.y);
-    return g;
-  }
-
-  /**
-   * A hex of the aim zone out of sight (rule 31) while picking a target:
-   * hatched in ink and not clickable, since the realm would cancel an aim
-   * at it and hold a shot at it for good; hovering it says what is in the
-   * way. The objects made, the hover text included, go into `objects` to
-   * be destroyed with the pick.
-   */
-  private hiddenHex(hex: string, sx: number, sy: number, blocker: string, objects: Phaser.GameObjects.GameObject[]) {
-    const points = this.insetOutline(BOARD_A.outline(hex), sx, sy);
-    const r = (BOARD_A.hexRadius * this.displayTransform().scale * Math.sqrt(3)) / 2;
-    const poly = this.add
-      .polygon(sx, sy, points, HIDDEN_HEX_COLOR, 0.18)
-      .setOrigin(0)
-      .setStrokeStyle(2, HIDDEN_HEX_COLOR, 0.7)
-      .setMask(this.arrMask)
-      .setInteractive({ hitArea: new Phaser.Geom.Polygon(points), hitAreaCallback: Phaser.Geom.Polygon.Contains })
-      .setDepth(500);
-    let detail: Phaser.GameObjects.Text | null = null;
-    poly.on("pointerover", () => {
-      detail = this.hoverDetail(sx, sy, r, ["No line of sight", `${blocker} in the way`]);
-      objects.push(detail);
-    });
-    poly.on("pointerout", () => {
-      detail?.destroy();
-      detail = null;
-    });
-    objects.push(poly, this.hatch(points, sx, sy, HIDDEN_HEX_COLOR, 0.45, 500.2));
-  }
-
   /** The lines shown above a hovered hex of the aim zone (below it when there is no room above). */
   private hoverDetail(sx: number, sy: number, r: number, lines: string[]): Phaser.GameObjects.Text {
     const detail = this.add
@@ -1951,14 +1909,12 @@ export class GameScene extends Phaser.Scene {
       const sight = canSee(BOARD_A, me, hex, standing);
       const hexSight = standing ? canSee(BOARD_A, me, hex) : sight;
       // The hex itself out of sight: nothing can go there (an aim is
-      // cancelled, a shot held for good), so it is hidden. The occupant out
-      // of sight but the hex in sight: the pick names the hex, not the
-      // seat; an aim covers the spot for when the occupant gets up, a shot
-      // is held until someone in sight stands there (the odds read 0).
-      if (!hexSight.clear) {
-        this.hiddenHex(hex, sx, sy, hexSight.blocker, objects);
-        continue;
-      }
+      // cancelled, a shot held for good), so it is left out, as on token
+      // hover. The occupant out of sight but the hex in sight: the pick
+      // names the hex, not the seat; an aim covers the spot for when the
+      // occupant gets up, a shot is held until someone in sight stands
+      // there (the odds read 0).
+      if (!hexSight.clear) continue;
       const hexOnly = !!standing && !sight.clear;
       const odds = shooting ? shotOdds(me, cardAimTime, hex, markersHex, BOARD_A, standing) : null;
       const who = standing ? charName(this.view?.players[chars.indexOf(standing)]?.char) : "";

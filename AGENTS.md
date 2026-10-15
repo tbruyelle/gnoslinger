@@ -494,9 +494,8 @@ Clicking a token opens the **character
   string). Aim then highlights the aim zone (`BoardMap.aimZone`,
   same axial maths as the realm) and the clicked hex goes into the plan
   (`pendingAims`, `5f:aim:A-F6`). A hex of the zone that is itself out of
-  sight (as upright, 31.3) is hatched in ink (`hiddenHex`, stripes from
-  `ui/hatch.ts`) and not clickable, aiming or shooting, its hover naming
-  the obstacle in the way; with the opponent hidden but its hex in sight
+  sight (as upright, 31.3) is left out, aiming or shooting, as on token
+  hover; with the opponent hidden but its hex in sight
   the pick names the hex (`5f:aim:A-I11` or `7f:shoot:A-I11`, not `@1`):
   an aim covers the spot, a shot is held until someone in sight stands
   there, the odds read 0 (`ShotOdds.los`) and the hover says so; every

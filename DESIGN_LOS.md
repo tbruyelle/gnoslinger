@@ -229,12 +229,12 @@ boxes are only sight anchors.
      `boardA.test.ts`. No geometry in TypeScript; tokens, highlights and the
      aim line keep using `hexes[].x/y`.
    - `scenes/GameScene.ts`: in `enterAimMode`, hexes of the aim zone without
-     line of sight from my previewed state are drawn hatched like disabled
-     card sides (`hiddenHex`, stripes from `ui/hatch.ts` clipped to the
-     outline) and are not clickable, the hover reading "No line of sight"
-     and the obstacle in the way; the height of a hex holding the opponent is the
-     opponent's. One rule for aiming and shooting: a hex that is itself out
-     of sight (as upright, 31.3) is hidden, since an aim there is cancelled
+     line of sight from my previewed state are left out, as the token hover
+     does (a first version hatched them in ink with a hover naming the
+     obstacle; dropped for the plainer look); the height of a hex holding
+     the opponent is the opponent's. One rule for aiming and shooting: a hex
+     that is itself out of sight (as upright, 31.3) is left out, since an
+     aim there is cancelled
      and a shot held for good, as for the Kid lying next to the trough; a
      hex in sight whose occupant is not stays pickable and the pick names
      the hex, as for the marshal across the trough from the hidden Kid: an
