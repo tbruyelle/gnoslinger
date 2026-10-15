@@ -1836,9 +1836,10 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * Shows where a character can aim and shoot (its aim zone, 8.32) from
-   * where the board shows it: brick red for an enemy, green for mine, under
-   * the tokens and not clickable, so the pointer stays on the token.
+   * Shows where a character can aim and shoot from where the board shows
+   * it: the hexes of its aim zone (8.32) it has a line of sight to (31),
+   * brick red for an enemy, green for mine, under the tokens and not
+   * clickable, so the pointer stays on the token.
    */
   private showAimZone(seat: number) {
     this.hideAimZone();
@@ -1847,12 +1848,11 @@ export class GameScene extends Phaser.Scene {
     const c = chars[seat];
     if (!c || c.status !== "alive") return;
     for (const hex of BOARD_A.aimZone(c.hex, c.facing)) {
+      // A hex out of sight (rule 31) is left out: no aim or shot can go there.
+      if (!canSee(BOARD_A, c, hex, standingOn(chars, hex, seat)).clear) continue;
       const { sx, sy } = this.hexToScreen(hex);
       const points = this.insetOutline(BOARD_A.outline(hex), sx, sy);
-      // A hex out of sight (rule 31) is faint and hatched: no aim or shot can go there.
-      const seen = canSee(BOARD_A, c, hex, standingOn(chars, hex, seat)).clear;
-      this.hoverZone.push(this.add.polygon(sx, sy, points, color, seen ? 0.28 : 0.1).setOrigin(0).setStrokeStyle(2, color, 0.8).setMask(this.arrMask).setDepth(0.5));
-      if (!seen) this.hoverZone.push(this.hatch(points, sx, sy, color, 0.5, 0.6));
+      this.hoverZone.push(this.add.polygon(sx, sy, points, color, 0.28).setOrigin(0).setStrokeStyle(2, color, 0.8).setMask(this.arrMask).setDepth(0.5));
     }
   }
 
