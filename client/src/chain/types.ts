@@ -4,9 +4,9 @@ export type Phase = "waiting" | "planning" | "finished";
 export type PlayerStatus = "alive" | "out" | "killed" | "passed_out";
 export type EventKind =
   | "move" | "turn" | "flip" | "delay" | "cancel" | "draw" | "wild_shot"
-  | "cock" | "uncock" | "load" | "aim" | "lose_aim" | "nothing" | "shot" | "malfunction" | "wound" | "direction" | "drop_gun" | "pass_out" | "serious_check";
+  | "cock" | "uncock" | "load" | "aim" | "lose_aim" | "nothing" | "shot" | "malfunction" | "wound" | "direction" | "drop_gun" | "pass_out" | "serious_check" | "vp";
 
-/** Seg of the events recorded after segment 5 (cancels, passing out, the serious-wound check); turn-start events have seg 0. */
+/** Seg of the events recorded after segment 5 (cancels, passing out, the serious-wound check, victory points); turn-start events have seg 0. */
 export const END_OF_TURN_SEG = 6;
 
 export interface PlayerView {
@@ -151,14 +151,25 @@ export interface GameView {
   players: PlayerView[];
   /** Weapons lying on the board. */
   ground: GroundGunView[];
-  /** Seat index of the winner, -1 for none. */
+  /** Seat index of the winner (the most victory points), -1 for none. */
   winner: number;
   endReason: string;
+  /** Victory points per seat, once a played game ended. */
+  vp?: number[];
+  /** The victory points earned and lost, per seat (rule 15). */
+  awards?: VPAward[];
   createdAt: number;
   updatedAt: number;
   /** Unix seconds after which ClaimTimeout succeeds; 0 when finished. */
   timeoutAt: number;
   lastTurn: TurnResult | null;
+}
+
+/** Victory points a seat earns (points > 0) or loses: reason is survive, hold_field, surrender, captured, killed, kill_enemy or knock_out_enemy. */
+export interface VPAward {
+  p: number;
+  reason: string;
+  points: number;
 }
 
 export interface GameSummary {
@@ -169,10 +180,12 @@ export interface GameSummary {
   maxTurns: number;
   /** Inactivity, in seconds, after which anyone may claim the timeout. */
   timeout: number;
-  /** Seat index of the winner, -1 for none. */
+  /** Seat index of the winner (the most victory points), -1 for none. */
   winner: number;
-  /** "" while running; cancelled, expired, resign, timeout, abandoned, max_turns, last_standing. */
+  /** "" while running; expired, surrender, timeout, abandoned, all_down, max_turns, last_standing. */
   endReason: string;
+  /** Victory points per seat, once a played game ended. */
+  vp?: number[];
   createdAt: number;
   updatedAt: number;
   /** submitted: the seat's plan for the turn in progress is in. */

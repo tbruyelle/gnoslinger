@@ -102,8 +102,8 @@ export class RealmClient {
     });
   }
 
-  async resign(id: string): Promise<void> {
-    await this.send("Resign", [id], () => this.finished(id));
+  async surrender(id: string): Promise<void> {
+    await this.send("Surrender", [id], () => this.finished(id));
   }
 
   async claimTimeout(id: string): Promise<void> {

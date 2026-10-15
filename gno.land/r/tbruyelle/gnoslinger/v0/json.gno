@@ -17,11 +17,12 @@ const listLimit = 50
 // GameJSON is the full view of a game:
 //
 //	{"id","rev","phase","turn","maxTurns","timeout" (seconds),"board",
-//	 "players":[{"addr","char","hex","facing","down","delay","status","submitted","playedFoot","playedRun","ranLastTurn",
+//	 "players":[{"addr","name","char","hex","facing","down","delay","status","submitted","playedFoot","playedRun","ranLastTurn",
 //	             "aim","aimHex" (the hex the AIM markers sit on, "" when on the opponent),"endurance","serious","gunArm","otherArm","leg",
 //	             "guns":[{"id","type","name","location","cocked","shells","capacity","jammed","exploded"}]}],
 //	 "ground":[{"id" (ground id, "g<id>" in a plan),"hex","guns":[{..}]}],
-//	 "winner","endReason","createdAt","updatedAt","timeoutAt",
+//	 "winner","endReason","vp":[victory points per seat],"awards":[{"p","reason","points"}] (rule 15, once a played game ends),
+//	 "createdAt","updatedAt","timeoutAt",
 //	 "lastTurn":null|{"turn","seed","cards":[result card numbers drawn, in order],"plans":[..],
 //	             "events":[{"seg","p","kind","action","from","to","facing","down","n","delay","reason","card","result","endurance","target","hit","range","gun","gunId","step","chart","status"}],
 //	             "start":[{"hex","facing","down","delay","status","aim","aimHex","endurance","serious","gunArm","otherArm","leg","guns":[..]},..]}}
@@ -48,6 +49,15 @@ func GameJSON(id string) string {
 	b.WriteByte(']')
 	writeGround(&b, g.State.Ground)
 	b.WriteString(`,"winner":` + strconv.Itoa(g.Winner))
+	writeVP(&b, g)
+	b.WriteString(`,"awards":[`)
+	for i, a := range g.Awards {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		b.WriteString(`{"p":` + strconv.Itoa(a.Player) + `,"reason":` + quote(a.Reason) + `,"points":` + strconv.Itoa(a.Points) + `}`)
+	}
+	b.WriteByte(']')
 	b.WriteString(`,"endReason":` + quote(g.EndReason))
 	b.WriteString(`,"createdAt":` + strconv.FormatInt(g.CreatedAt.Unix(), 10))
 	b.WriteString(`,"updatedAt":` + strconv.FormatInt(g.UpdatedAt.Unix(), 10))
@@ -258,7 +268,7 @@ func writeEvent(b *strings.Builder, e engine.Event) {
 // address's registered name ("" if none):
 //
 //	{"name","open":[summary...],"mine":[summary...]}
-//	summary = {"id","rev","phase","turn","maxTurns","timeout","winner","endReason","createdAt","updatedAt","players":[{"addr","name","char","submitted"}]}
+//	summary = {"id","rev","phase","turn","maxTurns","timeout","winner","endReason","vp","createdAt","updatedAt","players":[{"addr","name","char","submitted"}]}
 func GamesJSON(addr string) string {
 	var b strings.Builder
 	b.WriteString(`{"name":` + quote(registeredName(address(addr))))
@@ -296,6 +306,7 @@ func writeSummary(b *strings.Builder, g *Game) {
 	b.WriteString(`,"maxTurns":` + strconv.Itoa(g.MaxTurns))
 	b.WriteString(`,"timeout":` + strconv.FormatInt(int64(g.Timeout/time.Second), 10))
 	b.WriteString(`,"winner":` + strconv.Itoa(g.Winner))
+	writeVP(b, g)
 	b.WriteString(`,"endReason":` + quote(g.EndReason))
 	b.WriteString(`,"createdAt":` + strconv.FormatInt(g.CreatedAt.Unix(), 10))
 	b.WriteString(`,"updatedAt":` + strconv.FormatInt(g.UpdatedAt.Unix(), 10))
@@ -307,6 +318,18 @@ func writeSummary(b *strings.Builder, g *Game) {
 		b.WriteString(`{"addr":` + quote(p.Addr.String()) + `,"name":` + quote(registeredName(p.Addr)) + `,"char":` + quote(p.Char) + `,"submitted":` + strconv.FormatBool(g.Submitted[i]) + `}`)
 	}
 	b.WriteString("]}")
+}
+
+// writeVP writes the victory points of each seat.
+func writeVP(b *strings.Builder, g *Game) {
+	b.WriteString(`,"vp":[`)
+	for i, v := range g.VP {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		b.WriteString(strconv.Itoa(v))
+	}
+	b.WriteByte(']')
 }
 
 // quote encodes s as a JSON string.

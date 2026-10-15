@@ -110,18 +110,28 @@ func resolveTurn(g *Game) string {
 		st, endEvs = engine.EndShowdown(st, deck)
 		evs = append(evs, endEvs...)
 	}
+	// Victory points close the turn: what it did, then, when the showdown
+	// ends with it, the end of the showdown (rule 15).
+	over := engine.AliveCount(st) <= 1 || g.Turn >= g.MaxTurns
+	// From the snapshot: the live state may share the characters with st (see snapshot).
+	awards := engine.TurnVictoryPoints(engine.State{Chars: start}, st)
+	if over {
+		awards = append(awards, engine.EndVictoryPoints(st)...)
+	}
+	evs = append(evs, engine.VPEvents(awards)...)
 	seedHex := enchex.EncodeToString(seed[:])
 	g.Turns = append(g.Turns, newTurnResult(g.Turn, start, g.Plans, seedHex, deck.Drawn(), evs))
 	g.State = st
+	g.award(awards)
 	g.Plans = [engine.NumPlayers]string{}
 	g.Submitted = [engine.NumPlayers]bool{}
 	switch {
 	case engine.AliveCount(g.State) == 0:
-		g.finish("all_down", -1)
+		g.finish("all_down")
 	case engine.AliveCount(g.State) == 1:
-		g.finish("last_standing", lastAlive(g))
+		g.finish("last_standing")
 	case g.Turn >= g.MaxTurns:
-		g.finish("max_turns", -1)
+		g.finish("max_turns")
 	default:
 		g.Turn++
 	}
@@ -172,17 +182,11 @@ func groundExists(st engine.State, id int) bool {
 	return false
 }
 
-func lastAlive(g *Game) int {
-	for i, c := range g.State.Chars {
-		if c.Status == engine.Alive {
-			return i
-		}
-	}
-	return -1
-}
-
-// Resign forfeits the game to the opponent.
-func Resign(cur realm, id string) {
+// Surrender gives up the showdown (rule 15.4: at the start of a turn, that
+// is while the plans are collected). With two characters nobody is left to
+// fight: the game ends and is scored, the surrendered character losing the
+// "Surrender" points and, the enemy holding the field, being captured.
+func Surrender(cur realm, id string) {
 	caller := cur.Previous().Address()
 	g := getGame(id)
 	if g.Phase != PhasePlanning {
@@ -190,7 +194,8 @@ func Resign(cur realm, id string) {
 	}
 	p := g.mustSeat(caller)
 	g.State.Chars[p].Status = engine.Out
-	g.finish("resign", 1-p)
+	g.award(engine.EndVictoryPoints(g.State))
+	g.finish("surrender")
 	save(g)
 }
 
@@ -208,16 +213,18 @@ func ClaimTimeout(cur realm, id string) {
 	switch {
 	case g.Phase == PhaseWaiting:
 		openGames.Remove(id)
-		g.finish("expired", -1)
+		g.finish("expired")
 	case g.Submitted[0] != g.Submitted[1]:
 		loser := 0
 		if g.Submitted[0] {
 			loser = 1
 		}
+		// Out of time counts as surrendering.
 		g.State.Chars[loser].Status = engine.Out
-		g.finish("timeout", 1-loser)
+		g.award(engine.EndVictoryPoints(g.State))
+		g.finish("timeout")
 	default:
-		g.finish("abandoned", -1)
+		g.finish("abandoned")
 	}
 	save(g)
 }

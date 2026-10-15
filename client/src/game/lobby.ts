@@ -1,4 +1,5 @@
 import type { GameSummary, GamesView } from "../chain/types";
+import { signedVP } from "./vp";
 
 /** "fast_eddie" -> "Fast Eddie". */
 export function charName(key: string | undefined): string {
@@ -73,15 +74,22 @@ export function outcomeLine(g: GameSummary, me: string): string {
       return "cancelled";
     case "expired":
       return "expired, nobody joined";
-    case "resign":
-      return `${who(1 - g.winner)} resigned`;
+    case "surrender":
+      return `${who(1 - g.winner)} surrendered` + myVP(g, me);
     case "timeout":
-      return `${who(1 - g.winner)} ran out of time`;
+      return `${who(1 - g.winner)} ran out of time` + myVP(g, me);
     case "abandoned":
       return "abandoned";
     case "all_down":
-      return "everyone out of the fight: a draw";
+      return (g.winner >= 0 ? `everyone out of the fight, won by ${who(g.winner)}` : "everyone out of the fight: a draw") + myVP(g, me);
     default:
-      return g.winner >= 0 ? `won by ${who(g.winner)}` : `a draw after ${g.turn} turns`;
+      return (g.winner >= 0 ? `won by ${who(g.winner)}` : `a draw after ${g.turn} turns`) + myVP(g, me);
   }
+}
+
+/** " · you +4 VP" when I played the game and it earned points; "" otherwise. */
+function myVP(g: GameSummary, me: string): string {
+  const seat = g.players.findIndex((p) => p.addr && p.addr === me);
+  const v = seat >= 0 ? g.vp?.[seat] : undefined;
+  return v === undefined ? "" : ` · you ${signedVP(v)} VP`;
 }

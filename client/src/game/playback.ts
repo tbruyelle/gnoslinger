@@ -1,5 +1,6 @@
 import { END_OF_TURN_SEG, type GroundGunView, type GunLocation, type TurnEvent, type TurnResult } from "../chain/types";
 import { copyChar, type CharView } from "./replay";
+import { signedVP, vpReason } from "./vp";
 
 export const SEGMENTS = 5;
 
@@ -270,6 +271,8 @@ export function describeEvent(e: TurnEvent, names: string[]): string {
       return `${who} passes out`;
     case "serious_check":
       return `${who} draws card ${e.card} for the SERIOUS wounds: ${e.n} points`;
+    case "vp":
+      return `${who}: ${signedVP(e.n)} VP, ${vpReason(e.reason)}`;
     case "cancel":
       return `${who}: ${action} is cancelled (${e.reason.replace(/_/g, " ")})`;
     case "draw":

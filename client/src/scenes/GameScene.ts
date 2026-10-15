@@ -28,6 +28,7 @@ import { closeCharacterSheet, openCharacterSheet, type GunPick } from "../ui/cha
 import { ShowdownView, showdownLayout, type BoardRect, type CharPanel, type HandSide, type ShowdownLayout, type ShowdownModel, type TimelineRow } from "../ui/showdownView";
 import { showToast } from "../ui/toast";
 import { charName } from "../game/lobby";
+import { vpRecap, vpResult } from "../game/vp";
 
 // ── Layout constants ────────────────────────────────────────────────────────
 
@@ -1223,15 +1224,23 @@ export class GameScene extends Phaser.Scene {
         if (!pb) return "Replay";
         const t = pb.turns[pb.index];
         const where = pb.seg === 0 ? "start" : `segment ${pb.seg} of ${SEGMENTS}`;
-        return pb.live ? `Turn ${t.turn} resolution · ${where}` : `Replay · turn ${t.turn}, ${where}`;
+        if (pb.live) return `Turn ${t.turn} resolution · ${where}`;
+        return this.finalReplay ? `${this.overLine()} · turn ${t.turn}, ${where}` : `Replay · turn ${t.turn}, ${where}`;
       }
       case "spectate":
         return "Spectating";
-      case "ended": {
-        const w = view.winner >= 0 ? `${charName(view.players[view.winner].char)} wins` : "no winner";
-        return `Game over (${view.endReason.replace(/_/g, " ")}): ${w}`;
-      }
+      case "ended":
+        return this.overLine();
     }
+  }
+
+  /** How the game ended: the reason, the winner and the victory points. */
+  private overLine(): string {
+    const view = this.view;
+    if (!view) return "Game over";
+    const names = view.players.map((p) => charName(p.char));
+    const result = vpResult(view.winner, view.vp, view.awards, names) || (view.winner >= 0 ? `${names[view.winner]} wins` : "no winner");
+    return `Game over (${view.endReason.replace(/_/g, " ")}): ${result}`;
   }
 
   // ── Bottom panels ─────────────────────────────────────────────────────────
@@ -1257,8 +1266,8 @@ export class GameScene extends Phaser.Scene {
         return this.renderView();
       case "replay":
         return void this.openReplay();
-      case "resign":
-        return void this.resign();
+      case "surrender":
+        return void this.surrender();
       case "claim":
         return void this.claimTimeout();
       case "cancel":
@@ -1439,7 +1448,7 @@ export class GameScene extends Phaser.Scene {
           { id: "send", label: submitting ? "SIGNING…" : plan.length === 0 ? "PASS THE TURN" : "SEND PLAN", tone: "primary", disabled: submitting || !!pending || !!problem },
           { id: "clear", label: "Clear", tone: "plain", disabled: submitting || plan.length === 0 },
           replay,
-          { id: "resign", label: "Resign", tone: "danger", disabled: submitting },
+          { id: "surrender", label: "Surrender", tone: "danger", disabled: submitting },
         ],
       };
     }
@@ -1477,7 +1486,7 @@ export class GameScene extends Phaser.Scene {
         buttons: [
           ...(due ? [{ id: "claim", label: "CLAIM THE SHOWDOWN", tone: "primary" as const }] : []),
           replay,
-          { id: "resign", label: "Resign", tone: "danger" },
+          { id: "surrender", label: "Surrender", tone: "danger" },
         ],
       };
     }
@@ -2305,8 +2314,8 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  private async resign() {
-    await this.act(() => this.chain.realm.resign(this.gameID), "Resigned");
+  private async surrender() {
+    await this.act(() => this.chain.realm.surrender(this.gameID), "You surrendered");
   }
 
   private async claimTimeout() {
@@ -2710,6 +2719,10 @@ export class GameScene extends Phaser.Scene {
     if (pb.seg === SEGMENTS) lines.push(...describeEvents(endOfTurnEvents(t.events), names));
     if (lines.length === 0) lines = ["Nothing happens."];
     if (pb.seg === SEGMENTS && t.cards?.length) lines.push(`Result cards drawn: ${t.cards.join(", ")}`);
+    // The showdown ends after the last turn: the recap of its victory points closes the log.
+    if (this.finalReplay && pb.seg === SEGMENTS && pb.index === pb.turns.length - 1 && this.view) {
+      lines.push(...vpRecap(this.view.awards ?? [], this.view.vp ?? [], names));
+    }
     return lines;
   }
 

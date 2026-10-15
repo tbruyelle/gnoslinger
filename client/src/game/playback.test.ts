@@ -87,6 +87,8 @@ describe("snapshotAfterSegment", () => {
     const names = ["marshal", "dude"];
     expect(describeEvent(evs[2], names)).toBe("marshal shoots dude in A-F12 (aim time 3, range 1)");
     expect(describeEvent(ev({ p: 0, kind: "shot", card: 6, target: -1, to: "A-F6", hit: "-", range: 3, n: 1, reason: "empty_hex" }), names)).toBe("marshal shoots at A-F6 (aim time 1, range 3)");
+    expect(describeEvent(ev({ p: 1, kind: "vp", n: -8, reason: "killed" }), names)).toBe("dude: −8 VP, killed");
+    expect(describeEvent(ev({ p: 0, kind: "vp", n: 2, reason: "kill_enemy" }), names)).toBe("marshal: +2 VP, killed the enemy");
     expect(describeEvent(ev({ p: 0, kind: "nothing", to: "A-F6", reason: "empty_hex" }), names)).toBe("marshal holds fire: nobody in A-F6");
     expect(describeEvent(evs[4], names)).toBe("dude suffers KILL");
     expect(describeEvent(ev({ p: 1, kind: "wound", result: "stun", n: 4 }), names)).toBe("dude suffers STUN 4");

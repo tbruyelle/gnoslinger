@@ -19,7 +19,8 @@ type Profile struct {
 	// GamesPlayed counts the games the player sat in once they started (a
 	// second player joined); a cancelled showdown does not count.
 	GamesPlayed int
-	// VictoryPoints are not scored yet: always 0.
+	// VictoryPoints adds up the points of the player's finished games (rule
+	// 15); it may be negative.
 	VictoryPoints int
 	CreatedAt     time.Time
 }
@@ -36,9 +37,10 @@ func rankKey(p *Profile) string {
 	return desc(p.VictoryPoints) + ":" + desc(p.GamesPlayed) + ":" + p.Addr.String()
 }
 
-// desc is a fixed-width key that sorts larger numbers first.
+// desc is a fixed-width key that sorts larger numbers first; victory
+// points may be negative, so it is centred on 0 (|n| below 5e8).
 func desc(n int) string {
-	s := strconv.Itoa(999999999 - n)
+	s := strconv.Itoa(500000000 - n)
 	return strings.Repeat("0", 9-len(s)) + s
 }
 

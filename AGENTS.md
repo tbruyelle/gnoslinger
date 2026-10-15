@@ -14,9 +14,9 @@ transactions with the **Adena** wallet. There is no game server.
 Current milestone: **board A only, exactly 2 players, one character each**,
 the foot actions (advance, back up, run, spin around, sprint, turn,
 leap/drop, get up/down) and the Colt 45 gun play (Draw & Cock,
-Cock/Aim/Shoot, Shoot, Load) with the full hit, wound and penalty rules. Plans are
-submitted in clear (no commit-reveal yet); throwing, brawling,
-multi-board layouts and victory points come later.
+Cock/Aim/Shoot, Shoot, Load) with the full hit, wound and penalty rules, and
+victory points (rule 15). Plans are submitted in clear (no commit-reveal
+yet); throwing, brawling and multi-board layouts come later.
 
 ## Tech Stack
 
@@ -89,14 +89,15 @@ assets/                     served as the Vite public dir (boards, tokens, cards
 
 ### Data
 `Game{ID, Players[2]{Addr, Char}, State engine.State, Turn, MaxTurns, Phase,
-Plans[2], Submitted[2], LastTurn *TurnResult, Winner, EndReason, Rev,
-CreatedAt, UpdatedAt}` stored in an `avl.Tree` by zero-padded `seqid`;
+Plans[2], Submitted[2], LastTurn *TurnResult, Winner, EndReason, Awards
+[]engine.Award, VP[2], Rev, CreatedAt, UpdatedAt}` stored in an `avl.Tree` by zero-padded `seqid`;
 `byPlayer` (address → ids) and `openGames` indexes. Each address that creates
 or joins a game gets a `Profile{Addr, GamesPlayed, VictoryPoints, CreatedAt}`
 (`profile.gno`, `profiles` by address, `ranking` sorted by victory points then
 games played, both descending, then address): `GamesPlayed` goes up for both
 seats when a game starts (`JoinGame`), so a cancelled showdown does not count;
-victory points are not scored yet (always 0). `Rev` is bumped on every
+`VictoryPoints` adds up the points of the player's finished games (may be
+negative, `desc` centres the ranking key on 0). `Rev` is bumped on every
 change and is what clients poll. Every resolved turn is kept in `Turns`
 (`TurnResult{Turn, Plans, Seed, StartEnc, CardsEnc, EventsEnc}`, at most
 MaxTurns; the start snapshot, the cards drawn and the events are stored in
@@ -132,12 +133,13 @@ their cards) add a few hundred bytes. A 20-turn game is roughly 40–55 KB
 | `JoinGame(cur, id, charKey)` | seat 1; phase `planning`; refused once the game's timeout has passed |
 | `CancelGame(cur, id)` | creator, while waiting; deletes the game (and its `byPlayer` entry) so the creator gets the CreateGame storage deposit back; the client returns to the lobby once the game view answers "game not found" |
 | `SubmitPlan(cur, id, plan) int` | refused once the turn's timeout has passed (`assertInTime`: the game can only be claimed then, so a late plan cannot win it by claiming right after); validates, stores; the **second** plan resolves the turn in the same tx; returns Rev. A player with 5 or more delay cannot play anything and is passed automatically (`autoPass`, event `PlanPassed`), so the other plan alone resolves the turn; with both passed, turns resolve by themselves until someone can act |
-| `Resign(cur, id)` | forfeit |
-| `ClaimTimeout(cur, id)` | anyone, after the game's timeout without progress (`time.Now()`, lazy: no timers on chain); waiting → `expired`, one plan in → `timeout` (other forfeits), none → `abandoned` |
+| `Surrender(cur, id)` | rule 15.4, while the plans are collected (the start of a turn): the character is `Out`, the game ends and is scored (`surrender`) |
+| `ClaimTimeout(cur, id)` | anyone, after the game's timeout without progress (`time.Now()`, lazy: no timers on chain); waiting → `expired`, one plan in → `timeout` (the other is `Out`, scored as a surrender), none → `abandoned` (not scored) |
 
 Errors are panics prefixed `gnoslinger: `; the client extracts them from the
 tx result log. Events: `GameCreated`, `PlayerJoined`, `PlanSubmitted`,
-`PlanPassed`, `TurnResolved`, `GameEnded` (informational; there is no event subscription on
+`PlanPassed`, `TurnResolved`, `VictoryPoints` (`id seat player reason
+points`, one per award, points < 0 for a loss), `GameEnded` (informational; there is no event subscription on
 the RPC, clients poll).
 
 ### Reads
@@ -304,6 +306,29 @@ points); the crawl penalty is a fixed +2 with `Card` 0. Tests use
 `engine.Fixed(37)` (always DELAY 1), `engine.Sequence` or a hand-made
 `Drawer`.
 
+**Victory points** (rule 15, `engine/v0/victory.gno`), each character a
+side of its own, are scored at the end of every turn: `TurnVictoryPoints`
+compares the characters before the turn (the `start` snapshot) and after
+it: Killed −8 and the enemy Kill enemy +2; passing out 0 and the enemy Knock
+out enemy +1 when it lost endurance boxes (all crossed off by the enemy with
+two characters; a character down and out can no longer be hit, so a knock
+out is never followed by a kill). When the showdown ends with the turn,
+`EndVictoryPoints` follows: still up, Survive +2, and Hold the field +2 when
+the only one; Out (surrendered or out of time) Surrender −2 and the enemy's
+Knock out +1 as above; passed out or surrendered, Captured −4 when the enemy
+holds the field (15.63). Those awards close the turn's log as `vp` events
+(`EvVP`, Seg 6, N = points, Reason = the award). `Surrender` and a
+`timeout` claim score `EndVictoryPoints` at once (no turn). No Ally killed,
+Run away, money bags or special rules. `Game.award` records each award
+(`Awards`, `VP` totals, a `VictoryPoints` event, the profile's total);
+`finish` gives the win to the most points, equal points a draw. The game
+JSON carries `vp` and `awards` (`{p, reason, points}`), the summaries `vp`.
+The client shows the `vp` events in the log of the turn (`describeEvent`),
+the result in the header ("Marshal wins 4 to −6 VP", `game/vp.ts`), a recap
+per player at the end of the final replay (`vpRecap`), and my VP on the
+lobby's finished line. With two characters a kill or a pass out ends the
+showdown, so for now the points all land on the last turn.
+
 ### Gno idioms in use (gno 0.9)
 `func F(cur realm, ...)`, caller = `cur.Previous().Address()`, other realm
 functions called with `cross(cur)`, `chain.Emit`, `chain/runtime`,
@@ -376,7 +401,7 @@ played, victory points, since). `game/lobby.ts` sorts the games into
   header (Lobby, turn, status, players); while planning, waiting or once
   over, my character (endurance boxes, delay, AIM, wounds, guns) and
   **Your plan** (the segment tracker, `game/segments.ts`, then the entries,
-  points, Send / Clear / Replay / Resign, or the plan sent, Claim, Cancel) on
+  points, Send / Clear / Replay / Surrender, or the plan sent, Claim, Cancel) on
   the left, the other characters ("plan sent") on the right, and the hand along
   the bottom: one double-sided card per column, top or bottom half picked,
   the whole card shown on hover; in a replay, every character on the left,

@@ -163,7 +163,7 @@ func renderGame(res *mux.ResponseWriter, req *mux.Request) {
 			" · " + md.Link("Cancel", txlink.Call("CancelGame", "id", g.ID))))
 	case PhasePlanning:
 		res.Write(md.Paragraph(md.Link("Submit a plan", txlink.Call("SubmitPlan", "id", g.ID, "plan", "")) +
-			" · " + md.Link("Resign", txlink.Call("Resign", "id", g.ID)) +
+			" · " + md.Link("Surrender", txlink.Call("Surrender", "id", g.ID)) +
 			" · " + md.Link("Claim timeout", txlink.Call("ClaimTimeout", "id", g.ID)) +
 			" (after " + when(g.timeoutAt()) + ")"))
 	}
@@ -290,6 +290,12 @@ func describeEvent(g *Game, e engine.Event) string {
 		what = who + " passes out"
 	case engine.EvSeriousCheck:
 		what = who + " draws card " + strconv.Itoa(e.Card) + " for the SERIOUS wounds: " + strconv.Itoa(e.N) + " points"
+	case engine.EvVP:
+		pts := strconv.Itoa(e.N)
+		if e.N > 0 {
+			pts = "+" + pts
+		}
+		what = who + ": " + pts + " VP, " + strings.ReplaceAll(e.Reason, "_", " ")
 	case engine.EvDraw:
 		to := "to the " + strings.ReplaceAll(e.To, "_", " ")
 		if e.To == engine.BothHands.String() {
@@ -332,6 +338,9 @@ func phaseLabel(g *Game) string {
 		return g.Phase.String()
 	}
 	l := "finished (" + g.EndReason + ")"
+	if len(g.Awards) > 0 {
+		l += ", " + strconv.Itoa(g.VP[0]) + " to " + strconv.Itoa(g.VP[1]) + " VP"
+	}
 	if g.Winner >= 0 {
 		l += ", winner: " + seatLabel(g, g.Winner)
 	}

@@ -24,7 +24,7 @@ type Status int
 const (
 	// Alive characters plan and act.
 	Alive Status = iota
-	// Out characters (resigned, timed out) are skipped by Resolve.
+	// Out characters (surrendered, or out of time) are skipped by Resolve.
 	Out
 	// Killed characters are out of the game (14.6).
 	Killed

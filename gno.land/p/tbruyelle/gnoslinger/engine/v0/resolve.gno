@@ -29,6 +29,7 @@ const (
 	EvDropGun      = "drop_gun"      // Gun fell from From (hand) to the hex To, N = its ground id
 	EvPassOut      = "pass_out"      // end of turn: more delay than endurance two turns in a row
 	EvSeriousCheck = "serious_check" // end of showdown: Card, N = DELAY + SERIOUS points (4 kills)
+	EvVP           = "vp"            // end of turn: victory points (rule 15), N = points (< 0 for a loss), Reason = the award (VPSurvive...)
 )
 
 // Delay and cancel reasons.

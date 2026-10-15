@@ -55,6 +55,8 @@ describe("outcomeLine", () => {
   it("names who won or gave up, me as you", () => {
     const players = [{ addr: ME, char: "marshal" }, { addr: OTHER, char: "the_kid" }];
     expect(outcomeLine(game("1", { phase: "finished", winner: 0, endReason: "last_standing", players }), ME)).toBe("won by you");
-    expect(outcomeLine(game("1", { phase: "finished", winner: 0, endReason: "resign", players }), ME)).toBe("The Kid resigned");
+    expect(outcomeLine(game("1", { phase: "finished", winner: 0, endReason: "surrender", players }), ME)).toBe("The Kid surrendered");
+    // With the victory points of the seat I played.
+    expect(outcomeLine(game("1", { phase: "finished", winner: 0, endReason: "surrender", vp: [4, -6], players }), OTHER)).toBe("you surrendered · you −6 VP");
   });
 });

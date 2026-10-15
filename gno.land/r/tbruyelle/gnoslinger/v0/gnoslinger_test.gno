@@ -217,7 +217,15 @@ func TestMaxTurnsFinish(cur realm, t *testing.T) {
 	g := getGame(id)
 	uassert.Equal(t, "finished", g.Phase.String())
 	uassert.Equal(t, "max_turns", g.EndReason)
+	// Both survive: 2 VP each, a draw.
+	uassert.Equal(t, 2, g.VP[0])
+	uassert.Equal(t, 2, g.VP[1])
 	uassert.Equal(t, -1, g.Winner)
+	// The last turn closes with them, in its own log.
+	last := g.lastTurn().Events()
+	uassert.Equal(t, "vp", last[len(last)-1].Kind)
+	uassert.Equal(t, "survive", last[len(last)-1].Reason)
+	uassert.Equal(t, 2, last[len(last)-1].N)
 	uassert.Equal(t, 10, g.Turn)
 	uassert.Equal(t, 5, int(g.State.Chars[1].Facing)) // facing N, turned ahead_left: NW
 	uassert.True(t, strings.Contains(GameJSON(id), `"phase":"finished"`))
@@ -230,24 +238,32 @@ func TestMaxTurnsFinish(cur realm, t *testing.T) {
 	})
 }
 
-func TestResign(cur realm, t *testing.T) {
+func TestSurrender(cur realm, t *testing.T) {
 	testing.SetRealm(testing.NewUserRealm(alice))
 	id := CreateGame(cross(cur), "marshal", 10, 0)
 	testing.SetRealm(testing.NewUserRealm(bob))
 	JoinGame(cross(cur), id, "dude")
+	aliceVP := profiles.Get(alice.String()).(*Profile).VictoryPoints
+	bobVP := profiles.Get(bob.String()).(*Profile).VictoryPoints
 	testing.SetRealm(testing.NewUserRealm(carol))
 	uassert.AbortsWithMessage(t, cur, "gnoslinger: you are not a player of this game", func() {
-		Resign(cross(cur), id)
+		Surrender(cross(cur), id)
 	})
 	testing.SetRealm(testing.NewUserRealm(bob))
-	Resign(cross(cur), id)
+	Surrender(cross(cur), id)
 	g := getGame(id)
 	uassert.Equal(t, "finished", g.Phase.String())
-	uassert.Equal(t, "resign", g.EndReason)
-	uassert.Equal(t, 0, g.Winner)
+	uassert.Equal(t, "surrender", g.EndReason)
 	uassert.Equal(t, "out", g.State.Chars[1].Status.String())
+	// Unhurt, bob surrenders (-2) and is captured (-4); alice survives and holds the field.
+	uassert.Equal(t, 4, g.VP[0])
+	uassert.Equal(t, -6, g.VP[1])
+	uassert.Equal(t, 0, g.Winner)
+	uassert.Equal(t, aliceVP+4, profiles.Get(alice.String()).(*Profile).VictoryPoints)
+	uassert.Equal(t, bobVP-6, profiles.Get(bob.String()).(*Profile).VictoryPoints)
+	uassert.True(t, strings.Contains(GameJSON(id), `"vp":[4,-6],"awards":[{"p":0,"reason":"survive","points":2},{"p":0,"reason":"hold_field","points":2},{"p":1,"reason":"surrender","points":-2},{"p":1,"reason":"captured","points":-4}]`))
 	uassert.AbortsWithMessage(t, cur, "gnoslinger: game is not in progress", func() {
-		Resign(cross(cur), id)
+		Surrender(cross(cur), id)
 	})
 }
 
@@ -298,6 +314,9 @@ func TestClaimTimeout(cur realm, t *testing.T) {
 	ClaimTimeout(cross(cur), id)
 	g = getGame(id)
 	uassert.Equal(t, "timeout", g.EndReason)
+	// Out of time counts as surrendering.
+	uassert.Equal(t, 4, g.VP[0])
+	uassert.Equal(t, -6, g.VP[1])
 	uassert.Equal(t, 0, g.Winner)
 	uassert.Equal(t, "out", g.State.Chars[1].Status.String())
 
@@ -311,6 +330,7 @@ func TestClaimTimeout(cur realm, t *testing.T) {
 	g = getGame(id)
 	uassert.Equal(t, "abandoned", g.EndReason)
 	uassert.Equal(t, -1, g.Winner)
+	uassert.Equal(t, 0, len(g.Awards))
 	uassert.Equal(t, "alive", g.State.Chars[0].Status.String())
 }
 

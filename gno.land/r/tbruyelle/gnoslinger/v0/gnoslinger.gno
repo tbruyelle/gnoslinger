@@ -5,6 +5,7 @@
 package gnoslinger
 
 import (
+	"strconv"
 	"time"
 
 	"gno.land/p/nt/avl/v0"
@@ -97,8 +98,12 @@ type Game struct {
 	Plans     [engine.NumPlayers]string // current turn, canonical form
 	Submitted [engine.NumPlayers]bool
 	Turns     []*TurnResult // resolved turns, in order (at most MaxTurns)
-	Winner    int // seat index, -1 for none
+	Winner    int // seat index, -1 for none: the most victory points, -1 on a tie
 	EndReason string
+	// Awards are the victory points earned and lost so far (rule 15), at
+	// the end of each turn and of the showdown; VP adds them up per seat.
+	Awards []engine.Award
+	VP     [engine.NumPlayers]int
 	Rev       int // bumped on every change; clients poll it
 	CreatedAt time.Time
 	UpdatedAt time.Time
@@ -160,13 +165,34 @@ func (g *Game) assertInTime() {
 	}
 }
 
-func (g *Game) finish(reason string, winner int) {
+// award records victory points (rule 15): each award is a VictoryPoints
+// event, adds to the seat's total and to the player's profile.
+func (g *Game) award(awards []engine.Award) {
+	for _, a := range awards {
+		g.Awards = append(g.Awards, a)
+		g.VP[a.Player] += a.Points
+		emit("VictoryPoints", "id", g.ID, "seat", strconv.Itoa(a.Player), "player", g.Players[a.Player].Addr.String(),
+			"reason", a.Reason, "points", strconv.Itoa(a.Points))
+		points := a.Points
+		updateProfile(g.Players[a.Player].Addr, func(pr *Profile) { pr.VictoryPoints += points })
+	}
+}
+
+// finish ends the game: the most victory points win, a tie (a game nobody
+// played included) being a draw.
+func (g *Game) finish(reason string) {
 	g.Phase = PhaseFinished
 	g.EndReason = reason
-	g.Winner = winner
+	g.Winner = -1
+	switch {
+	case g.VP[0] > g.VP[1]:
+		g.Winner = 0
+	case g.VP[1] > g.VP[0]:
+		g.Winner = 1
+	}
 	w := ""
-	if winner >= 0 {
-		w = g.Players[winner].Addr.String()
+	if g.Winner >= 0 {
+		w = g.Players[g.Winner].Addr.String()
 	}
 	emit("GameEnded", "id", g.ID, "reason", reason, "winner", w)
 }

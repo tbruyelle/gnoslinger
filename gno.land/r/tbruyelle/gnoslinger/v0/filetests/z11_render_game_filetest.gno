@@ -79,6 +79,6 @@ func main(cur realm) {
 // - seg 4: marshal sprint: A-G7 → A-G8
 // - seg 4: marshal gains 2 delay (sprint, card 70), now 2
 //
-// [Submit a plan]($help&func=SubmitPlan&id=0000001&plan=) · [Resign]($help&func=Resign&id=0000001) · [Claim timeout]($help&func=ClaimTimeout&id=0000001) (after 2009-02-15 23:31 UTC)
+// [Submit a plan]($help&func=SubmitPlan&id=0000001&plan=) · [Surrender]($help&func=Surrender&id=0000001) · [Claim timeout]($help&func=ClaimTimeout&id=0000001) (after 2009-02-15 23:31 UTC)
 //
 // [Back to the lobby](/r/tbruyelle/gnoslinger/v0:)
