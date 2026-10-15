@@ -18,6 +18,7 @@ import {
   stepForward,
   type ReplayPos,
 } from "../game/playback";
+import { BURST_KEYS, hitBurst } from "../game/bursts";
 import { MAX_ACTION_POINTS, canPlay, drawDestinations, drawableGuns, encodePlan, planCost, validatePlan, type PlanEntry, isEnabled, decodePlan } from "../game/plan";
 import { firingGun, gunInHand, replayPlan, type CharView } from "../game/replay";
 import { SEGMENTS, segmentFills, turnSegmentCells } from "../game/segments";
@@ -709,7 +710,7 @@ export class GameScene extends Phaser.Scene {
     for (const n of AIM_MARKERS) {
       if (!this.textures.exists(`aim_${n}`)) this.load.image(`aim_${n}`, `aim${n}.gif`);
     }
-    for (const key of ["missed", "hit", "jammed", "exploded"]) {
+    for (const key of BURST_KEYS) {
       if (!this.textures.exists(key)) this.load.image(key, `${key}.png`);
     }
     for (const [group, files] of Object.entries(SOUND_FILES)) {
@@ -2090,11 +2091,12 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * A "HIT!", "MISSED!", "JAMMED!" or "EXPLODED!" burst beside a token, off to the side of the
+   * A burst (a hit location's "VITAL HIT!", "MISSED!", "JAMMED!" or
+   * "EXPLODED!", one of BURST_KEYS) beside a token, off to the side of the
    * bullet's path (perpendicular to it, on whichever side has more room):
    * pops up, holds, fades.
    */
-  private popBurst(key: "hit" | "missed" | "jammed" | "exploded", at: { sx: number; sy: number }, along: { x: number; y: number }) {
+  private popBurst(key: string, at: { sx: number; sy: number }, along: { x: number; y: number }) {
     if (!this.textures.exists(key)) return;
     const d = this.tokenDiameter();
     const len = Math.hypot(along.x, along.y) || 1;
@@ -2599,11 +2601,11 @@ export class GameScene extends Phaser.Scene {
       if (e.reason !== "misfire") this.puffSmoke(from, { x: to.sx - from.sx, y: to.sy - from.sy });
       this.tokens[e.p]?.kickGun(this.tweens);
       this.cameras.main.shake(hit ? 250 : 120, hit ? 0.006 : 0.0025);
-      // "HIT!" or "MISSED!" bursts beside the target as the bullet reaches it; a hit bleeds.
+      // The hit location's burst ("VITAL HIT!"...) or "MISSED!" beside the target as the bullet reaches it; a hit bleeds.
       const passing = length > 0 ? Math.hypot(near.sx - from.sx, near.sy - from.sy) / length : 1;
       const along = { x: to.sx - from.sx, y: to.sy - from.sy };
       this.time.delayedCall(flight * passing, () => {
-        this.popBurst(hit ? "hit" : "missed", centre, along);
+        this.popBurst(hit ? hitBurst(e.hit) : "missed", centre, along);
         if (hit) {
           this.spurtBlood(near, along);
           if (atToken) {

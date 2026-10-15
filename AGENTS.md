@@ -474,7 +474,10 @@ Clicking a token opens the **character
   shows AIM, endurance (boxes above the ones left are crossed off) and the
   permanent wounds. During playback a bullet flies from the shooter's gun
   icon for each shot (`flashShots`), shaking the view; a miss flies on off
-  the board; `assets/hit.png` or `missed.png` bursts beside the target (`jammed.png` or `exploded.png` beside the shooter when the second MALFUNCTION jams or blows up the gun; an exploded gun's icon is struck through in red and no gun card can use it). Throwing and brawling stay disabled.
+  the board; the hit location's burst, `assets/hit_<location>.png` (arm,
+  body, critical, gun, head, leg, side, vital, picked by `game/bursts.ts`
+  from the shot's final `hit`; `hit.png`, a plain "HIT!", only for a
+  location without an image), or `missed.png` bursts beside the target (`jammed.png` or `exploded.png` beside the shooter when the second MALFUNCTION jams or blows up the gun; an exploded gun's icon is struck through in red and no gun card can use it). Throwing and brawling stay disabled.
 - Config: `client/.env.local` (see `.env.example`): `VITE_RPC_URL`,
   `VITE_CHAIN_ID`, `VITE_CHAIN_NAME`, `VITE_REALM_PATH`, `VITE_POLL_MS`,
   optional `VITE_GAS_WANTED`/`VITE_GAS_FEE`. Without `VITE_GAS_WANTED` every
