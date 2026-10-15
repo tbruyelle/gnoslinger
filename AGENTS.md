@@ -71,15 +71,15 @@ go tool gno test -update-golden-tests ./gno.land/r/tbruyelle/gnoslinger/v0/   # 
 
 ```
 gno.land/
-  p/tbruyelle/gnoslinger/hex/v0      directions, relative directions, Board adjacency + axial coords + fenced hexsides + obstacles, range, aim zone (board_a.gno is generated)
+  p/tbruyelle/gnoslinger/hex/v0      directions, relative directions, Board adjacency + axial coords + fenced hexsides + obstacles + the between table, range, aim zone, line of sight (sight.gno; board_a.gno is generated)
   p/tbruyelle/gnoslinger/cards/v0    the 12 action cards (24 sides), Enabled() = implemented actions
-  p/tbruyelle/gnoslinger/engine/v0   pure rules engine: plan DSL + validation, Resolve, EndTurn, result deck (deck.gno, fire.gno), impact table
+  p/tbruyelle/gnoslinger/engine/v0   pure rules engine: plan DSL + validation, Resolve, EndTurn, result deck (deck.gno, fire.gno), impact table, sight heights (sight.gno)
   r/tbruyelle/gnoslinger/v0          the realm: games, lobby, SubmitPlan, JSON views, Render, filetests/
 client/src/
   chain/      rpc.ts (abci_query/status/tx), adena.ts (wallet), realm.ts (typed calls), poller.ts, types.ts
-  rules/      cards.ts, facing.ts (pure card data + facing math, mirrors the Gno packages)
-  board/      board_A.json (generated) + boardA.ts (BoardMap)
-  game/       plan.ts (encode/validate), replay.ts (preview), playback.ts (resolution log)
+  rules/      cards.ts, facing.ts, sight.ts (pure card data, facing math, sight heights; mirrors the Gno packages)
+  board/      board_A.json (generated) + boardA.ts (BoardMap: adjacency, aim zone, between table, line of sight)
+  game/       plan.ts (encode/validate), replay.ts (preview), playback.ts (resolution log), sight.ts (a character's sight, as the engine)
   scenes/     BootScene → LobbyScene → GameScene   (SetupScene/TokenPlacementScene are dormant, multi-board later)
   ui/toast.ts
 scripts/gen_board_data.py   generates hex/v0/board_a.gno and client/src/board/board_A.json
@@ -177,8 +177,11 @@ the option: Cock/Aim/Shoot `5f:cock|uncock`, `5f:aim:<target>` or
 keeps the aim); a target is a hex of the aim zone (`A-F6`) or a character
 by seat (`@1`; the client turns a click on an occupied hex into this). A
 shot at a hex hits the character standing there when it comes up; with
-nobody there it is held, like a Shoot doing nothing: no card, no shell, the
-gun stays cocked and the aim is kept (a `nothing` event, Reason `empty_hex`).
+nobody there, or with that character out of sight (rule 31, below), it is
+held, like a Shoot doing nothing: no card, no shell, the gun stays cocked
+and the aim is kept (a `nothing` event, Reason `empty_hex`, or `no_los`
+with `Target` the hidden seat; a shot at `@1` out of sight is held the
+same way).
 At most 5 entries, empty = pass. Example `1f:ahead_left,2f:ahead,3f`. Rules
 (engine `Plan.Validate`): one side per card, dir required for move/turn
 cards and in the right set, no choice otherwise, Draw & Cock needs a gun of
@@ -255,11 +258,37 @@ Turn, an aim or a shot (stricter than 12.44: cocking, uncocking and a Shoot
 doing nothing lose it too), when a new target (the hex
 aimed at, or the opponent shot at) is more than one hex from the markers
 (12.5; within one hex the markers move), when the markers' hex leaves the
-aim zone at the end of a segment (12.41), after a shot (12.43) and on
-penalties. **Aim zone** (8.32) = own hex plus the 120° cone between the
-ahead-left and ahead-right rows (`hex.Board.InAimZone`, axial coordinates
-generated into `board_a.gno`); range = shortest path (`Board.Distance`); no
-obstacles or line of sight yet. **A shot** draws a result card: a MALFUNCTION
+aim zone at the end of a segment (12.41), when the markers' target is out
+of sight at the end of a segment (31.1, Reason `no_los`, `To` the obstacle
+in the way), after a shot (12.43) and on penalties. **Aim zone** (8.32) =
+own hex plus the 120° cone between the ahead-left and ahead-right rows
+(`hex.Board.InAimZone`, axial coordinates generated into `board_a.gno`);
+range = shortest path (`Board.Distance`; the two halves of the split hex
+each count one step, unlike 30.62). **Line of sight** (rule 31, design in
+`DESIGN_LOS.md`): board A's only blocker is the horse trough (the corral
+fence never blocks sight, 35.1, and characters do not either). The
+generator traces the sight from the printed coordinates, boxes around the
+grid points except around the trough where the labels sit along its sides
+(`COORD_BOXES`), against the trough's outline, and emits the **between
+table** (`Board.between`, `between` in `board_A.json`: the hex pairs the
+trough lies between, 322 rows); neither the realm nor the client computes
+a line (`python3 scripts/gen_board_data.py --draw-los A-H11 A-I11` draws
+them). `hex.Board.LineOfSight(from, to, hFrom, hTo)` applies the heights
+(DOWN 3, obstacle 4, upright 5, wall 10; `hex.Height`) to the obstacles
+between: blocked when higher than both, clear when lower than both, and
+when between the two heights blocked only if the lower end is adjacent to
+it (31.31, 31.32; no plateau effect without hill or gully hexes). A
+character lying on the trough counts as upright and is never blocked by
+it (30.32, 36.5); a hex aimed at counts as upright (31.3). So two
+standing characters always see each other, two DOWN ones never across
+the trough, and a DOWN character next to it is hidden from anyone across
+it (and sees nobody across it). `engine/v0/sight.gno` (`sightHeight`,
+`canSee`) traces to a character at its height or to a hex. An **aim** at
+a target out of sight is cancelled (`cancel`, Reason `no_los`, `To` the
+obstacle); an aim at the hex under a hidden DOWN character works, since
+the hex is in sight, and covers the spot. A **shot** at a target out of
+sight is held, as at an empty hex (above). The aim zone is checked first,
+with its own reasons. **A shot** draws a result card: a MALFUNCTION
 whose Handloaded line says no effect is replaced; a misfire cancels the shot
 and a second MALFUNCTION jams (shells 0) or blows up the gun. A FIRE card's
 hit chart is read at aim time (card aim time + AIM points − GUN ARM / OTHER
@@ -442,7 +471,8 @@ played, victory points, since). `game/lobby.ts` sorts the games into
   (`draw` and `wild_shot` events are folded, the turn's `start` JSON lists
   the guns). Hovering a token shows that character's aim zone, where it can aim and
 shoot (`showAimZone`: brick red for an enemy, action green for mine, under
-the tokens, not clickable).
+the tokens, not clickable; the hexes it cannot see, `game/sight.ts` over
+`BoardMap.lineOfSight`, are left out).
 Clicking a token opens the **character
   sheet** (`ui/characterSheet.ts`): an HTML overlay built from the design
   template `ui/characterSheet.html` (1100×850, fonts Rye / Zilla Slab from
@@ -463,7 +493,14 @@ Clicking a token opens the **character
   uncocking and a Shoot doing nothing are only reachable through the plan
   string). Aim then highlights the aim zone (`BoardMap.aimZone`,
   same axial maths as the realm) and the clicked hex goes into the plan
-  (`pendingAims`, `5f:aim:A-F6`). When shooting, the hovered hex of the zone shows the chance
+  (`pendingAims`, `5f:aim:A-F6`). A hex of the zone out of sight is hatched
+  in ink (`hiddenHex`, stripes from `ui/hatch.ts`) and not clickable when
+  aiming, its hover naming the obstacle in the way; with the opponent
+  hidden but its hex in sight the pick names the hex (`5f:aim:A-I11`, not
+  `@1`), and when shooting no hex is hidden: the pick names the hex, the
+  odds read 0 (`ShotOdds.los`) and the hover says the shot is held while
+  the opponent lies hidden; every shot at an empty hex says it is held if
+  nobody stands there when it comes up. When shooting, the hovered hex of the zone shows the chance
   of hitting it (`game/shotOdds.ts` over `rules/hitChance.ts`, the players'
   aid table `percent_hit.png`: hit % per aim time 1–9 and range 0–12 out of
   the 108 cards, bullseye % in red; Target Status not counted), with range

@@ -71,15 +71,14 @@
   - add brawling
     - add knifes and others
 - Aim/Shoots
-  - line of sight
+  - line of sight (board A done: the trough, DESIGN_LOS.md; the rest
+    needs a board with buildings and its hexsides traced)
     - wall and doors block (except saloon)
-    - character in between doesnt block
-    - cant shot if target is down behind an obstacle
     - cant shot if target is down behind a window
-    - cant shoot if both players are down and there is an obstacle between
     - cant shoot if both players are down and there is a window between
       them
     - check case https://youtu.be/WGQbh6coUQI?t=2704
+    - range through the split hex I11 counts both halves (30.62 says one)
   - fanfire
   - keep smoke until end of next turn
   - hit
