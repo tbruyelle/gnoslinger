@@ -48,8 +48,11 @@
     - OK coral with the whyatt earp (adapt with number of players)
 
 ## Showdown
-- Victory points (required for more than 2 players)
-- make renaiming plan points more visible
+- >2 players
+  - check when player surrender and the other has played turn
+  - >2 players in the same hex
+  - handle aim token
+  - show aimed by in character sheet
 - add winning/losing burst
 - show tips (or highlight a card with some text)
   - when no gun: show need to draw and cock
@@ -65,7 +68,8 @@
 - Cards
   - add drop weapon action cards (show waepon on the ground)
   - add throw and strength
-- Character sheets
+  - add brawling
+    - add knifes and others
 - Aim/Shoots
   - line of sight
     - wall and doors block (except saloon)
@@ -76,7 +80,6 @@
     - cant shoot if both players are down and there is a window between
       them
     - check case https://youtu.be/WGQbh6coUQI?t=2704
-    - Check LOS behind the horse trough
   - fanfire
   - keep smoke until end of next turn
   - hit
@@ -87,7 +90,6 @@
   - walls 
   - doors except saloon
   - windows
-  - check 3 players in the same hex
 - Commit-reveal for plans (`PhaseCommit`/`PhaseRevaeal` reserved): secret
   simultaneous selection and dice seeded from revealed salts.
 - Sounds
