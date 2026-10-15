@@ -15,6 +15,7 @@
   - how to add more boards/gun in the future w/o changing the realms
 
 ## Player profile
+- Move profiles to specific realms to it keeps its data
 - Add profile page with specific token and linked reputation (check RPG rules)
   - Add XP to player to increase stats? 
 - Add a challenge player button
@@ -35,7 +36,6 @@
 ## Lobby
 - add last turn replay when player goes back to a game
 - allow winner to remove replay to be refunded for the deposit
-- Top players list leaderboard
 - Create game options
   - Allow create game with pot
     - join require to fill the pot with the same amount
