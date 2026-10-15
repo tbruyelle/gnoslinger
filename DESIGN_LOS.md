@@ -138,7 +138,13 @@ boxes are only sight anchors.
    - Run `make gen-board`; existing tests stay green.
 
 2. **Hex package: the sight rule** (`gno.land/p/tbruyelle/gnoslinger/hex/v0`),
-   in a new `sight.gno`; `geom.gno` is untouched.
+   in a new `sight.gno`; `geom.gno` is untouched: `InAimZone` (8.32, hex
+   rows from the axial coordinates) is not affected by the trough or the
+   printed coordinates, and rule 31.21 (a target out of the aim zone has
+   no LOS) is already the `out_of_zone` check at the same three moments.
+   The zone check comes first, the terrain check next, each with its own
+   reason, so the log can tell "in the blind zone" from "behind the
+   trough".
    - A `Height` type with `HeightDown = 3`, `HeightObstacle = 4` (windows
      too), `HeightUpright = 5`, `HeightWall = 10` (for later).
    - `Board.Adjacent(a, b string) bool`.
