@@ -68,8 +68,9 @@ coordinate and his target's coordinate"), which is what lets a string pass
 beside the trough between two of its neighbours.
 
 So each hex gets a **coordinate box**, the printed label's rectangle in
-board pixels: the standard label size (about 40×15 px) around the grid
-centre by default, the traced box for the five hexes around the trough. The
+board pixels: the standard label size (40×16 px, `COORD_HW`, `COORD_HH`)
+around the grid centre by default, the traced box for the five hexes
+around the trough (`COORD_BOXES`). The
 trough is **between** two hexes if every straight line from a point of one
 box to a point of the other crosses its polygon. For a convex obstacle it
 is enough to test the lines between the centre and the four corners of
@@ -85,7 +86,7 @@ table; neither computes a line. A sight check is then a binary search in
 the table followed by the height rule above, and the two sides cannot
 disagree since they read the same generated list.
 
-Measured on the image (x0, y0, x1, y1), to be refined when tracing:
+Measured on the image (x0, y0, x1, y1), the values of `COORD_BOXES`:
 H10 (1176, 1880, 1244, 1932), I10 (1236, 1849, 1324, 1892),
 J10 (1330, 1840, 1394, 1892), H11 (1128, 1967, 1194, 2018),
 I11 (1251, 1949, 1311, 1995). Tokens stay drawn at the grid centres; the
@@ -108,14 +109,15 @@ boxes are only sight anchors.
   segment's hits have applied, so a target that drops behind the trough is
   caught the same segment.
 
-**Assumptions to verify**
+**Notes on the tracing**
 
 - The blocking region is the rectangle already traced for the `A-I11*`
   highlight (`HALF_HEXES` in the generator), which sticks out a little into
   H11 and J10. With that polygon and the coordinate boxes above, 322 of the
   9,453 hex pairs are across it (398 with plain centre-to-centre lines,
   which is what the first draft of this plan used). Both the polygon and
-  the five boxes can be re-traced before step 1.
+  the five boxes can be re-traced at any time: the generator's self-checks
+  guard the known pairs and `--draw-los` shows the lines.
 - Where a line only grazes the trough the answer depends on a few pixels
   of tracing, for example H11–J10 along the trough's length, which the
   boxes leave clear. Those are long-shot or side-by-side cases; the clear
@@ -126,22 +128,26 @@ boxes are only sight anchors.
 ## Steps
 
 1. **Generator: the between table.** In `scripts/gen_board_data.py`:
-   - the coordinate box of every hex: the standard label size (`COORD_W`,
-     `COORD_H`) around the grid centre, overridden by `COORD_BOXES` for the
-     five hexes traced around the trough;
+   - the coordinate box of every hex: the standard label size (`COORD_HW`,
+     `COORD_HH`, half sizes) around the grid centre, overridden by
+     `COORD_BOXES` for the five hexes traced around the trough;
    - the polygon of every obstacle hex: the traced rectangle for the
      trough (the `shape` of `HALF_HEXES`), a regular hexagon rounded to
      integers for a whole-hex obstacle;
-   - the integer geometry: cross product, proper segment intersection,
-     point strictly inside a convex polygon, segment crossing a polygon;
+   - the geometry, one exact routine: `passes_through(a, b, poly)` clips
+     the segment by every edge's half-plane in rational arithmetic
+     (`fractions.Fraction` over integer cross products) and reports whether
+     a point of it lies strictly inside, so touching a corner or running
+     along an edge never counts;
    - `compute_between(...)`: for each obstacle and each pair of other
-     hexes, whether all 25 box-to-box lines cross the polygon;
+     hexes, whether all 25 box-to-box lines pass through the polygon;
    - self-checks that fail the run when the tracing drifts: H10–I11 and
      I10–I11 across the trough, H11–I11, J10–I11, H10–J10 and I10–J10
      beside it, touching a vertex and running along an edge not crossing,
      no pair involving `A-I11*`; the counts printed with the others;
-   - an optional `--draw-los A-H11 A-I11` that writes the lines and the
-     polygon over `board_A.png` to the scratch directory, for tracing.
+   - an optional `--draw-los A-H11 A-I11 [--out los.png]` that writes the
+     lines (red through the trough, green past it) and the polygon over
+     `board_A.png`, to `/tmp` by default, and prints the verdict.
    - Output in `board_a.gno`: `between [][3]int`, rows `{a, b, obstacle}`
      with `a < b` hex indices and the obstacle's index into `obstacles`,
      sorted so the realm can binary-search a pair (about 322 lines). The
@@ -159,19 +165,21 @@ boxes are only sight anchors.
    trough".
    - A `Height` type with `HeightDown = 3`, `HeightObstacle = 4` (windows
      too), `HeightUpright = 5`, `HeightWall = 10` (for later).
-   - `Board.Adjacent(a, b string) bool`.
+   - an unexported `adjacent(i, j int)` over the neighbour table.
    - `Board.Between(a, b string) []string`: the obstacle hexes lying
      between two hexes, from the `between` table (binary search on the
      ordered pair, so `Between(a, b) == Between(b, a)`); nil when clear or
-     unknown.
+     unknown. Its index-level twin is `obstaclesBetween`, since a method
+     cannot share the field's name.
    - `Board.LineOfSight(from, to string, hFrom, hTo Height) (clear bool, blocker string)`:
      for each obstacle between the two hexes, the height rule: blocked when
      the obstacle is higher than both heights, clear when lower than both,
      otherwise blocked only when the lower end is adjacent to it (31.31,
      31.32; 31.33 as a comment). The first blocker is returned.
-   - Tests in `board_test.gno`:
+   - Tests in `sight_test.gno`:
      - the table: sorted, `a < b`, every index valid, no row with
        `A-I11*`, `Between` symmetric;
+     - the height rule on its own (`blocks`), a wall included;
      - pairs across the trough: H10–I11, I10–I11, H10–J11, I10–I12, I9–I12,
        H9–J12;
      - pairs beside it: H11–I11, J10–I11, H10–J10, I10–J10, H10–H11,
@@ -183,11 +191,12 @@ boxes are only sight anchors.
        unknown hex false.
 
 3. **Engine** (`engine/v0`).
-   - `ReasonNoLOS = "no_los"`, carried by `cancel` and `lose_aim` events,
-     with the blocking hex in `To`. No encoding change (`Reason` and `To`
-     are existing fields).
-   - A helper giving a character's sight height (upright, or DOWN unless on
-     an obstacle) and one answering "can `c` see this target" for a hex
+   - `ReasonNoLOS = "no_los"`, carried by `cancel` and `lose_aim` events
+     with the blocking hex in `To`, and by the `nothing` event of a held
+     shot with the target's hex in `To` and its seat in `Target`. No
+     encoding change (existing fields).
+   - `sight.gno`: a character's sight height (upright, or DOWN unless on
+     an obstacle) and `canSee`, "can `c` see this target", for a hex
      (upright) or a character.
    - Three hooks in `resolve.gno`: the `OptAim` branch after the zone check
      (`cancel(ReasonNoLOS)`), `shoot` where a target out of sight holds the
@@ -221,8 +230,9 @@ boxes are only sight anchors.
      aim line keep using `hexes[].x/y`.
    - `scenes/GameScene.ts`: in `enterAimMode`, hexes of the aim zone without
      line of sight from my previewed state are drawn hatched like disabled
-     card sides and are not clickable, with "no line of sight (trough)" in
-     the hover detail; the height of a hex holding the opponent is the
+     card sides (`hiddenHex`, stripes from `ui/hatch.ts` clipped to the
+     outline) and are not clickable, the hover reading "No line of sight"
+     and the obstacle in the way; the height of a hex holding the opponent is the
      opponent's, except that an aim at a hex whose occupant is out of sight
      while the hex is in sight goes to the hex (31.3). A shot is never
      refused: with the occupant out of sight the pick names the hex, the
@@ -232,7 +242,9 @@ boxes are only sight anchors.
      unseen hexes out.
    - `game/shotOdds.ts`: a `los` flag so the odds read 0% there.
    - `game/playback.ts`: `describeEvent` wording for `cancel` and
-     `lose_aim` with reason `no_los`.
+     `lose_aim` with reason `no_los` ("no line of sight, A-I11\* in the
+     way") and for the held shot ("holds fire: The Kid in A-I11 is out of
+     sight").
    - The preview (`replay.ts`) is unchanged: like the aim zone today, the
      client prevents the pick and the realm decides at resolution.
    - `make check`.
@@ -252,8 +264,8 @@ few comparisons, once per aim, per shot and per aiming character per
 segment: far below the breadth-first search `Board.Distance` already runs
 for every shot's range. The table adds about 322 short lines to the
 `hex` package source, deployed once. No new game storage except the
-occasional `cancel` or `lose_aim` event carrying the `no_los` reason, a
-few dozen bytes in the turn's events.
+occasional `cancel`, `lose_aim` or `nothing` event carrying the `no_los`
+reason, a few dozen bytes in the turn's events.
 
 ## Later (first board with buildings)
 
