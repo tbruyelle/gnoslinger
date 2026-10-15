@@ -15,6 +15,11 @@ type Board struct {
 	qr        [][2]int // axial coordinates (q, r) of ids[i], see geom.gno
 	fence     []uint8  // fenced hexsides of ids[i]: bit d for direction d (rule 35)
 	obstacles []int    // indices of the obstacle hexes (rule 36)
+	// between lists the hex pairs an obstacle lies between for the line of
+	// sight (rule 31), computed by the generator from the printed coordinates
+	// and the obstacle's outline on the board image: {a, b, o} with a < b
+	// indices in ids and o an index in obstacles, sorted by (a, b, o).
+	between [][3]int
 }
 
 // Name returns the board letter, e.g. "A".

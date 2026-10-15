@@ -1,6 +1,7 @@
 # Line of sight (rule 31) — implementation plan
 
-Status: plan, 2026-10-15. Nothing implemented yet.
+Status: plan, 2026-10-15. Step 1 (the generator's between table) is done;
+the rest is not implemented yet.
 
 Board A has no buildings: the corral fence never blocks sight (35.1) and
 characters do not block it either, so line of sight (LOS) on board A comes

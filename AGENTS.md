@@ -49,7 +49,8 @@ make test          # go tool gno test ./gno.land/...   (unit tests + filetests)
 make lint          # go tool gno lint ./gno.land/...
 make fmt           # go tool gno fmt -w ./gno.land
 make check         # tsc --noEmit + vitest for the client
-make gen-board     # regenerate board A adjacency + fences + obstacles + half-hexes (realm + client) from assets/hex_grid.json
+make gen-board     # regenerate board A adjacency + fences + obstacles + half-hexes + the line-of-sight between table (realm + client) from assets/hex_grid.json
+                   # python3 scripts/gen_board_data.py --draw-los A-H11 A-I11 --out los.png  draws the lines of sight between two hexes over the board
 make mod-download  # sync ~/.config/gno/pkg/mod with the pinned gno (after update-fork)
 make update-fork FORK_REF=<ref>   # re-pin gnolang/gno in go.mod
 ```
