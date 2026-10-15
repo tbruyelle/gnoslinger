@@ -1,7 +1,7 @@
 # Line of sight (rule 31) — implementation plan
 
-Status: plan, 2026-10-15. Step 1 (the generator's between table) is done;
-the rest is not implemented yet.
+Status: plan, 2026-10-15. Steps 1 (the generator's between table) and 2
+(the hex package's sight rule) are done; the rest is not implemented yet.
 
 Board A has no buildings: the corral fence never blocks sight (35.1) and
 characters do not block it either, so line of sight (LOS) on board A comes
@@ -161,7 +161,8 @@ boxes are only sight anchors.
    - Tests in `board_test.gno`:
      - the table: sorted, `a < b`, every index valid, no row with
        `A-I11*`, `Between` symmetric;
-     - pairs across the trough: H10–I11, I10–I11, I10–J11, I9–I12, H9–J12;
+     - pairs across the trough: H10–I11, I10–I11, H10–J11, I10–I12, I9–I12,
+       H9–J12;
      - pairs beside it: H11–I11, J10–I11, H10–J10, I10–J10, H10–H11,
        H11–J10 (along its length), I11–I12, I11–J11, F3–F9;
      - the height matrix on I10–I11 (upright/upright clear, DOWN/DOWN
