@@ -1865,10 +1865,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * A hex of the aim zone out of sight (rule 31) while picking an aim:
+   * A hex of the aim zone out of sight (rule 31) while picking a target:
    * hatched in ink and not clickable, since the realm would cancel an aim
-   * at it; hovering it says what is in the way. The objects made, the hover
-   * text included, go into `objects` to be destroyed with the pick.
+   * at it and hold a shot at it for good; hovering it says what is in the
+   * way. The objects made, the hover text included, go into `objects` to
+   * be destroyed with the pick.
    */
   private hiddenHex(hex: string, sx: number, sy: number, blocker: string, objects: Phaser.GameObjects.GameObject[]) {
     const points = this.insetOutline(BOARD_A.outline(hex), sx, sy);
@@ -1944,21 +1945,21 @@ export class GameScene extends Phaser.Scene {
     const fontPx = Math.round(Phaser.Math.Clamp(r * 0.62, 10, 22));
     for (const hex of BOARD_A.aimZone(me.hex, me.facing)) {
       const { sx, sy } = this.hexToScreen(hex);
-      // The sight (rule 31) goes to the character standing there, else to the hex.
+      // The sight (rule 31) goes to the character standing there, else to
+      // the hex, which counts as upright (31.3).
       const standing = standingOn(chars, hex, this.myIndex);
       const sight = canSee(BOARD_A, me, hex, standing);
-      // A shot is never refused: at a hex nobody stands in when it comes up,
-      // or at a target out of sight, it is held (the odds read 0). An aim at
-      // a target out of sight is cancelled by the realm, so its hex is
-      // hidden, unless the hex itself is in sight: a hex aimed at counts as
-      // upright (31.3), so the aim goes to the hex and covers the spot for
-      // when the occupant gets up. Either way, with the occupant out of
-      // sight the pick names the hex, not the seat.
-      const hexOnly = !!standing && !sight.clear && (shooting || canSee(BOARD_A, me, hex).clear);
-      if (!shooting && !sight.clear && !hexOnly) {
-        this.hiddenHex(hex, sx, sy, sight.blocker, objects);
+      const hexSight = standing ? canSee(BOARD_A, me, hex) : sight;
+      // The hex itself out of sight: nothing can go there (an aim is
+      // cancelled, a shot held for good), so it is hidden. The occupant out
+      // of sight but the hex in sight: the pick names the hex, not the
+      // seat; an aim covers the spot for when the occupant gets up, a shot
+      // is held until someone in sight stands there (the odds read 0).
+      if (!hexSight.clear) {
+        this.hiddenHex(hex, sx, sy, hexSight.blocker, objects);
         continue;
       }
+      const hexOnly = !!standing && !sight.clear;
       const odds = shooting ? shotOdds(me, cardAimTime, hex, markersHex, BOARD_A, standing) : null;
       const who = standing ? charName(this.view?.players[chars.indexOf(standing)]?.char) : "";
       const circle = this.hexHighlight(BOARD_A.outline(hex), sx, sy, 0xb01010, 0.3, 0xff6040);

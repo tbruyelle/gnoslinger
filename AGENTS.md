@@ -493,14 +493,15 @@ Clicking a token opens the **character
   uncocking and a Shoot doing nothing are only reachable through the plan
   string). Aim then highlights the aim zone (`BoardMap.aimZone`,
   same axial maths as the realm) and the clicked hex goes into the plan
-  (`pendingAims`, `5f:aim:A-F6`). A hex of the zone out of sight is hatched
-  in ink (`hiddenHex`, stripes from `ui/hatch.ts`) and not clickable when
-  aiming, its hover naming the obstacle in the way; with the opponent
-  hidden but its hex in sight the pick names the hex (`5f:aim:A-I11`, not
-  `@1`), and when shooting no hex is hidden: the pick names the hex, the
-  odds read 0 (`ShotOdds.los`) and the hover says the shot is held while
-  the opponent lies hidden; every shot at an empty hex says it is held if
-  nobody stands there when it comes up. When shooting, the hovered hex of the zone shows the chance
+  (`pendingAims`, `5f:aim:A-F6`). A hex of the zone that is itself out of
+  sight (as upright, 31.3) is hatched in ink (`hiddenHex`, stripes from
+  `ui/hatch.ts`) and not clickable, aiming or shooting, its hover naming
+  the obstacle in the way; with the opponent hidden but its hex in sight
+  the pick names the hex (`5f:aim:A-I11` or `7f:shoot:A-I11`, not `@1`):
+  an aim covers the spot, a shot is held until someone in sight stands
+  there, the odds read 0 (`ShotOdds.los`) and the hover says so; every
+  shot at an empty hex says it is held if nobody stands there when it
+  comes up. When shooting, the hovered hex of the zone shows the chance
   of hitting it (`game/shotOdds.ts` over `rules/hitChance.ts`, the players'
   aid table `percent_hit.png`: hit % per aim time 1–9 and range 0–12 out of
   the 108 cards, bullseye % in red; Target Status not counted), with range

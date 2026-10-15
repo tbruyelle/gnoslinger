@@ -233,13 +233,15 @@ boxes are only sight anchors.
      card sides (`hiddenHex`, stripes from `ui/hatch.ts` clipped to the
      outline) and are not clickable, the hover reading "No line of sight"
      and the obstacle in the way; the height of a hex holding the opponent is the
-     opponent's, except that an aim at a hex whose occupant is out of sight
-     while the hex is in sight goes to the hex (31.3). A shot is never
-     refused: with the occupant out of sight the pick names the hex, the
-     odds read 0 and the tooltip says the shot is held while the occupant
-     lies hidden; every shot at an empty hex says it is held if nobody
-     stands there when it comes up. `showAimZone` (token hover) leaves the
-     unseen hexes out.
+     opponent's. One rule for aiming and shooting: a hex that is itself out
+     of sight (as upright, 31.3) is hidden, since an aim there is cancelled
+     and a shot held for good, as for the Kid lying next to the trough; a
+     hex in sight whose occupant is not stays pickable and the pick names
+     the hex, as for the marshal across the trough from the hidden Kid: an
+     aim covers the spot, a shot is held until someone in sight stands
+     there, the odds read 0 and the tooltip says so; every shot at an empty
+     hex says it is held if nobody stands there when it comes up.
+     `showAimZone` (token hover) leaves the unseen hexes out.
    - `game/shotOdds.ts`: a `los` flag so the odds read 0% there.
    - `game/playback.ts`: `describeEvent` wording for `cancel` and
      `lose_aim` with reason `no_los` ("no line of sight, A-I11\* in the
