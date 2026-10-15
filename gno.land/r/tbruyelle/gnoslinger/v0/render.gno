@@ -186,6 +186,11 @@ func renderHelp(res *mux.ResponseWriter, _ *mux.Request) {
 	res.Write(md.Paragraph("Example: " + md.InlineCode("1f:ahead_left,2f:ahead,3f") + " advances ahead-left, runs ahead, then sprints straight."))
 	res.Write(md.Paragraph("Rules: one side per card per turn; the total cost must fit in 5 minus your delay; " +
 		"Run needs Advance in the same plan; Sprint needs Run."))
+	res.Write(md.Paragraph("Aiming and shooting need the target in your aim zone and in sight (rule 31). " +
+		"On board A only the horse trough (" + md.InlineCode("A-I11*") + ") gets in the way: it hides two characters " +
+		"lying DOWN from each other, and a DOWN character next to it from anyone across it; standing characters see " +
+		"over it. An aim or a shot at a target out of sight is cancelled, and AIM points on it are lost at the end " +
+		"of the segment."))
 	res.Write(md.H2("Cards"))
 	var b strings.Builder
 	b.WriteString("| Card | Front | Back |\n|---|---|---|\n")
@@ -194,6 +199,24 @@ func renderHelp(res *mux.ResponseWriter, _ *mux.Request) {
 	}
 	res.Write(b.String() + "\n")
 	res.Write(md.Paragraph("Only foot actions are available for now; the others come with guns and brawling."))
+}
+
+// cancelReason is the reason of a cancel event as the log shows it: the
+// reason code, except a target out of sight, spelled out with the obstacle
+// in the way.
+func cancelReason(e engine.Event) string {
+	if e.Reason == engine.ReasonNoLOS {
+		return noSight(e)
+	}
+	return e.Reason
+}
+
+// noSight words a no_los reason: the event's To names the obstacle in the way.
+func noSight(e engine.Event) string {
+	if e.To == "" {
+		return "no line of sight"
+	}
+	return "no line of sight, " + e.To + " in the way"
 }
 
 func sideLabel(s cards.Side) string {
@@ -255,7 +278,11 @@ func describeEvent(g *Game, e engine.Event) string {
 		}
 		what += ": " + strconv.Itoa(e.N) + " AIM points"
 	case engine.EvLoseAim:
-		what = who + " loses the aim (" + strings.ReplaceAll(e.Reason, "_", " ") + ")"
+		if e.Reason == engine.ReasonNoLOS {
+			what = who + " loses the aim (" + noSight(e) + ")"
+		} else {
+			what = who + " loses the aim (" + strings.ReplaceAll(e.Reason, "_", " ") + ")"
+		}
 	case engine.EvNothing:
 		what = who + " does nothing (" + action + ")"
 	case engine.EvShot:
@@ -319,7 +346,7 @@ func describeEvent(g *Game, e engine.Event) string {
 			what += ": no longer jammed"
 		}
 	case engine.EvCancel:
-		what = who + ": " + action + " is cancelled (" + e.Reason + ")"
+		what = who + ": " + action + " is cancelled (" + cancelReason(e) + ")"
 	default:
 		what = who + " " + e.Kind
 	}

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"gno.land/p/tbruyelle/gnoslinger/engine/v0"
+	"gno.land/p/tbruyelle/gnoslinger/hex/v0"
 
 	"gno.land/p/nt/testutils/v0"
 	"gno.land/p/nt/uassert/v0"
@@ -537,4 +538,42 @@ func TestProfiles(cur realm, t *testing.T) {
 	uassert.True(t, strings.Contains(ProfileJSON(dave.String()), `"rank":`+strconv.Itoa(rankOf(d))))
 	uassert.True(t, strings.Contains(PlayersJSON(rankOf(d)-1, 1), `"addr":"`+dave.String()+`"`))
 	uassert.Equal(t, `{"total":`+strconv.Itoa(ranking.Size())+`,"offset":0,"players":[]}`, PlayersJSON(0, 0))
+}
+
+func TestLineOfSight(cur realm, t *testing.T) {
+	testing.SetRealm(testing.NewUserRealm(alice))
+	id := CreateGame(cross(cur), "marshal", 10, 0)
+	testing.SetRealm(testing.NewUserRealm(bob))
+	JoinGame(cross(cur), id, "dude")
+	g := getGame(id)
+
+	// Both lie DOWN on the two sides of the horse trough, alice's gun drawn
+	// and cocked: the trough hides them from each other (rule 31).
+	g.State.Chars[0].Hex, g.State.Chars[0].Facing, g.State.Chars[0].Down = "A-I10", hex.S, true
+	g.State.Chars[0].Guns[0].Location, g.State.Chars[0].Guns[0].Cocked = engine.GunHand, true
+	g.State.Chars[1].Hex, g.State.Chars[1].Facing, g.State.Chars[1].Down = "A-I12", hex.N, true
+	testing.SetRealm(testing.NewUserRealm(alice))
+	SubmitPlan(cross(cur), id, "5f:aim:@1,7f:shoot:@1")
+	testing.SetRealm(testing.NewUserRealm(bob))
+	SubmitPlan(cross(cur), id, "")
+	evs := g.lastTurn().Events()
+	n := 0
+	for _, e := range evs {
+		if e.Kind == engine.EvCancel {
+			n++
+			uassert.Equal(t, engine.ReasonNoLOS, e.Reason)
+			uassert.Equal(t, "A-I11*", e.To)
+		}
+	}
+	uassert.Equal(t, 2, n)
+	uassert.Equal(t, 0, g.State.Chars[0].Aim)
+	uassert.Equal(t, 6, g.State.Chars[0].Guns[0].Shells)
+	uassert.True(t, g.State.Chars[0].Guns[0].Cocked)
+	js := GameJSON(id)
+	uassert.True(t, strings.Contains(js, `"kind":"cancel","action":"cock_aim_shoot","from":"","to":"A-I11*"`), js)
+	uassert.True(t, strings.Contains(js, `"reason":"no_los"`), js)
+	page := Render("game/" + id)
+	uassert.True(t, strings.Contains(page, "cock aim shoot is cancelled (no line of sight, A-I11* in the way)"), page)
+	uassert.True(t, strings.Contains(page, "shoot is cancelled (no line of sight, A-I11* in the way)"), page)
+	uassert.True(t, strings.Contains(Render("help"), "in sight (rule 31)"))
 }
