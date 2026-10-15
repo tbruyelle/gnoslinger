@@ -105,12 +105,13 @@ type State struct {
 	GroundSeq int // last ground id handed out
 }
 
-// NewState is the fixed showdown setup ([H3]): seat 0 in the north half of
-// board A facing south, seat 1 in the south half facing north, six hexes apart.
+// NewState is a showdown before anyone set up: both characters upright with
+// their starting guns and endurance, standing nowhere yet (Hex "") until
+// SetUp gives each its hex and facing ([H3], setup.gno).
 func NewState() State {
 	return State{Chars: [NumPlayers]Character{
-		{Hex: "A-F3", Facing: hex.S, Guns: startingGuns(), Endurance: StartEndurance},
-		{Hex: "A-F9", Facing: hex.N, Guns: startingGuns(), Endurance: StartEndurance},
+		{Guns: startingGuns(), Endurance: StartEndurance},
+		{Guns: startingGuns(), Endurance: StartEndurance},
 	}}
 }
 

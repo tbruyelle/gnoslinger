@@ -20,7 +20,7 @@ var (
 
 func TestCreateAndJoin(cur realm, t *testing.T) {
 	testing.SetRealm(testing.NewUserRealm(alice))
-	id := CreateGame(cross(cur), "marshal", 20, 0)
+	id := CreateGame(cross(cur), "marshal", 20, 0, "A-G5", 3)
 	g := getGame(id)
 	uassert.Equal(t, "waiting", g.Phase.String())
 	uassert.Equal(t, 20, g.MaxTurns)
@@ -32,33 +32,36 @@ func TestCreateAndJoin(cur realm, t *testing.T) {
 	uassert.Equal(t, "marshal", g.Players[0].Char)
 	uassert.Equal(t, "", g.Players[1].Addr.String())
 	uassert.True(t, openGames.Has(id))
-	uassert.Equal(t, "A-F3", g.State.Chars[0].Hex)
-	uassert.Equal(t, "A-F9", g.State.Chars[1].Hex)
+	uassert.Equal(t, "A-G5", g.State.Chars[0].Hex)
+	uassert.Equal(t, int(hex.S), int(g.State.Chars[0].Facing))
+	uassert.Equal(t, "", g.State.Chars[1].Hex) // nobody there yet
 
 	js := GameJSON(id)
 	uassert.True(t, strings.Contains(js, `"id":"`+id+`"`), js)
 	uassert.True(t, strings.Contains(js, `"phase":"waiting"`), js)
-	uassert.True(t, strings.Contains(js, `"hex":"A-F3","facing":3,"down":false,"delay":0,"status":"alive","submitted":false`), js)
+	uassert.True(t, strings.Contains(js, `"hex":"A-G5","facing":3,"down":false,"delay":0,"status":"alive","submitted":false`), js)
 	uassert.True(t, strings.Contains(js, `"lastTurn":null}`), js)
 	uassert.True(t, strings.Contains(js, `"guns":[{"id":1,"type":"colt45","name":"Colt 45","location":"holstered","cocked":false,"shells":6,"capacity":6,"jammed":false,"exploded":false}]`), js)
 
 	uassert.AbortsWithMessage(t, cur, "gnoslinger: you cannot join your own game", func() {
-		JoinGame(cross(cur), id, "dude")
+		JoinGame(cross(cur), id, "the_kid", "A-E9", 0)
 	})
 
 	testing.SetRealm(testing.NewUserRealm(bob))
 	uassert.AbortsWithMessage(t, cur, "gnoslinger: unknown character nobody", func() {
-		JoinGame(cross(cur), id, "nobody")
+		JoinGame(cross(cur), id, "nobody", "A-F9", 0)
 	})
-	JoinGame(cross(cur), id, "dude")
+	JoinGame(cross(cur), id, "the_kid", "A-E9", 0)
 	uassert.Equal(t, "planning", g.Phase.String())
 	uassert.Equal(t, 2, g.Rev)
 	uassert.Equal(t, bob.String(), g.Players[1].Addr.String())
+	uassert.Equal(t, "A-E9", g.State.Chars[1].Hex)
+	uassert.Equal(t, int(hex.N), int(g.State.Chars[1].Facing))
 	uassert.False(t, openGames.Has(id))
 
 	testing.SetRealm(testing.NewUserRealm(carol))
 	uassert.AbortsWithMessage(t, cur, "gnoslinger: game is not open", func() {
-		JoinGame(cross(cur), id, "dude")
+		JoinGame(cross(cur), id, "the_kid", "A-E9", 0)
 	})
 
 	// Both players find the game in their list; carol has none.
@@ -70,36 +73,86 @@ func TestCreateAndJoin(cur realm, t *testing.T) {
 func TestCreateValidation(cur realm, t *testing.T) {
 	testing.SetRealm(testing.NewUserRealm(alice))
 	uassert.AbortsWithMessage(t, cur, "gnoslinger: unknown character bogus", func() {
-		CreateGame(cross(cur), "bogus", 10, 0)
+		CreateGame(cross(cur), "bogus", 10, 0, "A-G5", 3)
 	})
 	uassert.AbortsWithMessage(t, cur, "gnoslinger: maxTurns must be between 10 and 30", func() {
-		CreateGame(cross(cur), "marshal", 31, 0)
+		CreateGame(cross(cur), "marshal", 31, 0, "A-G5", 3)
 	})
 	uassert.AbortsWithMessage(t, cur, "gnoslinger: maxTurns must be between 10 and 30", func() {
-		CreateGame(cross(cur), "marshal", 9, 0)
+		CreateGame(cross(cur), "marshal", 9, 0, "A-G5", 3)
 	})
 	uassert.AbortsWithMessage(t, cur, "gnoslinger: maxTurns must be between 10 and 30", func() {
-		CreateGame(cross(cur), "marshal", 0, 0)
+		CreateGame(cross(cur), "marshal", 0, 0, "A-G5", 3)
 	})
 	uassert.AbortsWithMessage(t, cur, "gnoslinger: timeoutMinutes must be between 5 and 43200", func() {
-		CreateGame(cross(cur), "marshal", 10, 43201)
+		CreateGame(cross(cur), "marshal", 10, 43201, "A-G5", 3)
 	})
 	uassert.AbortsWithMessage(t, cur, "gnoslinger: timeoutMinutes must be between 5 and 43200", func() {
-		CreateGame(cross(cur), "marshal", 10, 4)
+		CreateGame(cross(cur), "marshal", 10, 4, "A-G5", 3)
 	})
 	uassert.AbortsWithMessage(t, cur, "gnoslinger: game not found", func() {
-		JoinGame(cross(cur), "9999999", "dude")
+		JoinGame(cross(cur), "9999999", "the_kid", "A-E9", 0)
 	})
 	uassert.AbortsWithMessage(t, cur, "gnoslinger: invalid game id", func() {
-		JoinGame(cross(cur), "nope", "dude")
+		JoinGame(cross(cur), "nope", "the_kid", "A-E9", 0)
 	})
+}
+
+func TestSetUp(cur realm, t *testing.T) {
+	testing.SetRealm(testing.NewUserRealm(alice))
+	// A character of the showdown, in one of the hexes assigned to it, facing one of the six directions.
+	uassert.AbortsWithMessage(t, cur, "gnoslinger: dude is not in this showdown: play marshal or the_kid", func() {
+		CreateGame(cross(cur), "dude", 10, 0, "A-G5", 3)
+	})
+	uassert.AbortsWithMessage(t, cur, "gnoslinger: marshal sets up in A-G5, A-G6, A-G7, A-G8, A-G9, not in A-F3", func() {
+		CreateGame(cross(cur), "marshal", 10, 0, "A-F3", 3)
+	})
+	uassert.AbortsWithMessage(t, cur, "gnoslinger: marshal sets up in A-G5, A-G6, A-G7, A-G8, A-G9, not in A-E7", func() {
+		CreateGame(cross(cur), "marshal", 10, 0, "A-E7", 3)
+	})
+	uassert.AbortsWithMessage(t, cur, "gnoslinger: facing must be between 0 (N) and 5 (NW)", func() {
+		CreateGame(cross(cur), "marshal", 10, 0, "A-G5", 6)
+	})
+	uassert.AbortsWithMessage(t, cur, "gnoslinger: facing must be between 0 (N) and 5 (NW)", func() {
+		CreateGame(cross(cur), "marshal", 10, 0, "A-G5", -1)
+	})
+	// The creator may take the kid's side.
+	id := CreateGame(cross(cur), "the_kid", 10, 0, "A-E6", 2)
+	g := getGame(id)
+	uassert.Equal(t, "A-E6", g.State.Chars[0].Hex)
+	uassert.Equal(t, int(hex.SE), int(g.State.Chars[0].Facing))
+	uassert.False(t, g.State.Chars[0].Down)
+	uassert.True(t, strings.Contains(GameJSON(id), `"char":"","hex":"","facing":0`), GameJSON(id))
+
+	// The joiner plays the other character, in its own hexes.
+	testing.SetRealm(testing.NewUserRealm(bob))
+	uassert.AbortsWithMessage(t, cur, "gnoslinger: the_kid is taken: play marshal", func() {
+		JoinGame(cross(cur), id, "the_kid", "A-E9", 0)
+	})
+	uassert.AbortsWithMessage(t, cur, "gnoslinger: marshal sets up in A-G5, A-G6, A-G7, A-G8, A-G9, not in A-E9", func() {
+		JoinGame(cross(cur), id, "marshal", "A-E9", 0)
+	})
+	uassert.AbortsWithMessage(t, cur, "gnoslinger: marshal sets up in A-G5, A-G6, A-G7, A-G8, A-G9, not in A-I11*", func() {
+		JoinGame(cross(cur), id, "marshal", "A-I11*", 0)
+	})
+	uassert.AbortsWithMessage(t, cur, "gnoslinger: facing must be between 0 (N) and 5 (NW)", func() {
+		JoinGame(cross(cur), id, "marshal", "A-G9", 7)
+	})
+	uassert.Equal(t, "waiting", g.Phase.String())
+	JoinGame(cross(cur), id, "marshal", "A-G9", 5)
+	uassert.Equal(t, "planning", g.Phase.String())
+	uassert.Equal(t, "A-G9", g.State.Chars[1].Hex)
+	uassert.Equal(t, int(hex.NW), int(g.State.Chars[1].Facing))
+	uassert.True(t, strings.Contains(GameJSON(id), `"char":"marshal","hex":"A-G9","facing":5`), GameJSON(id))
+	uassert.True(t, strings.Contains(Render("game/"+id), "| A-E6 | SE |"))
+	uassert.True(t, strings.Contains(Render("game/"+id), "| A-G9 | NW |"))
 }
 
 func TestSubmitAndResolve(cur realm, t *testing.T) {
 	testing.SetRealm(testing.NewUserRealm(alice))
-	id := CreateGame(cross(cur), "marshal", 10, 0)
+	id := CreateGame(cross(cur), "marshal", 10, 0, "A-G5", 3)
 	testing.SetRealm(testing.NewUserRealm(bob))
-	JoinGame(cross(cur), id, "dude")
+	JoinGame(cross(cur), id, "the_kid", "A-E9", 0)
 	g := getGame(id)
 	rev := g.Rev
 
@@ -159,20 +212,20 @@ func TestSubmitAndResolve(cur realm, t *testing.T) {
 	uassert.Equal(t, "1f:ahead,2f:ahead", lt.Plans[0])
 	uassert.Equal(t, "5b", lt.Plans[1])
 	uassert.Equal(t, 64, len(lt.Seed))
-	uassert.Equal(t, "A-F3", lt.Start()[0].Hex)
-	uassert.Equal(t, "A-F9", lt.Start()[1].Hex)
-	// Alice advanced F3->F4 on segment 2 and ran F4->F5 on segment 3;
+	uassert.Equal(t, "A-G5", lt.Start()[0].Hex)
+	uassert.Equal(t, "A-E9", lt.Start()[1].Hex)
+	// Alice advanced G5->G6 on segment 2 and ran G6->G7 on segment 3;
 	// Bob dropped on segment 3.
 	uassert.Equal(t, 3, len(lt.Events()))
-	uassert.Equal(t, "A-F5", g.State.Chars[0].Hex)
-	uassert.Equal(t, "A-F9", g.State.Chars[1].Hex)
+	uassert.Equal(t, "A-G7", g.State.Chars[0].Hex)
+	uassert.Equal(t, "A-E9", g.State.Chars[1].Hex)
 	uassert.True(t, g.State.Chars[1].Down)
 	uassert.False(t, g.State.Chars[0].PlayedFoot) // cleared at end of turn
 
 	js := GameJSON(id)
 	uassert.True(t, strings.Contains(js, `"turn":2`), js)
 	uassert.True(t, strings.Contains(js, `"lastTurn":{"turn":1,"seed":"`+lt.Seed+`","cards":[],"plans":["1f:ahead,2f:ahead","5b"],"events":[`), js)
-	uassert.True(t, strings.Contains(js, `"start":[{"hex":"A-F3","facing":3,"down":false,"delay":0,"status":"alive","aim":0,"aimHex":"","endurance":20,"serious":0,"gunArm":0,"otherArm":0,"leg":0,"guns":[{"id":1,"type":"colt45","name":"Colt 45","location":"holstered","cocked":false,"shells":6,"capacity":6,"jammed":false,"exploded":false}]},{"hex":"A-F9","facing":0,"down":false,"delay":0,"status":"alive","aim":0,"aimHex":"","endurance":20,"serious":0,"gunArm":0,"otherArm":0,"leg":0,"guns":[{"id":1,"type":"colt45","name":"Colt 45","location":"holstered","cocked":false,"shells":6,"capacity":6,"jammed":false,"exploded":false}]}]}}`), js)
+	uassert.True(t, strings.Contains(js, `"start":[{"hex":"A-G5","facing":3,"down":false,"delay":0,"status":"alive","aim":0,"aimHex":"","endurance":20,"serious":0,"gunArm":0,"otherArm":0,"leg":0,"guns":[{"id":1,"type":"colt45","name":"Colt 45","location":"holstered","cocked":false,"shells":6,"capacity":6,"jammed":false,"exploded":false}]},{"hex":"A-E9","facing":0,"down":false,"delay":0,"status":"alive","aim":0,"aimHex":"","endurance":20,"serious":0,"gunArm":0,"otherArm":0,"leg":0,"guns":[{"id":1,"type":"colt45","name":"Colt 45","location":"holstered","cocked":false,"shells":6,"capacity":6,"jammed":false,"exploded":false}]}]}}`), js)
 
 	// Alice ran on turn 1, so she may sprint on turn 2; Bob did not.
 	uassert.True(t, g.State.Chars[0].RanLastTurn)
@@ -193,18 +246,18 @@ func TestSubmitAndResolve(cur realm, t *testing.T) {
 	uassert.True(t, strings.HasPrefix(h, `{"id":"`+id+`","turn":3,"phase":"planning","players":[`), h)
 	uassert.True(t, strings.Contains(h, `"turns":[{"turn":1,`), h)
 	uassert.True(t, strings.Contains(h, `},{"turn":2,`), h)
-	uassert.True(t, strings.Contains(h, `"start":[{"hex":"A-F5","facing":3,"down":false,"delay":0,"status":"alive","aim":0,"aimHex":"","endurance":20,"serious":0,"gunArm":0,"otherArm":0,"leg":0,"guns":[{"id":1,"type":"colt45","name":"Colt 45","location":"holstered","cocked":false,"shells":6,"capacity":6,"jammed":false,"exploded":false}]},{"hex":"A-F9","facing":0,"down":true,"delay":0,"status":"alive","aim":0,"aimHex":"","endurance":20,"serious":0,"gunArm":0,"otherArm":0,"leg":0,"guns":[{"id":1,"type":"colt45","name":"Colt 45","location":"holstered","cocked":false,"shells":6,"capacity":6,"jammed":false,"exploded":false}]}]}`), h)
+	uassert.True(t, strings.Contains(h, `"start":[{"hex":"A-G7","facing":3,"down":false,"delay":0,"status":"alive","aim":0,"aimHex":"","endurance":20,"serious":0,"gunArm":0,"otherArm":0,"leg":0,"guns":[{"id":1,"type":"colt45","name":"Colt 45","location":"holstered","cocked":false,"shells":6,"capacity":6,"jammed":false,"exploded":false}]},{"hex":"A-E9","facing":0,"down":true,"delay":0,"status":"alive","aim":0,"aimHex":"","endurance":20,"serious":0,"gunArm":0,"otherArm":0,"leg":0,"guns":[{"id":1,"type":"colt45","name":"Colt 45","location":"holstered","cocked":false,"shells":6,"capacity":6,"jammed":false,"exploded":false}]}]}`), h)
 	uassert.Equal(t, h, Render("json/history/"+id))
-	uassert.True(t, strings.Contains(js, `{"seg":2,"p":0,"kind":"move","action":"advance","from":"A-F3","to":"A-F4","facing":3,"down":false,"n":0,"delay":0,"reason":"","card":0,"result":"","endurance":0,"target":0,"hit":"","range":0,"gun":"","gunId":0,"step":3,"chart":"","status":""}`), js)
+	uassert.True(t, strings.Contains(js, `{"seg":2,"p":0,"kind":"move","action":"advance","from":"A-G5","to":"A-G6","facing":3,"down":false,"n":0,"delay":0,"reason":"","card":0,"result":"","endurance":0,"target":0,"hit":"","range":0,"gun":"","gunId":0,"step":3,"chart":"","status":""}`), js)
 	uassert.True(t, strings.Contains(js, `{"seg":3,"p":1,"kind":"flip","action":"get_up_down","from":"","to":"","facing":0,"down":true,"n":0,"delay":0,"reason":"","card":0,"result":"","endurance":0,"target":0,"hit":"","range":0,"gun":"","gunId":0,"step":4,"chart":"","status":""}`), js)
-	uassert.True(t, strings.Contains(js, `"hex":"A-F9","facing":0,"down":true`), js)
+	uassert.True(t, strings.Contains(js, `"hex":"A-E9","facing":0,"down":true`), js)
 }
 
 func TestMaxTurnsFinish(cur realm, t *testing.T) {
 	testing.SetRealm(testing.NewUserRealm(alice))
-	id := CreateGame(cross(cur), "marshal", 10, 0)
+	id := CreateGame(cross(cur), "marshal", 10, 0, "A-G5", 3)
 	testing.SetRealm(testing.NewUserRealm(bob))
-	JoinGame(cross(cur), id, "dude")
+	JoinGame(cross(cur), id, "the_kid", "A-E9", 0)
 	for i := 0; i < 9; i++ {
 		testing.SetRealm(testing.NewUserRealm(alice))
 		SubmitPlan(cross(cur), id, "")
@@ -241,9 +294,9 @@ func TestMaxTurnsFinish(cur realm, t *testing.T) {
 
 func TestSurrender(cur realm, t *testing.T) {
 	testing.SetRealm(testing.NewUserRealm(alice))
-	id := CreateGame(cross(cur), "marshal", 10, 0)
+	id := CreateGame(cross(cur), "marshal", 10, 0, "A-G5", 3)
 	testing.SetRealm(testing.NewUserRealm(bob))
-	JoinGame(cross(cur), id, "dude")
+	JoinGame(cross(cur), id, "the_kid", "A-E9", 0)
 	aliceVP := profiles.Get(alice.String()).(*Profile).VictoryPoints
 	bobVP := profiles.Get(bob.String()).(*Profile).VictoryPoints
 	testing.SetRealm(testing.NewUserRealm(carol))
@@ -270,7 +323,7 @@ func TestSurrender(cur realm, t *testing.T) {
 
 func TestCancel(cur realm, t *testing.T) {
 	testing.SetRealm(testing.NewUserRealm(alice))
-	id := CreateGame(cross(cur), "marshal", 10, 0)
+	id := CreateGame(cross(cur), "marshal", 10, 0, "A-G5", 3)
 	testing.SetRealm(testing.NewUserRealm(bob))
 	uassert.AbortsWithMessage(t, cur, "gnoslinger: only the creator can cancel the game", func() {
 		CancelGame(cross(cur), id)
@@ -285,14 +338,14 @@ func TestCancel(cur realm, t *testing.T) {
 	})
 	testing.SetRealm(testing.NewUserRealm(bob))
 	uassert.AbortsWithMessage(t, cur, "gnoslinger: game not found", func() {
-		JoinGame(cross(cur), id, "dude")
+		JoinGame(cross(cur), id, "the_kid", "A-E9", 0)
 	})
 }
 
 func TestClaimTimeout(cur realm, t *testing.T) {
 	// A waiting game nobody joined is cancelled.
 	testing.SetRealm(testing.NewUserRealm(alice))
-	id := CreateGame(cross(cur), "marshal", 10, 30)
+	id := CreateGame(cross(cur), "marshal", 10, 30, "A-G5", 3)
 	uassert.AbortsWithMessage(t, cur, "gnoslinger: the game has not timed out yet", func() {
 		ClaimTimeout(cross(cur), id)
 	})
@@ -305,9 +358,9 @@ func TestClaimTimeout(cur realm, t *testing.T) {
 
 	// One plan in: the other player forfeits.
 	testing.SetRealm(testing.NewUserRealm(alice))
-	id = CreateGame(cross(cur), "marshal", 10, 30)
+	id = CreateGame(cross(cur), "marshal", 10, 30, "A-G5", 3)
 	testing.SetRealm(testing.NewUserRealm(bob))
-	JoinGame(cross(cur), id, "dude")
+	JoinGame(cross(cur), id, "the_kid", "A-E9", 0)
 	testing.SetRealm(testing.NewUserRealm(alice))
 	SubmitPlan(cross(cur), id, "")
 	testing.SkipHeights(361)
@@ -323,9 +376,9 @@ func TestClaimTimeout(cur realm, t *testing.T) {
 
 	// No plan in: abandoned.
 	testing.SetRealm(testing.NewUserRealm(alice))
-	id = CreateGame(cross(cur), "marshal", 10, 30)
+	id = CreateGame(cross(cur), "marshal", 10, 30, "A-G5", 3)
 	testing.SetRealm(testing.NewUserRealm(bob))
-	JoinGame(cross(cur), id, "dude")
+	JoinGame(cross(cur), id, "the_kid", "A-E9", 0)
 	testing.SkipHeights(361)
 	ClaimTimeout(cross(cur), id)
 	g = getGame(id)
@@ -338,18 +391,18 @@ func TestClaimTimeout(cur realm, t *testing.T) {
 func TestLateMoves(cur realm, t *testing.T) {
 	// Past the timeout a waiting game takes no player.
 	testing.SetRealm(testing.NewUserRealm(alice))
-	id := CreateGame(cross(cur), "marshal", 10, 30)
+	id := CreateGame(cross(cur), "marshal", 10, 30, "A-G5", 3)
 	testing.SkipHeights(361)
 	testing.SetRealm(testing.NewUserRealm(bob))
 	uassert.AbortsWithMessage(t, cur, "gnoslinger: out of time: the game can only be claimed now", func() {
-		JoinGame(cross(cur), id, "dude")
+		JoinGame(cross(cur), id, "the_kid", "A-E9", 0)
 	})
 
 	// Nor a running game a plan: it can only be claimed.
 	testing.SetRealm(testing.NewUserRealm(alice))
-	id = CreateGame(cross(cur), "marshal", 10, 30)
+	id = CreateGame(cross(cur), "marshal", 10, 30, "A-G5", 3)
 	testing.SetRealm(testing.NewUserRealm(bob))
-	JoinGame(cross(cur), id, "dude")
+	JoinGame(cross(cur), id, "the_kid", "A-E9", 0)
 	testing.SkipHeights(361)
 	testing.SetRealm(testing.NewUserRealm(alice))
 	uassert.AbortsWithMessage(t, cur, "gnoslinger: out of time: the game can only be claimed now", func() {
@@ -361,17 +414,17 @@ func TestLateMoves(cur realm, t *testing.T) {
 
 func TestRender(cur realm, t *testing.T) {
 	testing.SetRealm(testing.NewUserRealm(alice))
-	id := CreateGame(cross(cur), "marshal", 10, 0)
+	id := CreateGame(cross(cur), "marshal", 10, 0, "A-G5", 3)
 	testing.SetRealm(testing.NewUserRealm(bob))
-	JoinGame(cross(cur), id, "dude")
+	JoinGame(cross(cur), id, "the_kid", "A-E9", 0)
 	home := Render("")
 	uassert.True(t, strings.Contains(home, "# Gnoslinger"), home)
 	uassert.True(t, strings.Contains(home, "/r/tbruyelle/gnoslinger/v0:game/"+id), home)
-	uassert.True(t, strings.Contains(home, "marshal vs dude"), home)
+	uassert.True(t, strings.Contains(home, "marshal vs the\\_kid"), home)
 
 	page := Render("game/" + id)
 	uassert.True(t, strings.Contains(page, "# Game "+id), page)
-	uassert.True(t, strings.Contains(page, "| A-F3 | S |"), page)
+	uassert.True(t, strings.Contains(page, "| A-G5 | S |"), page)
 	uassert.True(t, strings.Contains(page, "planning"), page)
 	uassert.True(t, strings.Contains(page, "func=SubmitPlan"), page)
 
@@ -380,8 +433,8 @@ func TestRender(cur realm, t *testing.T) {
 	testing.SetRealm(testing.NewUserRealm(bob))
 	SubmitPlan(cross(cur), id, "1f:ahead")
 	page = Render("game/" + id)
-	uassert.True(t, strings.Contains(page, "seg 2: marshal advance: A-F3 → A-F4"), page)
-	uassert.True(t, strings.Contains(page, "seg 2: dude advance: A-F9 → A-F8"), page)
+	uassert.True(t, strings.Contains(page, "seg 2: marshal advance: A-G5 → A-G6"), page)
+	uassert.True(t, strings.Contains(page, "seg 2: the\\_kid advance: A-E9 → A-E8"), page)
 
 	help := Render("help")
 	uassert.True(t, strings.Contains(help, "1f:ahead_left,2f:ahead,3f"), help)
@@ -393,9 +446,9 @@ func TestRender(cur realm, t *testing.T) {
 
 func TestDrawAndCock(cur realm, t *testing.T) {
 	testing.SetRealm(testing.NewUserRealm(alice))
-	id := CreateGame(cross(cur), "marshal", 10, 0)
+	id := CreateGame(cross(cur), "marshal", 10, 0, "A-G5", 3)
 	testing.SetRealm(testing.NewUserRealm(bob))
-	JoinGame(cross(cur), id, "dude")
+	JoinGame(cross(cur), id, "the_kid", "A-E9", 0)
 	testing.SetRealm(testing.NewUserRealm(alice))
 	uassert.AbortsWithMessage(t, cur, "gnoslinger: you have no such gun", func() {
 		SubmitPlan(cross(cur), id, "9f:2:0")
@@ -419,9 +472,9 @@ func TestDrawAndCock(cur realm, t *testing.T) {
 
 func TestShootout(cur realm, t *testing.T) {
 	testing.SetRealm(testing.NewUserRealm(alice))
-	id := CreateGame(cross(cur), "marshal", 10, 0)
+	id := CreateGame(cross(cur), "marshal", 10, 0, "A-G5", 3)
 	testing.SetRealm(testing.NewUserRealm(bob))
-	JoinGame(cross(cur), id, "dude")
+	JoinGame(cross(cur), id, "the_kid", "A-E9", 0)
 	g := getGame(id)
 
 	// Turn 1: both draw and cock. Turn 2: alice aims twice (4 AIM points).
@@ -439,7 +492,7 @@ func TestShootout(cur realm, t *testing.T) {
 	uassert.True(t, strings.Contains(js, `"ranLastTurn":false,"aim":4,"aimHex":"","endurance":20,"serious":0,"gunArm":0,"otherArm":0,"leg":0,"guns":[{"id":1,"type":"colt45","name":"Colt 45","location":"gun_hand","cocked":true,"shells":6,"capacity":6,"jammed":false,"exploded":false}]`), js)
 	uassert.True(t, strings.Contains(js, `"ground":[]`), js)
 
-	// Turn 3: alice shoots (aim time 1 + 4 = 5, range 6); bob does nothing with his gun.
+	// Turn 3: alice shoots (aim time 1 + 4 = 5, range 5); bob does nothing with his gun.
 	testing.SetRealm(testing.NewUserRealm(alice))
 	SubmitPlan(cross(cur), id, "7f:shoot:@1")
 	testing.SetRealm(testing.NewUserRealm(bob))
@@ -457,7 +510,7 @@ func TestShootout(cur realm, t *testing.T) {
 	}
 	uassert.Equal(t, 0, shot.Player)
 	uassert.Equal(t, 1, shot.Target)
-	uassert.Equal(t, 6, shot.Range)
+	uassert.Equal(t, 5, shot.Range)
 	uassert.Equal(t, 1, shot.Seg)
 	if shot.Reason != engine.ReasonMisfire {
 		uassert.Equal(t, 5, shot.N)
@@ -467,14 +520,14 @@ func TestShootout(cur realm, t *testing.T) {
 	uassert.True(t, g.State.Chars[0].Guns[0].Shells <= 5)
 	uassert.True(t, len(lt.Cards()) >= 1)
 	uassert.True(t, strings.Contains(GameJSON(id), `"kind":"shot"`))
-	uassert.True(t, strings.Contains(Render("game/"+id), "shoots dude in A-F9 (card "))
+	uassert.True(t, strings.Contains(Render("game/"+id), "shoots the\\_kid in A-E9 (card "))
 }
 
 func TestAutoPass(cur realm, t *testing.T) {
 	testing.SetRealm(testing.NewUserRealm(alice))
-	id := CreateGame(cross(cur), "marshal", 10, 0)
+	id := CreateGame(cross(cur), "marshal", 10, 0, "A-G5", 3)
 	testing.SetRealm(testing.NewUserRealm(bob))
-	JoinGame(cross(cur), id, "dude")
+	JoinGame(cross(cur), id, "the_kid", "A-E9", 0)
 	g := getGame(id)
 	// Alice carries 5 delay: she cannot play anything, so bob's plan alone
 	// resolves the turn; her pass is recorded as an empty plan.
@@ -507,24 +560,24 @@ func TestProfiles(cur realm, t *testing.T) {
 
 	// Creating a game makes the profile; the game counts once it starts.
 	testing.SetRealm(testing.NewUserRealm(dave))
-	id := CreateGame(cross(cur), "marshal", 10, 0)
+	id := CreateGame(cross(cur), "marshal", 10, 0, "A-G5", 3)
 	uassert.Equal(t, 0, profiles.Get(dave.String()).(*Profile).GamesPlayed)
 	CancelGame(cross(cur), id)
 	uassert.Equal(t, 0, profiles.Get(dave.String()).(*Profile).GamesPlayed)
 
-	id = CreateGame(cross(cur), "marshal", 10, 0)
+	id = CreateGame(cross(cur), "marshal", 10, 0, "A-G5", 3)
 	testing.SetRealm(testing.NewUserRealm(erin))
-	JoinGame(cross(cur), id, "dude")
+	JoinGame(cross(cur), id, "the_kid", "A-E9", 0)
 	uassert.Equal(t, 1, profiles.Get(dave.String()).(*Profile).GamesPlayed)
 	uassert.Equal(t, 1, profiles.Get(erin.String()).(*Profile).GamesPlayed)
 	uassert.Equal(t, profiles.Size(), ranking.Size())
 
 	// A second game puts dave ahead of erin.
 	testing.SetRealm(testing.NewUserRealm(dave))
-	CreateGame(cross(cur), "marshal", 10, 0)
-	id = CreateGame(cross(cur), "marshal", 10, 0)
+	CreateGame(cross(cur), "marshal", 10, 0, "A-G5", 3)
+	id = CreateGame(cross(cur), "marshal", 10, 0, "A-G5", 3)
 	testing.SetRealm(testing.NewUserRealm(alice))
-	JoinGame(cross(cur), id, "dude")
+	JoinGame(cross(cur), id, "the_kid", "A-E9", 0)
 	d := profiles.Get(dave.String()).(*Profile)
 	e := profiles.Get(erin.String()).(*Profile)
 	uassert.Equal(t, 2, d.GamesPlayed)
@@ -542,9 +595,9 @@ func TestProfiles(cur realm, t *testing.T) {
 
 func TestLineOfSight(cur realm, t *testing.T) {
 	testing.SetRealm(testing.NewUserRealm(alice))
-	id := CreateGame(cross(cur), "marshal", 10, 0)
+	id := CreateGame(cross(cur), "marshal", 10, 0, "A-G5", 3)
 	testing.SetRealm(testing.NewUserRealm(bob))
-	JoinGame(cross(cur), id, "dude")
+	JoinGame(cross(cur), id, "the_kid", "A-E9", 0)
 	g := getGame(id)
 
 	// Both lie DOWN on the two sides of the horse trough, alice's gun drawn
@@ -584,6 +637,6 @@ func TestLineOfSight(cur realm, t *testing.T) {
 	uassert.True(t, strings.Contains(js, `"kind":"nothing","action":"shoot","from":"","to":"A-I12"`), js)
 	page := Render("game/" + id)
 	uassert.True(t, strings.Contains(page, "cock aim shoot is cancelled (no line of sight, A-I11* in the way)"), page)
-	uassert.True(t, strings.Contains(page, "holds fire: dude in A-I12 is out of sight"), page)
+	uassert.True(t, strings.Contains(page, "holds fire: the\\_kid in A-I12 is out of sight"), page)
 	uassert.True(t, strings.Contains(Render("help"), "in sight (rule 31)"))
 }

@@ -29,7 +29,8 @@ import { SHOOT_OPTIONS, isShooting, type ShootOption } from "../game/plan";
 import { closeCharacterSheet, openCharacterSheet, type GunPick } from "../ui/characterSheet";
 import { ShowdownView, showdownLayout, type BoardRect, type CharPanel, type HandSide, type ShowdownLayout, type ShowdownModel, type TimelineRow } from "../ui/showdownView";
 import { showToast } from "../ui/toast";
-import { charName } from "../game/lobby";
+import { charName, formatDuration } from "../game/lobby";
+import { defaultFacing, setupZone, startingChar } from "../game/setup";
 import { vpRecap, vpResult } from "../game/vp";
 
 // ── Layout constants ────────────────────────────────────────────────────────
@@ -45,7 +46,20 @@ const GOLD = 0xd4a044;
 /** Screen angle (degrees) of each absolute direction, y down. */
 const DIR_ANGLE = [270, 330, 30, 90, 150, 210];
 
-type Mode = "sync" | "select" | "submitting" | "waiting" | "playback" | "ended" | "spectate";
+type Mode = "sync" | "setup" | "select" | "submitting" | "waiting" | "playback" | "ended" | "spectate";
+
+/**
+ * What the lobby hands the scene to set a character up on the board before
+ * signing (game/setup.ts): a showdown to call, with the form's options, or
+ * one to join.
+ */
+export type SetupRequest = { kind: "create"; charKey: string; turns: number; timeoutMinutes: number } | { kind: "join"; charKey: string };
+
+/** Depth of the setup zone's highlights: under the aim zone shown on token hover (0.5) and the tokens (from 1). */
+const SETUP_ZONE_DEPTH = 0.3;
+/** The ghost of my token on the set-up hex under the pointer: above the hovered highlight, under the tokens, see-through. */
+const SETUP_GHOST_DEPTH = 0.9;
+const SETUP_GHOST_ALPHA = 0.55;
 
 
 /** Highest delay marker available (DEL 1 to DEL 8). */
@@ -621,6 +635,21 @@ export class GameScene extends Phaser.Scene {
   private finalReplay = false;
   /** The plan sent this turn, shown while waiting: known from sending it, else read back from the chain. */
   private sentPlan: { turn: number; plan: string } | null = null;
+  /**
+   * Setting my character up before calling or joining (SetupRequest): the
+   * seat it takes, the hex and facing picked so far, the highlights of the
+   * hexes it may stand in, the ghost of my token on the one under the
+   * pointer, and whether the call is being signed.
+   */
+  private setup: {
+    req: SetupRequest;
+    seat: number;
+    hex: string | null;
+    facing: number;
+    zone: Phaser.GameObjects.GameObject[];
+    ghost: Phaser.GameObjects.Image | null;
+    busy: boolean;
+  } | null = null;
 
   // Zoom & pan
   private zoom = 1;
@@ -648,8 +677,12 @@ export class GameScene extends Phaser.Scene {
     super({ key: "GameScene" });
   }
 
-  init(data: { gameID: string }) {
-    this.gameID = data.gameID;
+  /** A game to show, or a set up: calling a showdown has no game yet, joining one has the game it joins. */
+  init(data: { gameID?: string; setup?: SetupRequest }) {
+    this.gameID = data.gameID ?? "";
+    this.setup = data.setup
+      ? { req: data.setup, seat: data.setup.kind === "create" ? 0 : 1, hex: null, facing: defaultFacing(data.setup.charKey), zone: [], ghost: null, busy: false }
+      : null;
     this.view = null;
     this.myIndex = -1;
     this.renderedTurn = -1;
@@ -742,14 +775,18 @@ export class GameScene extends Phaser.Scene {
     // The turn's deadline can pass while the screen is open: look again now and then.
     this.time.addEvent({ delay: 15_000, loop: true, callback: () => this.mode !== "playback" && this.renderView() });
 
-    this.poller = new GamePoller(
-      this.chain.realm,
-      this.gameID,
-      (v) => void this.onGame(v),
-      (e) => this.onPollError(e),
-      this.chain.config.pollMs,
-    );
-    this.poller.start();
+    if (this.gameID) {
+      this.poller = new GamePoller(
+        this.chain.realm,
+        this.gameID,
+        (v) => void this.onGame(v),
+        (e) => this.onPollError(e),
+        this.chain.config.pollMs,
+      );
+      this.poller.start();
+    } else if (this.setup) {
+      void this.beginCreate();
+    }
 
     const leave = (why: string) => {
       if (!this.scene.isActive()) return;
@@ -780,8 +817,8 @@ export class GameScene extends Phaser.Scene {
     const first = this.view === null;
     this.view = view;
     this.netError = null;
-    this.myIndex = seatOf(view, this.chain.wallet.address);
-    await this.ensureTextures(view);
+    this.myIndex = this.setup ? this.setup.seat : seatOf(view, this.chain.wallet.address);
+    await this.ensureTextures([...view.players.map((p) => p.char), ...(this.setup ? [this.setup.req.charKey] : [])]);
     if (!this.scene.isActive()) return;
 
     if (first) {
@@ -819,8 +856,8 @@ export class GameScene extends Phaser.Scene {
     this.renderView();
   }
 
-  private ensureTextures(view: GameView): Promise<void> {
-    const missing = view.players.map((p) => p.char).filter((c) => c && !this.textures.exists(`char_${c}`));
+  private ensureTextures(chars: string[]): Promise<void> {
+    const missing = [...new Set(chars)].filter((c) => c && !this.textures.exists(`char_${c}`));
     if (missing.length === 0) return Promise.resolve();
     return new Promise((resolve) => {
       for (const c of missing) this.load.image(`char_${c}`, `char_${c}.png`);
@@ -833,6 +870,12 @@ export class GameScene extends Phaser.Scene {
   private applyState(reset: boolean) {
     const view = this.view;
     if (!view) return;
+    // Joining: I set my character up in the empty seat while the showdown
+    // waits for a player; once it went on without me, I only watch.
+    if (this.setup?.req.kind === "join" && view.phase !== "waiting") {
+      showToast(this, view.phase === "planning" ? "Another player joined this showdown first" : "This showdown is over", "info");
+      this.endSetup();
+    }
     const turnChanged = view.turn !== this.renderedTurn;
     this.committed = view.players.map((p) => ({
       hex: p.hex, facing: p.facing, down: p.down, delay: p.delay, status: p.status,
@@ -845,8 +888,9 @@ export class GameScene extends Phaser.Scene {
     if (reset || turnChanged || this.mode === "waiting" || this.mode === "playback") {
       this.clearSelection();
     }
-    const me = this.myIndex >= 0 ? view.players[this.myIndex] : null;
-    if (view.phase === "finished") this.mode = "ended";
+    const me = this.myIndex >= 0 && view.players[this.myIndex]?.addr ? view.players[this.myIndex] : null;
+    if (this.setup) this.mode = "setup";
+    else if (view.phase === "finished") this.mode = "ended";
     else if (!me) this.mode = "spectate";
     else if (view.phase === "waiting") this.mode = "waiting";
     else if (me.submitted) this.mode = "waiting";
@@ -855,8 +899,41 @@ export class GameScene extends Phaser.Scene {
 
     this.buildTokens();
     this.refreshTokens(!reset);
+    this.showSetupZone();
     this.renderView();
     if (this.mode === "waiting" && view.phase === "planning") void this.loadSentPlan();
+  }
+
+  /**
+   * Calling a showdown: nothing is on the chain yet, the board shows my
+   * character alone, where I put it, until the call is signed.
+   */
+  private async beginCreate() {
+    const setup = this.setup;
+    if (!setup) return;
+    await this.ensureTextures([setup.req.charKey]);
+    if (!this.scene.isActive() || this.setup !== setup) return;
+    this.committed = [startingChar("", setup.facing), startingChar("", 0)];
+    this.myIndex = setup.seat;
+    this.mode = "setup";
+    this.buildTokens();
+    this.refreshTokens(false);
+    this.showSetupZone();
+    this.renderView();
+  }
+
+  /** Leaves the set up: its highlights and ghost go, my seat is whatever the chain says. */
+  private endSetup() {
+    for (const o of this.setup?.zone ?? []) o.destroy();
+    this.setup?.ghost?.destroy();
+    this.setup = null;
+    if (this.view) this.myIndex = seatOf(this.view, this.chain.wallet.address);
+  }
+
+  /** The character token of a seat: the chain's, or the one I am setting up in it. */
+  private charOf(seat: number): string {
+    if (this.setup && seat === this.setup.seat) return this.setup.req.charKey;
+    return this.view?.players[seat]?.char ?? "";
   }
 
   // ── Layout ────────────────────────────────────────────────────────────────
@@ -874,6 +951,10 @@ export class GameScene extends Phaser.Scene {
     this.groundIcons = [];
     if (this.optMenu) this.optMenu.objects = [];
     if (this.aimMode) this.aimMode.objects = [];
+    if (this.setup) {
+      this.setup.zone = [];
+      this.setup.ghost = null;
+    }
 
     const b = this.board;
     this.add.rectangle(0, 0, this.cw, this.ch, 0x1e1618).setOrigin(0);
@@ -887,6 +968,7 @@ export class GameScene extends Phaser.Scene {
     this.buildBoard();
     this.buildTokens();
     this.refreshTokens(false);
+    this.showSetupZone();
     this.renderView();
     if (this.choiceMode) this.showChoiceOverlays();
     if (this.optMenu) this.openOptMenu(this.optMenu.card, this.optMenu.side);
@@ -981,7 +1063,10 @@ export class GameScene extends Phaser.Scene {
       const t = this.playback.turns[this.playback.index];
       return snapshotAfterSegment(startOfTurn(t, this.committed), t.events, this.playback.seg, this.groundBefore(), this.playback.cut ?? undefined);
     }
-    return this.committed.map((c, i) => (i === this.myIndex && this.preview ? this.preview : c));
+    return this.committed.map((c, i) => {
+      if (this.setup && i === this.setup.seat) return { ...c, hex: this.setup.hex ?? "", facing: this.setup.facing, down: false };
+      return i === this.myIndex && this.preview ? this.preview : c;
+    });
   }
 
   private buildTokens() {
@@ -998,31 +1083,33 @@ export class GameScene extends Phaser.Scene {
       }
     }
     this.tokens = [];
-    const view = this.view;
-    if (!view) return;
     const { scale } = this.displayTransform();
     const tokenScale = scale * TOKEN_SCALE_FACTOR;
     const chars = this.displayChars();
-    view.players.forEach((p, i) => {
-      if (!p.char || !this.textures.exists(`char_${p.char}`)) {
+    chars.forEach((c, i) => {
+      const charKey = this.charOf(i);
+      // No token for an empty seat, nor for a character standing nowhere yet (setting up).
+      if (!charKey || !c?.hex || !this.textures.exists(`char_${charKey}`)) {
         this.tokens.push(null);
         return;
       }
-      const c = chars[i];
       const { sx, sy } = this.tokenScreenPos(chars, i);
       const hl = this.add
         .circle(sx, sy, (95 * tokenScale) / 2 + 4, GOLD, 0)
         .setStrokeStyle(3, GOLD, 0)
         .setMask(this.arrMask);
       const img = this.add
-        .image(sx, sy, `char_${p.char}`)
+        .image(sx, sy, `char_${charKey}`)
         .setScale(tokenScale)
-        .setAngle(dirIndexToAngle(c.facing, p.char))
+        .setAngle(dirIndexToAngle(c.facing, charKey))
         .setOrigin(0.5)
         .setMask(this.arrMask)
         .setInteractive({ useHandCursor: true });
       img.on("pointerup", (pointer: Phaser.Input.Pointer) => {
-        if (this.isDragging || pointer.rightButtonReleased()) return;
+        if (this.isDragging) return;
+        // Setting up, my token turns under the clicks: clockwise, the other way with the right button.
+        if (this.setup && i === this.setup.seat) return this.turnSetup(pointer.rightButtonReleased() ? -1 : 1);
+        if (pointer.rightButtonReleased()) return;
         this.openSheet(i);
       });
       img.on("pointerover", () => {
@@ -1033,7 +1120,7 @@ export class GameScene extends Phaser.Scene {
         this.applyTokenHighlight(i);
         this.hideAimZone();
       });
-      const token = new CharacterToken(p.char, img, hl, CharacterToken.depthFor(i));
+      const token = new CharacterToken(charKey, img, hl, CharacterToken.depthFor(i));
       // The AIM marker on this token belongs to the opponent: the line runs from the aimer to here.
       token.onAimHover = (over) => (over ? this.showAimLine(this.gunCentre(1 - i), this.tokenCentre(i)) : this.hideAimLine());
       // The gun of an aiming character: the line runs from the aimer to its target.
@@ -1099,10 +1186,9 @@ export class GameScene extends Phaser.Scene {
    * keyed "s<seat>" or "g<index>".
    */
   private occupantsAt(chars: CharView[], ground: GroundGunView[], hex: string): string[] {
-    const players = this.view?.players ?? [];
     const out: string[] = [];
     chars.forEach((c, j) => {
-      if (c && players[j]?.char && c.hex === hex) out.push(`s${j}`);
+      if (c && c.hex && this.charOf(j) && c.hex === hex) out.push(`s${j}`);
     });
     ground.forEach((g, j) => {
       if (g.hex === hex) out.push(`g${j}`);
@@ -1168,7 +1254,7 @@ export class GameScene extends Phaser.Scene {
     const ground = this.displayGround();
     const radius = this.tokenDiameter() * (0.5 + STACK_SPREAD);
     let hit: string | null = null;
-    const hexes = new Set<string>([...chars.filter((c) => c).map((c) => c.hex), ...ground.map((g) => g.hex)]);
+    const hexes = new Set<string>([...chars.filter((c) => c && c.hex).map((c) => c.hex), ...ground.map((g) => g.hex)]);
     for (const hex of hexes) {
       if (this.occupantsAt(chars, ground, hex).length < 2) continue;
       const { sx, sy } = this.hexToScreen(hex);
@@ -1202,7 +1288,7 @@ export class GameScene extends Phaser.Scene {
   private applyTokenHighlight(i: number) {
     const t = this.tokens[i];
     if (!t) return;
-    if (i === this.myIndex) t.setHighlight(0xffffff, this.mode === "select" ? 0.9 : 0.4);
+    if (i === this.myIndex) t.setHighlight(0xffffff, this.mode === "select" || this.mode === "setup" ? 0.9 : 0.4);
     else t.setHighlight(GOLD, 0);
   }
 
@@ -1210,6 +1296,7 @@ export class GameScene extends Phaser.Scene {
     this.buildBoard();
     this.buildTokens();
     this.refreshTokens(false);
+    this.showSetupZone();
     this.clearChoiceOverlays();
     if (this.choiceMode) this.showChoiceOverlays();
     if (this.optMenu) this.openOptMenu(this.optMenu.card, this.optMenu.side); // follows the token on zoom and pan
@@ -1219,6 +1306,10 @@ export class GameScene extends Phaser.Scene {
   // ── HUD ───────────────────────────────────────────────────────────────────
 
   private statusLine(): string {
+    if (this.mode === "setup") {
+      if (this.setup?.busy) return "Signing in Adena…";
+      return this.setup?.req.kind === "create" ? "Take position to call the showdown" : "Take position to join the showdown";
+    }
     const view = this.view!;
     switch (this.mode) {
       case "sync":
@@ -1286,6 +1377,12 @@ export class GameScene extends Phaser.Scene {
         return void this.claimTimeout();
       case "cancel":
         return void this.cancelGame();
+      case "setup":
+        return void this.sendSetup();
+      case "turnLeft":
+        return this.turnSetup(-1);
+      case "turnRight":
+        return this.turnSetup(1);
       case "prevTurn":
         return this.jumpTurn(-1);
       case "nextTurn":
@@ -1304,13 +1401,13 @@ export class GameScene extends Phaser.Scene {
 
   /** A character as the side panels show it. */
   private charPanel(seat: number, c: CharView, badge: string): CharPanel {
-    const p = this.view!.players[seat];
+    const charKey = this.charOf(seat);
     return {
       seat,
-      name: charName(p.char),
-      charKey: p.char,
+      name: charName(charKey),
+      charKey,
       you: seat === this.myIndex,
-      where: `${c.hex} · facing ${DIR_NAMES[c.facing] ?? "?"}${c.down ? " · down" : ""}`,
+      where: c.hex ? `${c.hex} · facing ${DIR_NAMES[c.facing] ?? "?"}${c.down ? " · down" : ""}` : "nowhere yet: pick a hex",
       out: c.status === "killed" ? "DEAD" : c.status === "passed_out" ? "PASSED OUT" : "",
       endurance: c.endurance,
       maxEndurance: MAX_ENDURANCE,
@@ -1334,14 +1431,17 @@ export class GameScene extends Phaser.Scene {
     const players = view?.players ?? [];
     const names = players.map((p) => charName(p.char));
     const tone: ShowdownModel["statusTone"] =
-      this.mode === "select" || this.mode === "submitting" ? "move" : this.mode === "playback" ? "replay" : this.mode === "ended" ? "over" : this.mode === "waiting" ? "wait" : "info";
+      this.mode === "select" || this.mode === "submitting" || this.mode === "setup" ? "move" : this.mode === "playback" ? "replay" : this.mode === "ended" ? "over" : this.mode === "waiting" ? "wait" : "info";
+    const calling = this.setup?.req.kind === "create" ? this.setup.req : null;
     const base = {
-      title: view ? `Game ${view.id} · Turn ${view.turn} of ${view.maxTurns}` : `Game ${this.gameID}`,
-      status: view ? this.statusLine() : "Loading…",
+      title: view
+        ? `Game ${view.id} · Turn ${view.turn} of ${view.maxTurns}`
+        : calling
+          ? `New showdown · ${calling.turns} turns · ${formatDuration(calling.timeoutMinutes * 60)} per turn`
+          : `Game ${this.gameID}`,
+      status: view || this.mode === "setup" ? this.statusLine() : "Loading…",
       statusTone: tone,
-      right: this.netError
-        ? `RPC offline: ${this.netError}`
-        : players.map((p, i) => (p.addr ? `${charName(p.char)} (${i === this.myIndex ? "you" : playerLabel(p)})` : "empty seat")).join("  vs  "),
+      right: this.headerRight(),
       rightError: !!this.netError,
     };
 
@@ -1389,7 +1489,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     // Planning layout: my character (or everyone, for a spectator) on the left, the others and my plan on the right, the hand below.
-    const committed = this.committed;
+    const committed = this.setup ? this.displayChars() : this.committed; // setting up, my panel shows the position picked
     const planning = view?.phase === "planning";
     const badge = (i: number) => (planning && players[i]?.addr ? (players[i].submitted ? "PLAN SENT" : "PLANNING") : "");
     const mine = this.myIndex >= 0 && committed[this.myIndex] ? this.charPanel(this.myIndex, committed[this.myIndex], "") : null;
@@ -1415,12 +1515,49 @@ export class GameScene extends Phaser.Scene {
     return { ...base, left, tracker, others, plan: this.planPanel(names), hand: this.handModel(), replay: null };
   }
 
+  /** The header's right end: the RPC error, else who sits in each seat (me by my character, a seat I am setting up in included). */
+  private headerRight(): string {
+    if (this.netError) return `RPC offline: ${this.netError}`;
+    const seats = this.view ? this.view.players.length : this.setup ? 2 : 0;
+    const labels: string[] = [];
+    for (let i = 0; i < seats; i++) {
+      const p = this.view?.players[i];
+      if (p?.addr) labels.push(`${charName(p.char)} (${i === this.myIndex ? "you" : playerLabel(p)})`);
+      else if (this.setup && i === this.setup.seat) labels.push(`${charName(this.setup.req.charKey)} (you)`);
+      else labels.push("empty seat");
+    }
+    return labels.join("  vs  ");
+  }
+
   /** The right column's plan panel: my plan while I pick it, the plan sent, or what the game waits for. */
   private planPanel(names: string[]): ShowdownModel["plan"] {
     const view = this.view;
+    const lobby = { id: "lobby", label: "Lobby", tone: "plain" as const };
+    if (this.mode === "setup" && this.setup) {
+      const s = this.setup;
+      const zone = setupZone(s.req.charKey);
+      const off = s.busy || !s.hex;
+      return {
+        title: "Take position",
+        points: zone.length ? `${zone[0]} to ${zone[zone.length - 1]}` : "",
+        lines: s.hex ? [{ name: s.hex, detail: `facing ${DIR_NAMES[s.facing]}` }] : [],
+        empty: `Click one of the green hexes, where ${charName(s.req.charKey)} sets up, to stand there.`,
+        note: s.busy
+          ? "Signing in Adena…"
+          : s.hex
+            ? "Click your token to turn it (the right button turns it the other way), or click another green hex to move. Hover your token to see where you could aim."
+            : `You start upright, your Colt 45 holstered, facing ${DIR_NAMES[s.facing]} unless you turn.`,
+        warn: false,
+        buttons: [
+          { id: "setup", label: s.busy ? "SIGNING…" : s.req.kind === "create" ? "CALL THE SHOWDOWN" : "JOIN THE SHOWDOWN", tone: "primary", disabled: off },
+          { id: "turnLeft", label: "↶ Turn left", tone: "plain", disabled: off },
+          { id: "turnRight", label: "Turn right ↷", tone: "plain", disabled: off },
+          lobby,
+        ],
+      };
+    }
     if (!view) return { title: "Loading", points: "", lines: [], empty: "Reading the showdown from the chain…", note: "", warn: false, buttons: [] };
     const lines = (plan: PlanEntry[]) => plan.map((e) => ({ name: getActionDef(e).name, detail: planDetail(e, names), cost: getActionDef(e).cost }));
-    const lobby = { id: "lobby", label: "Lobby", tone: "plain" as const };
     const replay = { id: "replay", label: "Replay", tone: "plain" as const, disabled: !view.lastTurn };
     const me = this.myIndex >= 0 ? view.players[this.myIndex] : null;
     const opponents = view.players.filter((p, i) => i !== this.myIndex && p.addr).map((p) => charName(p.char)).join(", ") || "your opponent";
@@ -1554,8 +1691,8 @@ export class GameScene extends Phaser.Scene {
           : "Out of time: the turn takes no more plans."
         : this.mode === "submitting"
           ? "Signing your plan in Adena…"
-          : this.mode === "waiting"
-            ? this.view?.phase === "waiting"
+          : this.mode === "waiting" || this.mode === "setup"
+            ? this.view?.phase === "waiting" || this.mode === "setup"
               ? "Your hand, for when the showdown starts."
               : "Your plan is sent."
             : this.mode === "ended"
@@ -1618,13 +1755,14 @@ export class GameScene extends Phaser.Scene {
     const view = this.view;
     const p = view?.players[seat];
     const c = this.displayChars()[seat];
-    if (!view || !p || !c) return;
+    const charKey = this.charOf(seat);
+    if (!view || !p || !c || !charKey || !c.hex) return;
     // The overlay owns the pointer while it is open: no card or token reacts underneath.
     this.input.enabled = false;
     openCharacterSheet(
       {
-      name: charName(p.char),
-      charKey: p.char,
+      name: charName(charKey),
+      charKey,
       seat,
       hex: c.hex,
       facing: c.facing,
@@ -1803,7 +1941,7 @@ export class GameScene extends Phaser.Scene {
    * the screen point (sx, sy), clickable inside the outline only; it lights
    * up while the pointer is over it.
    */
-  private hexHighlight(outline: { x: number; y: number }[], sx: number, sy: number, fill: number, alpha: number, stroke: number): Phaser.GameObjects.Polygon {
+  private hexHighlight(outline: { x: number; y: number }[], sx: number, sy: number, fill: number, alpha: number, stroke: number, depth = 500): Phaser.GameObjects.Polygon {
     const points = this.insetOutline(outline, sx, sy);
     const hex = this.add
       .polygon(sx, sy, points, fill, alpha)
@@ -1811,11 +1949,126 @@ export class GameScene extends Phaser.Scene {
       .setStrokeStyle(2, stroke, 0.9)
       .setMask(this.arrMask)
       .setInteractive({ hitArea: new Phaser.Geom.Polygon(points), hitAreaCallback: Phaser.Geom.Polygon.Contains, useHandCursor: true })
-      .setDepth(500);
+      .setDepth(depth);
     // Above its neighbours while hovered, so its whole outline shows (labels stay above at 501).
-    hex.on("pointerover", () => hex.setFillStyle(fill, Math.min(1, alpha * 2)).setStrokeStyle(4, 0xffffff, 1).setDepth(500.5));
-    hex.on("pointerout", () => hex.setFillStyle(fill, alpha).setStrokeStyle(2, stroke, 0.9).setDepth(500));
+    hex.on("pointerover", () => hex.setFillStyle(fill, Math.min(1, alpha * 2)).setStrokeStyle(4, 0xffffff, 1).setDepth(depth + 0.5));
+    hex.on("pointerout", () => hex.setFillStyle(fill, alpha).setStrokeStyle(2, stroke, 0.9).setDepth(depth));
     return hex;
+  }
+
+  // ── Setting up ────────────────────────────────────────────────────────────
+
+  /**
+   * Highlights the hexes my character may set up in (game/setup.ts), under
+   * the tokens: a click stands it there. The hex picked shows darker;
+   * nothing shows while the call is being signed.
+   */
+  private showSetupZone() {
+    const setup = this.setup;
+    if (!setup) return;
+    for (const o of setup.zone) o.destroy();
+    setup.zone = [];
+    this.hideSetupGhost();
+    if (setup.busy) return;
+    for (const hex of setupZone(setup.req.charKey)) {
+      const { sx, sy } = this.hexToScreen(hex);
+      const h = this.hexHighlight(BOARD_A.outline(hex), sx, sy, MY_ZONE_COLOR, hex === setup.hex ? 0.5 : 0.22, MY_ZONE_COLOR, SETUP_ZONE_DEPTH);
+      h.on("pointerover", () => this.showSetupGhost(hex));
+      h.on("pointerout", () => this.hideSetupGhost());
+      h.on("pointerup", (pointer: Phaser.Input.Pointer) => {
+        if (this.isDragging || pointer.rightButtonReleased()) return;
+        this.placeSetup(hex);
+      });
+      setup.zone.push(h);
+    }
+  }
+
+  /** Shows my token, see-through, on a hex of my zone under the pointer, the way it would stand there (not where it already stands). */
+  private showSetupGhost(hex: string) {
+    this.hideSetupGhost();
+    const setup = this.setup;
+    if (!setup || setup.busy || hex === setup.hex || !this.textures.exists(`char_${setup.req.charKey}`)) return;
+    const { sx, sy } = this.hexToScreen(hex);
+    setup.ghost = this.add
+      .image(sx, sy, `char_${setup.req.charKey}`)
+      .setScale(this.displayTransform().scale * TOKEN_SCALE_FACTOR)
+      .setAngle(dirIndexToAngle(setup.facing, setup.req.charKey))
+      .setAlpha(SETUP_GHOST_ALPHA)
+      .setMask(this.arrMask)
+      .setDepth(SETUP_GHOST_DEPTH);
+  }
+
+  private hideSetupGhost() {
+    if (!this.setup) return;
+    this.setup.ghost?.destroy();
+    this.setup.ghost = null;
+  }
+
+  /** Stands my character in one of its hexes, keeping the way it faces. */
+  private placeSetup(hex: string) {
+    const setup = this.setup;
+    if (!setup || setup.busy || hex === setup.hex) return;
+    setup.hex = hex;
+    this.hideSetupGhost(); // the token itself comes here
+    this.playCues([{ group: "step", delayMs: 0 }]);
+    if (!this.tokens[setup.seat]) this.buildTokens(); // the token appears with the first pick
+    this.refreshTokens(true);
+    this.showSetupZone();
+    this.renderView();
+  }
+
+  /** Turns my character one direction clockwise (1) or counter-clockwise (-1) while setting up. */
+  private turnSetup(delta: 1 | -1) {
+    const setup = this.setup;
+    if (!setup || setup.busy || !setup.hex) return;
+    setup.facing = (setup.facing + delta + 6) % 6;
+    this.playCues([{ group: "turn", delayMs: 0 }]);
+    setup.ghost?.setAngle(dirIndexToAngle(setup.facing, setup.req.charKey));
+    this.refreshTokens(true);
+    if (this.hoverZone.length > 0) this.showAimZone(setup.seat); // the pointer is on the token: its aim zone turns with it
+    this.renderView();
+  }
+
+  /**
+   * Signs the call or the join with the position picked. A showdown called
+   * reopens as the game it became; a join hands the board back to the poll.
+   */
+  private async sendSetup() {
+    const setup = this.setup;
+    if (!setup || setup.busy || !setup.hex) return;
+    setup.busy = true;
+    this.showSetupZone();
+    this.renderView();
+    try {
+      if (setup.req.kind === "create") {
+        const chain = this.chain;
+        const r = await chain.realm.createGame(setup.req.charKey, setup.req.turns, setup.req.timeoutMinutes, setup.hex, setup.facing);
+        // The tx result was not indexed in time: the game is the newest of ours.
+        const id = r.gameID ?? (await chain.realm.listGames(chain.wallet.address)).mine[0]?.id ?? null;
+        if (!this.scene.isActive()) return;
+        if (!id) {
+          showToast(this, "The showdown was called; find it in the lobby", "info");
+          this.scene.start("LobbyScene", { splash: false });
+          return;
+        }
+        this.scene.restart({ gameID: id });
+      } else {
+        await this.chain.realm.joinGame(this.gameID, setup.req.charKey, setup.hex, setup.facing);
+        if (!this.scene.isActive()) return;
+        this.endSetup();
+        this.mode = "sync";
+        this.renderView();
+        await this.poller?.pokeNow();
+      }
+    } catch (e) {
+      if (!this.scene.isActive()) return;
+      showToast(this, userMessage(e), "error");
+      if (this.setup) {
+        this.setup.busy = false;
+        this.showSetupZone();
+        this.renderView();
+      }
+    }
   }
 
   /**

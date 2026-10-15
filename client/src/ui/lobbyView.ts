@@ -1,6 +1,7 @@
 import { playerLabel, type GameSummary, type GamesView, type PlayersView, type Profile } from "../chain/types";
 import { uprightTokenAngle } from "../rules";
 import { charName, formatDuration, formatLeft, lobbySections, outcomeLine, runningOut, secondsLeft } from "../game/lobby";
+import { opponentOf } from "../game/setup";
 
 /**
  * The lobby, an HTML overlay over the canvas (like the character sheet), from
@@ -33,12 +34,9 @@ export interface LobbyModel {
   /** "" while loading. */
   balance: string;
   locked: boolean;
-  /** A wallet action is in flight: actions are disabled. */
-  busy: boolean;
   games: GamesView | null;
-  /** The character I play in a game I create / join. */
+  /** The character I play in a game I create (joining, I play the one the creator did not take). */
   creatorChar: string;
-  joinerChar: string;
   turns: number;
   turnOptions: number[];
   timeoutIndex: number;
@@ -262,7 +260,6 @@ export class LobbyView {
     }
     const s = lobbySections(m.games, m.address);
     const now = Date.now() / 1000;
-    const dis = m.busy ? " disabled" : "";
     const others = (g: GameSummary) => g.players.filter((p) => p.addr && p.addr !== m.address);
     // The creator holds seat 0.
     const gameLabel = (g: GameSummary) => `Game ${g.id} · created by ${g.players[0]?.addr === m.address ? "you" : charName(g.players[0]?.char)}`;
@@ -280,7 +277,7 @@ export class LobbyView {
         const left = secondsLeft(g, now);
         const late = runningOut(left, g.timeout);
         const pill = `<span class="gl-pill${late ? " late" : ""}">${left > 0 ? esc(formatLeft(left)) + " left" : "out of time"}</span>`;
-        return row("gl-card", g, versus(g), `${gameLabel(g)} · Turn ${g.turn} of ${g.maxTurns}`, pill + `<button type="button" class="gl-play" data-act="open" data-id="${esc(g.id)}"${dis}>${left > 0 ? "PLAY" : "OPEN"}</button>`);
+        return row("gl-card", g, versus(g), `${gameLabel(g)} · Turn ${g.turn} of ${g.maxTurns}`, pill + `<button type="button" class="gl-play" data-act="open" data-id="${esc(g.id)}">${left > 0 ? "PLAY" : "OPEN"}</button>`);
       })
       .join("");
     const count = s.yourMove.length;
@@ -289,7 +286,7 @@ export class LobbyView {
       (count ? `<span class="gl-count">${count} showdown${count > 1 ? "s wait" : " waits"} for your plan</span>` : "") +
       `</div>${yourMove || '<p class="gl-empty">No showdown waits for your plan.</p>'}</section>`;
 
-    const openBtn = (g: GameSummary, label = "Open") => `<button type="button" class="gl-open" data-act="open" data-id="${esc(g.id)}"${dis}>${label}</button>`;
+    const openBtn = (g: GameSummary, label = "Open") => `<button type="button" class="gl-open" data-act="open" data-id="${esc(g.id)}">${label}</button>`;
     const waiting = s.waiting
       .map((g) => {
         if (g.phase === "waiting") return row("gl-line", g, versus(g), `${gameLabel(g)} · ${g.maxTurns} turns · ${formatDuration(g.timeout)} per turn`, openBtn(g));
@@ -310,7 +307,7 @@ export class LobbyView {
           `<div class="gl-line">${tokenImg(c?.char ?? "")}<div class="gl-what">` +
           `<span class="gl-title">${esc(`${charName(c?.char)} · ${c ? playerLabel(c) : ""}`)}</span>` +
           `<span class="gl-detail">${esc(`Game ${g.id} · ${g.maxTurns} turns · ${formatDuration(g.timeout)} per turn`)}</span></div>` +
-          `<button type="button" class="gl-join" data-act="join" data-id="${esc(g.id)}"${dis}>Join as ${esc(charName(m.joinerChar))}</button></div>`
+          `<button type="button" class="gl-join" data-act="join" data-id="${esc(g.id)}">Join as ${esc(charName(opponentOf(c?.char ?? "")))}</button></div>`
         );
       })
       .join("");
@@ -332,7 +329,7 @@ export class LobbyView {
   private form(m: LobbyModel): string {
     const turns = m.turnOptions.map((t) => `<option value="${t}"${t === m.turns ? " selected" : ""}>${t}</option>`).join("");
     const timeouts = m.timeoutOptions.map((o, i) => `<option value="${i}"${i === m.timeoutIndex ? " selected" : ""}>${esc(o.label)}</option>`).join("");
-    const disabled = m.busy || m.status !== "ready" ? " disabled" : "";
+    const disabled = m.status !== "ready" ? " disabled" : "";
     return (
       '<aside class="gl-aside" aria-labelledby="gl-new"><form class="gl-form">' +
       '<h2 id="gl-new" class="gl-h2">New showdown</h2>' +
@@ -340,7 +337,8 @@ export class LobbyView {
       `<div class="gl-field"><label for="gl-turns">Turns</label><select id="gl-turns">${turns}</select></div>` +
       `<div class="gl-field"><label for="gl-timeout">Time to play each turn</label><select id="gl-timeout">${timeouts}</select>` +
       '<span class="gl-note">Past it, anyone may claim the game: the player who did not play forfeits.</span></div>' +
-      `<button type="button" class="gl-create" data-act="create"${disabled}>${m.busy ? "SIGNING…" : "CALL A SHOWDOWN"}</button>` +
+      `<button type="button" class="gl-create" data-act="create"${disabled}>CALL A SHOWDOWN</button>` +
+      '<span class="gl-note">Next you take position on the board, then sign the call.</span>' +
       "</form>" +
       this.topPlayers(m) +
       "</aside>"

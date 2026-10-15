@@ -12,6 +12,7 @@ resolves the turns; a Phaser web app is the interface and signs its
 transactions with the **Adena** wallet. There is no game server.
 
 Current milestone: **board A only, exactly 2 players, one character each**,
+each player picking where its character stands when calling or joining,
 the foot actions (advance, back up, run, spin around, sprint, turn,
 leap/drop, get up/down) and the Colt 45 gun play (Draw & Cock,
 Cock/Aim/Shoot, Shoot, Load) with the full hit, wound and penalty rules, and
@@ -73,13 +74,13 @@ go tool gno test -update-golden-tests ./gno.land/r/tbruyelle/gnoslinger/v0/   # 
 gno.land/
   p/tbruyelle/gnoslinger/hex/v0      directions, relative directions, Board adjacency + axial coords + fenced hexsides + obstacles + the between table, range, aim zone, line of sight (sight.gno; board_a.gno is generated)
   p/tbruyelle/gnoslinger/cards/v0    the 12 action cards (24 sides), Enabled() = implemented actions
-  p/tbruyelle/gnoslinger/engine/v0   pure rules engine: plan DSL + validation, Resolve, EndTurn, result deck (deck.gno, fire.gno), impact table, sight heights (sight.gno)
+  p/tbruyelle/gnoslinger/engine/v0   pure rules engine: set up (setup.gno), plan DSL + validation, Resolve, EndTurn, result deck (deck.gno, fire.gno), impact table, sight heights (sight.gno)
   r/tbruyelle/gnoslinger/v0          the realm: games, lobby, SubmitPlan, JSON views, Render, filetests/
 client/src/
   chain/      rpc.ts (abci_query/status/tx), adena.ts (wallet), realm.ts (typed calls), poller.ts, types.ts
   rules/      cards.ts, facing.ts, sight.ts (pure card data, facing math, sight heights; mirrors the Gno packages)
   board/      board_A.json (generated) + boardA.ts (BoardMap: adjacency, aim zone, between table, line of sight)
-  game/       plan.ts (encode/validate), replay.ts (preview), playback.ts (resolution log), sight.ts (a character's sight, as the engine)
+  game/       setup.ts (where each character sets up, as the engine), plan.ts (encode/validate), replay.ts (preview), playback.ts (resolution log), sight.ts (a character's sight, as the engine)
   scenes/     BootScene → LobbyScene → GameScene   (SetupScene/TokenPlacementScene are dormant, multi-board later)
   ui/toast.ts
 scripts/gen_board_data.py   generates hex/v0/board_a.gno and client/src/board/board_A.json
@@ -127,11 +128,27 @@ rewritten `Game` (not broken down further); events (combat: shots, wounds,
 their cards) add a few hundred bytes. A 20-turn game is roughly 40–55 KB
 (4–5.5 GNOT) on top of create and join.
 
+### Set up
+Rule 3.4 and the SET UP of a showdown (`engine/v0/setup.gno`, [H3]): each
+character of the showdown has its own hexes to set up in and a default
+facing, `engine.Setups` (`CharSetup{Char, Hexes, Facing}`, `SetupOf`,
+`CanSetUp`, `ShowdownChars`): the **marshal** inside the corral in
+**G5-G9** looking NW, **the_kid** in **E5-E9** looking SE (showdown 1's
+line-up, two columns apart; a flat-top grid has no W or E). The creator
+sets up first, in any order of characters; the joiner must take the other
+one. A character with no entry is not in the showdown, so CreateGame and
+JoinGame refuse it. Each may face any direction. Nobody is alerted
+(29.21): both start upright with the loaded Colt 45 holstered
+(`engine.NewState` leaves the seats in no hex, `State.SetUp` places one).
+The empty seat of a waiting game has `"hex":""` in the JSON. The client
+mirrors the table in `game/setup.ts` (`SETUPS`, `setupZone`,
+`defaultFacing`, `opponentOf`).
+
 ### Crossing functions (called with MsgCall, args are strings)
 | Function | Notes |
 |---|---|
-| `CreateGame(cur, charKey, maxTurns, timeoutMinutes) string` | seat 0; 10 to 30 turns (the client sends 20); 0 timeout = 2 days (5 min to 30 days); phase `waiting` |
-| `JoinGame(cur, id, charKey)` | seat 1; phase `planning`; refused once the game's timeout has passed |
+| `CreateGame(cur, charKey, maxTurns, timeoutMinutes, startHex, facing) string` | seat 0, a character of the showdown standing in one of its hexes (`startHex`) facing 0 N … 5 NW; 10 to 30 turns (the client sends 20); 0 timeout = 2 days (5 min to 30 days); phase `waiting` |
+| `JoinGame(cur, id, charKey, startHex, facing)` | seat 1, the character the creator did not take, in one of its hexes; phase `planning`; refused once the game's timeout has passed |
 | `CancelGame(cur, id)` | creator, while waiting; deletes the game (and its `byPlayer` entry) so the creator gets the CreateGame storage deposit back; the client returns to the lobby once the game view answers "game not found" |
 | `SubmitPlan(cur, id, plan) int` | refused once the turn's timeout has passed (`assertInTime`: the game can only be claimed then, so a late plan cannot win it by claiming right after); validates, stores; the **second** plan resolves the turn in the same tx; returns Rev. A player with 5 or more delay cannot play anything and is passed automatically (`autoPass`, event `PlanPassed`), so the other plan alone resolves the turn; with both passed, turns resolve by themselves until someone can act |
 | `Surrender(cur, id)` | rule 15.4, while the plans are collected (the start of a turn): the character is `Out`, the game ends and is scored (`surrender`) |
@@ -420,10 +437,27 @@ ranking in a dialog, 20 a page (`PLAYERS_PAGE`), whose rows open a
 player's profile; my address in the top bar opens mine (rank, games
 played, victory points, since). `game/lobby.ts` sorts the games into
   those sections from the `submitted` flag each player carries in
-  `json/games/{addr}`. Characters are fixed for now: the creator plays
-  `marshal`, the joiner `the_kid` (`CREATOR_CHAR`/`JOINER_CHAR`); the realm
-  still takes any character key.
-- `GameScene`: renders `committed` state from the chain. The board (Phaser)
+  `json/games/{addr}`. **Call a showdown** and **Join** do not sign
+  anything yet: they open the game screen in its set-up mode (below), where
+  the player takes position first. Characters are fixed for now: the creator plays
+  the showdown's first character, `marshal` (`CREATOR_CHAR`), the joiner the
+  one the creator did not take (`opponentOf`); the realm takes only the
+  showdown's characters.
+- `GameScene`: renders `committed` state from the chain. Opened with a
+  `SetupRequest` instead of (or with) a game id, it is in **set-up mode**
+  (`mode === "setup"`, `GameScene.setup`): calling a showdown shows board A
+  with nothing on the chain yet, joining one shows the creator's token and
+  the empty seat; my character's hexes (`setupZone`) are highlighted in
+  action green under the tokens (`showSetupZone`); the one under the
+  pointer shows my token see-through, as it would stand (`showSetupGhost`);
+  a click stands my token
+  there (`placeSetup`), facing its default way (`defaultFacing`) until
+  turned: clicking the token turns it clockwise (right button
+  the other way, `turnSetup`), the panel on the left has Turn left/right and
+  **CALL THE SHOWDOWN** / **JOIN THE SHOWDOWN** (`sendSetup`: `CreateGame`
+  then the scene restarts on the game created; `JoinGame` then the poll
+  takes over), the hand shows greyed out. A join whose game started without
+  me drops to spectating. The board (Phaser)
   sits in the centre cell of an HTML overlay, `ui/showdownView.ts` after the
   Design canvas's game mockups, laid out by `showdownLayout` (the scene's
   board transform, mask, zoom/pan and input bounds use the same rectangle)
@@ -528,9 +562,11 @@ Clicking a token opens the **character
 1. Two accounts in Adena; `ADENA_ADDRS="g1... g1..." make gnodev` (premines
    them); `make web`; open http://localhost:5173, approve connect / add
    network `dev` / switch.
-2. Account A: **Create a game**. Switch account in Adena (the app
-   reconnects): **Join** from "Open games". Both see the marshal at A-F3
-   (facing S) and The Kid at A-F9 (facing N).
+2. Account A: **Call a showdown**: the board opens with G5 to G9 in
+   green; click a hex (say A-G7), turn the token if you like, **CALL THE
+   SHOWDOWN**. Switch account in Adena (the app reconnects): **Join** from
+   "Open showdowns", E5 to E9 are green, click A-E7, **JOIN THE SHOWDOWN**.
+   Both see the marshal at A-G7 (facing NW) and The Kid at A-E7 (facing SE).
 3. Each account picks cards and sends its plan; the second submission
    resolves the turn, both tabs replay it, positions match
    `go tool gnokey query vm/qrender -remote 127.0.0.1:26657 -data 'gno.land/r/tbruyelle/gnoslinger/v0:json/game/0000001'`.

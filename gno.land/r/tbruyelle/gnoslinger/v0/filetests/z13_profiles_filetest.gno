@@ -15,13 +15,13 @@ const (
 
 func main(cur realm) {
 	testing.SetRealm(testing.NewUserRealm(alice))
-	id := gnoslinger.CreateGame(cross(cur), "marshal", 10, 0)
+	id := gnoslinger.CreateGame(cross(cur), "marshal", 10, 0, "A-G5", 3)
 	// Alice has a profile, the game has not started: no game played yet.
 	println(gnoslinger.ProfileJSON(alice.String()))
 	println(gnoslinger.ProfileJSON(bob.String()))
 	testing.SetRealm(testing.NewUserRealm(bob))
-	gnoslinger.JoinGame(cross(cur), id, "dude")
-	gnoslinger.CreateGame(cross(cur), "marshal", 10, 0)
+	gnoslinger.JoinGame(cross(cur), id, "the_kid", "A-E9", 0)
+	gnoslinger.CreateGame(cross(cur), "marshal", 10, 0, "A-G5", 3)
 	println(gnoslinger.PlayersJSON(0, 5))
 	println(gnoslinger.PlayersJSON(1, 5))
 	println(gnoslinger.Render("json/players/0/1"))

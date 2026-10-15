@@ -65,14 +65,15 @@ export class RealmClient {
   }
 
   /**
-   * Creates a game and returns its id (null only if neither the wallet nor
-   * the chain told us in time). timeoutMinutes 0 keeps the realm's default
-   * inactivity timeout (2 days).
+   * Creates a game, the creator standing in startHex facing f (0=N … 5=NW,
+   * any hex of the north half of the board, game/setup.ts), and returns its
+   * id (null only if neither the wallet nor the chain told us in time).
+   * timeoutMinutes 0 keeps the realm's default inactivity timeout (2 days).
    */
-  async createGame(charKey: string, maxTurns: number, timeoutMinutes = 0): Promise<{ hash: string | null; gameID: string | null }> {
+  async createGame(charKey: string, maxTurns: number, timeoutMinutes: number, startHex: string, facing: number): Promise<{ hash: string | null; gameID: string | null }> {
     const me = this.wallet.address;
     const before = new Set((await this.listGames(me)).mine.map((g) => g.id));
-    const r = await this.send("CreateGame", [charKey, String(maxTurns), String(timeoutMinutes)], async () => {
+    const r = await this.send("CreateGame", [charKey, String(maxTurns), String(timeoutMinutes), startHex, String(facing)], async () => {
       const games = await this.listGames(me);
       const fresh = games.mine.find((g) => !before.has(g.id) && g.players[0]?.addr === me);
       return fresh?.id ?? null;
@@ -80,9 +81,10 @@ export class RealmClient {
     return { hash: r.hash, gameID: r.tx?.data ? unwrapQevalString(r.tx.data) : r.watched };
   }
 
-  async joinGame(id: string, charKey: string): Promise<void> {
+  /** Joins a waiting game, standing in startHex (any hex of the south half of the board) facing f. */
+  async joinGame(id: string, charKey: string, startHex: string, facing: number): Promise<void> {
     const me = this.wallet.address;
-    await this.send("JoinGame", [id, charKey], async () => ((await this.getGame(id)).players[1]?.addr === me ? true : null));
+    await this.send("JoinGame", [id, charKey, startHex, String(facing)], async () => ((await this.getGame(id)).players[1]?.addr === me ? true : null));
   }
 
   /** Cancels a game nobody joined; the realm deletes it (refunding its storage deposit). */

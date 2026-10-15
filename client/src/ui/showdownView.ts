@@ -93,7 +93,8 @@ export interface HandSide {
 export interface PlanLine {
   name: string;
   detail: string;
-  cost: number;
+  /** Time points, in the circle on the right; none for a line that is not an action. */
+  cost?: number;
 }
 
 export interface Button {
@@ -443,7 +444,7 @@ export class ShowdownView {
     const p = m.plan;
     if (!p) return "";
     const lines = p.lines
-      .map((l, i) => `<li><b>${i + 1}</b><div><strong>${esc(l.name)}</strong>${l.detail ? `<small>${esc(l.detail)}</small>` : ""}</div><em>${l.cost}</em></li>`)
+      .map((l, i) => `<li><b>${i + 1}</b><div><strong>${esc(l.name)}</strong>${l.detail ? `<small>${esc(l.detail)}</small>` : ""}</div>${l.cost === undefined ? "" : `<em>${l.cost}</em>`}</li>`)
       .join("");
     const buttons = p.buttons
       .map((b) => `<button type="button" class="gv-btn ${b.tone}" data-act="btn" data-id="${esc(b.id)}"${b.disabled ? " disabled" : ""}>${esc(b.label)}</button>`)

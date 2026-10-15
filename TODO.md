@@ -62,7 +62,6 @@
   - when gun is exploded: nothing can be done except thrown or drop
   - when player has serious
   - allow enable/disable tooltip
-- Add token placement during create/join phase
 - Movements
   - Check possible to move around a building corner
 - Cards

@@ -14,6 +14,7 @@ export interface PlayerView {
   /** Registered name (namereg, in gno.land/r/sys/users), "" if none. */
   name?: string;
   char: string;
+  /** The hex the character stands in, "" for a seat nobody took yet. */
   hex: string;
   /** Absolute facing 0=N 1=NE 2=SE 3=S 4=SW 5=NW. */
   facing: number;

@@ -17,7 +17,7 @@ const listLimit = 50
 // GameJSON is the full view of a game:
 //
 //	{"id","rev","phase","turn","maxTurns","timeout" (seconds),"board",
-//	 "players":[{"addr","name","char","hex","facing","down","delay","status","submitted","playedFoot","playedRun","ranLastTurn",
+//	 "players":[{"addr","name","char","hex" ("" until the seat set up),"facing","down","delay","status","submitted","playedFoot","playedRun","ranLastTurn",
 //	             "aim","aimHex" (the hex the AIM markers sit on, "" when on the opponent),"endurance","serious","gunArm","otherArm","leg",
 //	             "guns":[{"id","type","name","location","cocked","shells","capacity","jammed","exploded"}]}],
 //	 "ground":[{"id" (ground id, "g<id>" in a plan),"hex","guns":[{..}]}],

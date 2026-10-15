@@ -65,7 +65,7 @@ func renderHome(res *mux.ResponseWriter, _ *mux.Request) {
 	res.Write(md.Paragraph("Two-player showdowns on board A, the Corral. " +
 		"Create a game, wait for an opponent, then submit a plan every turn. " +
 		link("How to play", "help") + "."))
-	res.Write(md.Paragraph(md.Link("Create a game as the marshal", txlink.Call("CreateGame", "charKey", "marshal", "maxTurns", "20", "timeoutMinutes", "0"))))
+	res.Write(md.Paragraph(md.Link("Create a game as the marshal", txlink.Call("CreateGame", "charKey", "marshal", "maxTurns", "20", "timeoutMinutes", "0", "startHex", "A-G7", "facing", "5"))))
 
 	res.Write(md.H2("Open games"))
 	n := 0
@@ -77,7 +77,7 @@ func renderHome(res *mux.ResponseWriter, _ *mux.Request) {
 			" | " + addr(g.Players[0].Addr) +
 			" | " + sanitize.InlineText(g.Players[0].Char) +
 			" | " + when(g.CreatedAt) +
-			" | " + md.Link("Join as the dude", txlink.Call("JoinGame", "id", g.ID, "charKey", "dude")) + " |\n")
+			" | " + md.Link("Join as the kid", txlink.Call("JoinGame", "id", g.ID, "charKey", "the_kid", "startHex", "A-E7", "facing", "2")) + " |\n")
 		n++
 		return n >= recentLimit
 	})
@@ -159,7 +159,7 @@ func renderGame(res *mux.ResponseWriter, req *mux.Request) {
 
 	switch g.Phase {
 	case PhaseWaiting:
-		res.Write(md.Paragraph(md.Link("Join as the dude", txlink.Call("JoinGame", "id", g.ID, "charKey", "dude")) +
+		res.Write(md.Paragraph(md.Link("Join as the kid", txlink.Call("JoinGame", "id", g.ID, "charKey", "the_kid", "startHex", "A-E7", "facing", "2")) +
 			" · " + md.Link("Cancel", txlink.Call("CancelGame", "id", g.ID))))
 	case PhasePlanning:
 		res.Write(md.Paragraph(md.Link("Submit a plan", txlink.Call("SubmitPlan", "id", g.ID, "plan", "")) +
@@ -177,6 +177,13 @@ func renderHelp(res *mux.ResponseWriter, _ *mux.Request) {
 		"segment equal to the time points used so far plus its own cost plus the delay points on your sheet. " +
 		"Delay you gain during a segment counts from the next one; actions left after segment 5 are cancelled. " +
 		"At the end of the turn half of your delay (rounded up) goes away."))
+	res.Write(md.H2("Setting up"))
+	res.Write(md.Paragraph("Each player picks where to stand when calling or joining a showdown, among the hexes assigned " +
+		"to its character: the marshal inside the corral in " + md.InlineCode("A-G5") + " to " + md.InlineCode("A-G9") +
+		", the kid in " + md.InlineCode("A-E5") + " to " + md.InlineCode("A-E9") + "; each faces any direction (" +
+		md.InlineCode("0") + " N, " + md.InlineCode("1") + " NE, " + md.InlineCode("2") + " SE, " + md.InlineCode("3") + " S, " +
+		md.InlineCode("4") + " SW, " + md.InlineCode("5") + " NW; the marshal looks north-west and the kid south-east unless told otherwise). " +
+		"Both start upright with a loaded Colt 45 in the holster."))
 	res.Write(md.H2("Plan string"))
 	res.Write(md.Paragraph("A plan is a comma-separated list of card sides in play order, each " +
 		md.InlineCode("<card><f|b>[:<direction>]") + ". Directions are relative to your facing: " +

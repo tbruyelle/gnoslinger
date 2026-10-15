@@ -48,7 +48,7 @@ func TestEncodeEventsRoundTrip(t *testing.T) {
 }
 
 func TestEncodeCharactersRoundTrip(t *testing.T) {
-	st := NewState()
+	st := startState()
 	st.Chars[0].Hex, st.Chars[0].Facing, st.Chars[0].Down, st.Chars[0].Delay = "A-G5", hex.SW, true, 3
 	st.Chars[0].Status, st.Chars[0].PlayedFoot, st.Chars[0].PlayedRun, st.Chars[0].RanLastTurn, st.Chars[0].Dropped = Killed, true, true, true, true
 	st.Chars[0].Aim, st.Chars[0].AimHex, st.Chars[0].Endurance, st.Chars[0].Exhausted = 4, "A-F6", 11, 1

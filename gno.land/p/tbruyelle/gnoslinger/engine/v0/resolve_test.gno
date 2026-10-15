@@ -39,7 +39,7 @@ func neighbor(t *testing.T, id string, d hex.Dir) string {
 }
 
 func TestMultiCostActionExecutesOnce(t *testing.T) {
-	st, evs := resolve(t, NewState(), "1f:ahead", "")
+	st, evs := resolve(t, startState(), "1f:ahead", "")
 	moves := ofKind(evs, 0, EvMove)
 	if len(moves) != 1 {
 		t.Fatalf("got %d move events: %v", len(moves), evs)
@@ -54,13 +54,13 @@ func TestMultiCostActionExecutesOnce(t *testing.T) {
 	if len(evs) != 1 {
 		t.Errorf("unexpected extra events: %v", evs)
 	}
-	if st.Chars[1] != NewState().Chars[1] {
+	if st.Chars[1] != startState().Chars[1] {
 		t.Errorf("idle char 1 changed: %+v", st.Chars[1])
 	}
 }
 
 func TestCarriedDelayPushesActions(t *testing.T) {
-	st := NewState()
+	st := startState()
 	st.Chars[0].Delay = 1
 	st, evs := resolve(t, st, "1f:ahead,3b:ahead_left", "")
 	moves, turns := ofKind(evs, 0, EvMove), ofKind(evs, 0, EvTurn)
@@ -76,7 +76,7 @@ func TestCarriedDelayPushesActions(t *testing.T) {
 }
 
 func TestSegmentFiveCancels(t *testing.T) {
-	st, evs := resolve(t, NewState(), "4b,1f:ahead,3b:ahead_left", "")
+	st, evs := resolve(t, startState(), "4b,1f:ahead,3b:ahead_left", "")
 	flips := ofKind(evs, 0, EvFlip)
 	if len(flips) != 1 || flips[0].Seg != 1 || !flips[0].Down || flips[0].Action != cards.LeapDrop {
 		t.Errorf("leap/drop should flip down at seg 1: %v", flips)
@@ -104,7 +104,7 @@ func TestSegmentFiveCancels(t *testing.T) {
 
 func TestFencePenalty(t *testing.T) {
 	// Advancing across the corral fence (35.2): E3 -> E2 draws two delay cards.
-	st := NewState()
+	st := startState()
 	st.Chars[0] = Character{Hex: "A-E3", Facing: hex.N}
 	st.Chars[1] = Character{Hex: "A-F9", Facing: hex.N}
 	st, evs := resolve(t, st, "1f:ahead", "")
@@ -113,7 +113,7 @@ func TestFencePenalty(t *testing.T) {
 		t.Errorf("char at %s, delay %d, delays = %v", st.Chars[0].Hex, st.Chars[0].Delay, d)
 	}
 	// Through the Upper Gate (F3 -> F2): no fence, no penalty.
-	st = NewState()
+	st = startState()
 	st.Chars[0] = Character{Hex: "A-F3", Facing: hex.N}
 	st.Chars[1] = Character{Hex: "A-F9", Facing: hex.N}
 	st, evs = resolve(t, st, "1f:ahead", "")
@@ -121,7 +121,7 @@ func TestFencePenalty(t *testing.T) {
 		t.Errorf("char at %s, delays = %v", st.Chars[0].Hex, ofKind(evs, 0, EvDelay))
 	}
 	// Crawling across it: the crawl's 2 delay and the fence's two cards.
-	st = NewState()
+	st = startState()
 	st.Chars[0] = Character{Hex: "A-E3", Facing: hex.N, Down: true}
 	st.Chars[1] = Character{Hex: "A-F9", Facing: hex.N}
 	st, evs = resolve(t, st, "1f:ahead", "")
@@ -150,7 +150,7 @@ func TestFencePenalty(t *testing.T) {
 
 func TestObstaclePenalty(t *testing.T) {
 	// Onto the trough (36.4): H10 -> I11* draws two delay cards...
-	st := NewState()
+	st := startState()
 	st.Chars[0] = Character{Hex: "A-F3", Facing: hex.S}
 	st.Chars[1] = Character{Hex: "A-H10", Facing: hex.SE}
 	st, evs := resolve(t, st, "", "1f:ahead")
@@ -159,7 +159,7 @@ func TestObstaclePenalty(t *testing.T) {
 		t.Errorf("char at %s, delay %d, delays = %v", st.Chars[1].Hex, st.Chars[1].Delay, d)
 	}
 	// ...and off it again, to the empty half: I11* -> I11.
-	st = NewState()
+	st = startState()
 	st.Chars[0] = Character{Hex: "A-F3", Facing: hex.S}
 	st.Chars[1] = Character{Hex: "A-I11*", Facing: hex.S}
 	st, evs = resolve(t, st, "", "1f:ahead")
@@ -167,14 +167,14 @@ func TestObstaclePenalty(t *testing.T) {
 		t.Errorf("char at %s, delays = %v", st.Chars[1].Hex, d)
 	}
 	// The empty half on to I12, or past the trough, I10 -> J10: nothing.
-	st = NewState()
+	st = startState()
 	st.Chars[0] = Character{Hex: "A-F3", Facing: hex.S}
 	st.Chars[1] = Character{Hex: "A-I11", Facing: hex.S}
 	st, evs = resolve(t, st, "", "1f:ahead")
 	if d := ofKind(evs, 1, EvDelay); st.Chars[1].Hex != "A-I12" || len(d) != 0 {
 		t.Errorf("char at %s, delays = %v", st.Chars[1].Hex, d)
 	}
-	st = NewState()
+	st = startState()
 	st.Chars[0] = Character{Hex: "A-F3", Facing: hex.S}
 	st.Chars[1] = Character{Hex: "A-I10", Facing: hex.SE}
 	st, evs = resolve(t, st, "", "1f:ahead")
@@ -184,7 +184,7 @@ func TestObstaclePenalty(t *testing.T) {
 }
 
 func TestOccupiedHexPenalty(t *testing.T) {
-	st := NewState()
+	st := startState()
 	st.Chars[0] = Character{Hex: "A-F5", Facing: hex.S}
 	st.Chars[1] = Character{Hex: "A-F7", Facing: hex.N}
 	// Both advance into A-F6 on segment 2: both draw a delay card.
@@ -200,7 +200,7 @@ func TestOccupiedHexPenalty(t *testing.T) {
 	}
 
 	// A mover ending in a stationary character's hex: both draw (rule 9.24).
-	st = NewState()
+	st = startState()
 	st.Chars[0] = Character{Hex: "A-F5", Facing: hex.S}
 	st.Chars[1] = Character{Hex: "A-F6", Facing: hex.N}
 	st, evs = resolve(t, st, "1f:ahead", "")
@@ -214,7 +214,7 @@ func TestOccupiedHexPenalty(t *testing.T) {
 	}
 
 	// Moving out of a shared hex carries no penalty.
-	st = NewState()
+	st = startState()
 	st.Chars[0] = Character{Hex: "A-F6", Facing: hex.S}
 	st.Chars[1] = Character{Hex: "A-F6", Facing: hex.N}
 	_, evs = resolve(t, st, "1f:ahead", "")
@@ -224,7 +224,7 @@ func TestOccupiedHexPenalty(t *testing.T) {
 }
 
 func TestSprintGoesStraightAndDrawsDelay(t *testing.T) {
-	start := NewState()
+	start := startState()
 	st, evs := resolve(t, start, "1f:ahead_left,2f:ahead,3f", "")
 	moves := ofKind(evs, 0, EvMove)
 	if len(moves) != 3 {
@@ -254,7 +254,7 @@ func TestSprintGoesStraightAndDrawsDelay(t *testing.T) {
 }
 
 func TestCrawlPenalty(t *testing.T) {
-	st := NewState()
+	st := startState()
 	st.Chars[0].Down = true
 	st, evs := resolve(t, st, "1f:ahead", "")
 	d := ofKind(evs, 0, EvDelay)
@@ -267,7 +267,7 @@ func TestCrawlPenalty(t *testing.T) {
 }
 
 func TestOffBoardMoveIsCancelledButConsumesTime(t *testing.T) {
-	st := NewState()
+	st := startState()
 	st.Chars[1] = Character{Hex: "A-F12", Facing: hex.S} // the bottom edge
 	st, evs := resolve(t, st, "", "1f:ahead,3b:ahead_left")
 	if m := ofKind(evs, 1, EvMove); len(m) != 0 {
@@ -287,7 +287,7 @@ func TestOffBoardMoveIsCancelledButConsumesTime(t *testing.T) {
 }
 
 func TestGetUpDownAndSpin(t *testing.T) {
-	st, evs := resolve(t, NewState(), "5b,2b:back_right", "")
+	st, evs := resolve(t, startState(), "5b,2b:back_right", "")
 	flips, turns := ofKind(evs, 0, EvFlip), ofKind(evs, 0, EvTurn)
 	if len(flips) != 1 || flips[0].Seg != 3 || !flips[0].Down {
 		t.Errorf("flips = %v", flips)
@@ -305,7 +305,7 @@ func TestGetUpDownAndSpin(t *testing.T) {
 }
 
 func TestOutPlayerIsSkipped(t *testing.T) {
-	st := NewState()
+	st := startState()
 	st.Chars[1].Status = Out
 	st, evs := resolve(t, st, "1f:ahead", "1f:ahead,3b:ahead")
 	for _, e := range evs {
@@ -322,9 +322,9 @@ func TestOutPlayerIsSkipped(t *testing.T) {
 }
 
 func TestResolveDoesNotMutateInput(t *testing.T) {
-	st := NewState()
+	st := startState()
 	resolve(t, st, "1f:ahead", "1f:ahead")
-	if st.Chars != NewState().Chars || len(st.Ground) != 0 {
+	if st.Chars != startState().Chars || len(st.Ground) != 0 {
 		t.Errorf("input state mutated: %+v", st)
 	}
 }
@@ -332,7 +332,7 @@ func TestResolveDoesNotMutateInput(t *testing.T) {
 func TestEndTurnAndBudget(t *testing.T) {
 	// Rule 6.3 example: 5 -> 2 -> 1 -> 0.
 	for _, tt := range [][2]int{{5, 2}, {3, 1}, {2, 1}, {1, 0}, {0, 0}, {4, 2}} {
-		st := NewState()
+		st := startState()
 		st.Chars[0].Delay = tt[0]
 		st.Chars[0].PlayedFoot, st.Chars[0].PlayedRun = true, true
 		st, _ = EndTurn(st)
@@ -346,23 +346,23 @@ func TestEndTurnAndBudget(t *testing.T) {
 			t.Error("RanLastTurn should carry PlayedRun over")
 		}
 	}
-	if st, _ := EndTurn(NewState()); st.Chars[0].RanLastTurn {
+	if st, _ := EndTurn(startState()); st.Chars[0].RanLastTurn {
 		t.Error("RanLastTurn set without a run")
 	}
-	ran := NewState()
+	ran := startState()
 	ran.Chars[0].PlayedRun = true
 	ran, _ = EndTurn(ran)
 	if ran, _ = EndTurn(ran); ran.Chars[0].RanLastTurn {
 		t.Error("RanLastTurn should last one turn only")
 	}
 	for _, tt := range [][2]int{{0, 5}, {2, 3}, {5, 0}, {7, 0}} {
-		st := NewState()
+		st := startState()
 		st.Chars[1].Delay = tt[0]
 		if got := st.Budget(1); got != tt[1] {
 			t.Errorf("Budget with delay %d = %d, want %d", tt[0], got, tt[1])
 		}
 	}
-	if s := NewState(); s.Chars[0].Hex != "A-F3" || s.Chars[0].Facing != hex.S || s.Chars[1].Hex != "A-F9" || s.Chars[1].Facing != hex.N || AliveCount(s) != 2 {
+	if s := startState(); s.Chars[0].Hex != "A-F3" || s.Chars[0].Facing != hex.S || s.Chars[1].Hex != "A-F9" || s.Chars[1].Facing != hex.N || AliveCount(s) != 2 {
 		t.Errorf("NewState = %+v", s)
 	}
 	if Alive.String() != "alive" || Out.String() != "out" {
@@ -371,7 +371,7 @@ func TestEndTurnAndBudget(t *testing.T) {
 }
 
 func TestDrawAndCock(t *testing.T) {
-	st, evs := resolve(t, NewState(), "9f:1:0", "")
+	st, evs := resolve(t, startState(), "9f:1:0", "")
 	draws := ofKind(evs, 0, EvDraw)
 	if len(draws) != 1 || draws[0].Seg != 3 || draws[0].Gun != Colt45 || draws[0].GunID != 1 || draws[0].From != "holstered" || draws[0].To != "gun_hand" {
 		t.Fatalf("draws = %v", draws)
@@ -384,14 +384,14 @@ func TestDrawAndCock(t *testing.T) {
 		t.Error("the other character's gun moved")
 	}
 	// With a carried delay of 3 the draw (cost 3) is out of time.
-	st = NewState()
+	st = startState()
 	st.Chars[0].Delay = 3
 	st, evs = resolve(t, st, "9f:1:0", "")
 	if c := ofKind(evs, 0, EvCancel); len(c) != 1 || c[0].Reason != ReasonTime || st.Chars[0].Guns[0].Location != Holstered {
 		t.Errorf("cancels = %v, gun = %+v", c, st.Chars[0].Guns[0])
 	}
 	// A gun that is no longer holstered when the action executes cancels it.
-	st = NewState()
+	st = startState()
 	st.Chars[0].Guns[0].Location = GunHand
 	_, evs = resolve(t, st, "9f:1:0", "")
 	if c := ofKind(evs, 0, EvCancel); len(c) != 1 || c[0].Reason != ReasonNoGun {
@@ -401,7 +401,7 @@ func TestDrawAndCock(t *testing.T) {
 
 func TestDelayCardPenalties(t *testing.T) {
 	// LOSE AIM (card 88) and a 0 (card 1) on the leap: no delay gained.
-	st := NewState()
+	st := startState()
 	seq := Sequence{88, 1}
 	st, evs := resolveWith(t, st, "4b", "", &seq)
 	d := ofKind(evs, 0, EvDelay)
@@ -414,7 +414,7 @@ func TestDelayCardPenalties(t *testing.T) {
 
 	// A MALFUNCTION card (104, DELAY 1) is an ordinary delay card: its
 	// MALFUNCTION block only matters when shooting.
-	st = NewState()
+	st = startState()
 	st.Chars[0].RanLastTurn = true
 	seq = Sequence{104}
 	st, evs = resolveWith(t, st, "1f:ahead,2f:ahead,3f", "", &seq)
@@ -427,7 +427,7 @@ func TestDelayCardPenalties(t *testing.T) {
 	}
 
 	// WILD SHOT (card 100) fires the cocked gun: uncocked, one shell less.
-	st = NewState()
+	st = startState()
 	st.Chars[0].RanLastTurn = true
 	st.Chars[0].Guns[0].Location = GunHand
 	st.Chars[0].Guns[0].Cocked = true
@@ -445,7 +445,7 @@ func TestDelayCardPenalties(t *testing.T) {
 		t.Errorf("gun = %+v, delay %d", g, st.Chars[0].Delay)
 	}
 	// Without a cocked gun a WILD SHOT is harmless.
-	st = NewState()
+	st = startState()
 	st.Chars[0].RanLastTurn = true
 	seq = Sequence{100}
 	st, evs = resolveWith(t, st, "1f:ahead,2f:ahead,3f", "", &seq)
@@ -457,7 +457,7 @@ func TestDelayCardPenalties(t *testing.T) {
 func TestDropPenalty(t *testing.T) {
 	// DROP on the DELAY line (card 107): an upright character turns DOWN and
 	// draws three more delay cards (rule 14.11).
-	st := NewState()
+	st := startState()
 	st.Chars[0].RanLastTurn = true
 	seq := Sequence{107, 37} // then card 37 (DELAY 1) forever
 	st, evs := resolveWith(t, st, "1f:ahead,2f:ahead,3f", "", &seq)
@@ -485,7 +485,7 @@ func TestDropPenalty(t *testing.T) {
 
 // armed returns a state where seat p holds its cocked Colt in the gun hand.
 func armed(p int) State {
-	st := NewState()
+	st := startState()
 	st.Chars[p].Guns[0].Location = GunHand
 	st.Chars[p].Guns[0].Cocked = true
 	return st
@@ -493,7 +493,7 @@ func armed(p int) State {
 
 func TestCockAimShootOptions(t *testing.T) {
 	// No gun in hand: cock, aim and shoot are cancelled (11.3); nothing passes.
-	st := NewState()
+	st := startState()
 	_, evs := resolve(t, st, "5f:cock,7f", "")
 	c := ofKind(evs, 0, EvCancel)
 	if len(c) != 1 || c[0].Action != cards.CockAimShoot || c[0].Reason != ReasonNoGun || c[0].Seg != 2 {
@@ -503,7 +503,7 @@ func TestCockAimShootOptions(t *testing.T) {
 		t.Errorf("nothing = %v", n)
 	}
 	// Draw & Cock then uncock, cock again.
-	st = NewState()
+	st = startState()
 	st, evs = resolve(t, st, "9f:1:0,5f:uncock", "")
 	if u := ofKind(evs, 0, EvUncock); len(u) != 1 || u[0].Seg != 5 || u[0].GunID != 1 || st.Chars[0].Guns[0].Cocked {
 		t.Errorf("uncock = %v, gun %+v", u, st.Chars[0].Guns[0])
@@ -897,7 +897,7 @@ func TestGunHitDropsTheGun(t *testing.T) {
 func TestSeriousFatigueLegAndPassOut(t *testing.T) {
 	// SERIOUS 2: two fatigue cards at turn start (DELAY 1 each): delay 2 and
 	// endurance 18 before segment 1, pushing an advance to segment 4.
-	st := NewState()
+	st := startState()
 	st.Chars[0].Serious = 2
 	st, evs := resolve(t, st, "1f:ahead", "")
 	d := ofKind(evs, 0, EvDelay)
@@ -908,13 +908,13 @@ func TestSeriousFatigueLegAndPassOut(t *testing.T) {
 		t.Errorf("moves = %v, endurance %d", m, st.Chars[0].Endurance)
 	}
 	// LEG 1: one fatigue card per hex moved upright, none while crawling.
-	st = NewState()
+	st = startState()
 	st.Chars[0].Leg = 1
 	st, evs = resolve(t, st, "1f:ahead,2f:ahead", "")
 	if d := ofKind(evs, 0, EvDelay); len(d) != 2 || d[0].Reason != ReasonLeg || d[0].Seg != 2 || d[1].Seg != 4 || st.Chars[0].Endurance != 18 {
 		t.Errorf("delays = %v", d)
 	}
-	st = NewState()
+	st = startState()
 	st.Chars[0].Leg = 1
 	st.Chars[0].Down = true
 	_, evs = resolve(t, st, "1f:ahead", "")
@@ -922,7 +922,7 @@ func TestSeriousFatigueLegAndPassOut(t *testing.T) {
 		t.Errorf("delays = %v", d)
 	}
 	// Passing out: more delay than endurance at the end of two turns in a row.
-	st = NewState()
+	st = startState()
 	st.Chars[0].Endurance, st.Chars[0].Delay = 1, 5
 	st, evs = EndTurn(st) // 5 -> 3 > 1: first turn
 	if st.Chars[0].Exhausted != 1 || st.Chars[0].Status != Alive || len(evs) != 0 {
@@ -937,7 +937,7 @@ func TestSeriousFatigueLegAndPassOut(t *testing.T) {
 		t.Errorf("passed out: guns %+v, ground %+v", st.Chars[0].Guns, st.Ground)
 	}
 	// A turn with delay back under endurance resets the count.
-	st = NewState()
+	st = startState()
 	st.Chars[0].Endurance, st.Chars[0].Delay, st.Chars[0].Exhausted = 1, 1, 1
 	if st, _ = EndTurn(st); st.Chars[0].Exhausted != 0 {
 		t.Errorf("exhausted = %d", st.Chars[0].Exhausted)
@@ -945,7 +945,7 @@ func TestSeriousFatigueLegAndPassOut(t *testing.T) {
 }
 
 func TestEndShowdownSeriousCheck(t *testing.T) {
-	st := NewState()
+	st := startState()
 	st.Chars[0].Serious = 2
 	st.Chars[1].Serious = 3
 	seq := Sequence{37, 37} // DELAY 1 each: 3 survives, 4 dies
@@ -960,7 +960,7 @@ func TestEndShowdownSeriousCheck(t *testing.T) {
 		t.Errorf("the dead keep their guns: %+v, ground %+v", st.Chars[1].Guns, st.Ground)
 	}
 	// A penalty line counts as zero.
-	st = NewState()
+	st = startState()
 	st.Chars[0].Serious = 3
 	seq = Sequence{88} // LOSE AIM
 	if st, _ = EndShowdown(st, &seq); st.Chars[0].Status != Alive {
@@ -1041,7 +1041,7 @@ func TestShotAtHex(t *testing.T) {
 func TestPickUpFromTheGround(t *testing.T) {
 	// A Colt with 4 shells lies in the marshal's hex; he has nothing in hand.
 	ground := func() State {
-		st := NewState()
+		st := startState()
 		st.Chars[0].Guns = Guns{}
 		st.Ground = []GroundGun{{ID: 7, Hex: "A-F3", Gun: Gun{ID: 1, Type: Colt45, Location: Holstered, Shells: 4}}}
 		st.GroundSeq = 7

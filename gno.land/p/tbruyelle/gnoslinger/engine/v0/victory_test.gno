@@ -10,12 +10,12 @@ import (
 // showdown scores a showdown that ends in the given state, from a start
 // where both characters were up: what the last turn did, then the end.
 func showdown(s State) []Award {
-	return append(TurnVictoryPoints(NewState(), s), EndVictoryPoints(s)...)
+	return append(TurnVictoryPoints(startState(), s), EndVictoryPoints(s)...)
 }
 
 // endState is the starting state with the given statuses and endurances.
 func endState(s0, s1 Status, e0, e1 int) State {
-	s := NewState()
+	s := startState()
 	s.Chars[0].Status, s.Chars[0].Endurance = s0, e0
 	s.Chars[1].Status, s.Chars[1].Endurance = s1, e1
 	return s
@@ -79,7 +79,7 @@ func TestTurnVictoryPoints_OnlyWhatTheTurnDid(t *testing.T) {
 	before := endState(Alive, PassedOut, StartEndurance, 4)
 	after := endState(Alive, PassedOut, StartEndurance, 4)
 	uassert.Equal(t, 0, len(TurnVictoryPoints(before, after)))
-	uassert.Equal(t, 0, len(TurnVictoryPoints(NewState(), NewState())))
+	uassert.Equal(t, 0, len(TurnVictoryPoints(startState(), startState())))
 }
 
 func TestVPEvents(t *testing.T) {

@@ -10,6 +10,8 @@ import { SOUND_FILES, SOUND_VOLUME, soundKey } from "../game/sounds";
 import { LobbyView, PLAYERS_PAGE, type LobbyDialog } from "../ui/lobbyView";
 import { showToast } from "../ui/toast";
 import { installWalletNotices } from "../ui/walletNotices";
+import { SETUPS, opponentOf } from "../game/setup";
+import type { SetupRequest } from "./GameScene";
 
 /** All character tokens, for the picker that will come back later. */
 export const CHARACTERS = Object.keys(CHAR_ARROW_DIR);
@@ -29,9 +31,8 @@ const DEFAULT_TURNS = 20;
 /** Players shown in the lobby's top players panel. */
 const TOP_PLAYERS = 5;
 
-/** Default characters until players can pick their own: creator and joiner. */
-export const CREATOR_CHAR = "marshal";
-export const JOINER_CHAR = "the_kid";
+/** The character a creator plays until players can pick their own: the showdown's first side (the joiner gets the other, game/setup.ts). */
+export const CREATOR_CHAR = SETUPS[0].char;
 
 const SUBTITLE = "showdowns on the gno.land chain";
 /** Shown under the splash: the cover art and the game are Avalon Hill's. */
@@ -86,7 +87,6 @@ export class LobbyScene extends Phaser.Scene {
   private dialog: LobbyDialog | null = null;
   /** Bumped by each dialog request, so a late answer cannot replace a newer dialog. */
   private dialogSeq = 0;
-  private busy = false;
   private balance: string | null = null;
   private turns = DEFAULT_TURNS;
   private timeoutIndex = DEFAULT_TIMEOUT_INDEX;
@@ -114,7 +114,6 @@ export class LobbyScene extends Phaser.Scene {
     this.topPlayers = null;
     this.topKey = "";
     this.dialog = null;
-    this.busy = false;
   }
 
   create() {
@@ -126,10 +125,16 @@ export class LobbyScene extends Phaser.Scene {
         if (this.chain) void this.copyAddress(this.chain.wallet.address);
       },
       open: (id) => this.scene.start("GameScene", { gameID: id }),
-      join: (id) => this.joinGame(id),
-      create: () => {
-        if (!this.busy) this.createGame();
+      // Calling and joining go through the board first, where the player takes position (GameScene's set up).
+      join: (id) => {
+        // The joiner plays the character of the showdown the creator did not take.
+        const creator = this.games?.open.find((g) => g.id === id)?.players[0]?.char ?? CREATOR_CHAR;
+        this.scene.start("GameScene", { gameID: id, setup: { kind: "join", charKey: opponentOf(creator) } satisfies SetupRequest });
       },
+      create: () =>
+        this.scene.start("GameScene", {
+          setup: { kind: "create", charKey: CREATOR_CHAR, turns: this.turns, timeoutMinutes: TIMEOUT_OPTIONS[this.timeoutIndex].minutes } satisfies SetupRequest,
+        }),
       setTurns: (turns) => (this.turns = turns),
       setTimeout: (index) => (this.timeoutIndex = index),
       openProfile: (addr, fromPage) => void this.openProfile(addr, fromPage),
@@ -308,46 +313,6 @@ export class LobbyScene extends Phaser.Scene {
     this.renderView();
   }
 
-  /** Runs a wallet action; a returned game id opens the game. */
-  private async run(action: () => Promise<string | null>) {
-    if (this.busy || !this.chain) return;
-    this.busy = true;
-    this.buildAll();
-    try {
-      const id = await action();
-      if (id) {
-        this.scene.start("GameScene", { gameID: id });
-        return;
-      }
-    } catch (e) {
-      showToast(this, userMessage(e), "error");
-    } finally {
-      this.busy = false;
-      if (this.scene.isActive()) {
-        this.buildAll();
-        void this.refreshGames();
-      }
-    }
-  }
-
-  private createGame() {
-    void this.run(async () => {
-      const chain = this.chain!;
-      const r = await chain.realm.createGame(CREATOR_CHAR, this.turns, TIMEOUT_OPTIONS[this.timeoutIndex].minutes);
-      if (r.gameID) return r.gameID;
-      // The tx result was not indexed in time: the game is the newest of ours.
-      const games = await chain.realm.listGames(chain.wallet.address);
-      return games.mine[0]?.id ?? null;
-    });
-  }
-
-  private joinGame(id: string) {
-    void this.run(async () => {
-      await this.chain!.realm.joinGame(id, JOINER_CHAR);
-      return id;
-    });
-  }
-
   // ── Layout ────────────────────────────────────────────────────────────────
 
   private buildAll() {
@@ -375,10 +340,8 @@ export class LobbyScene extends Phaser.Scene {
       name: this.games?.name ?? "",
       balance: this.balance ?? "",
       locked: walletLocked(),
-      busy: this.busy,
       games: this.games,
       creatorChar: CREATOR_CHAR,
-      joinerChar: JOINER_CHAR,
       turns: this.turns,
       turnOptions: TURN_OPTIONS,
       timeoutIndex: this.timeoutIndex,
