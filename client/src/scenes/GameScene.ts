@@ -86,6 +86,9 @@ const AUTO_GAP_MS = 450;
 const OBSTACLE_LIFT = 1.1;
 /** How far a hex highlight's corners are pulled in from the hex's own, in screen pixels. */
 const HEX_HIGHLIGHT_INSET = 4;
+/** The aim zone shown while the pointer is on a token: the palette's brick for an enemy, its action green for mine. */
+const ENEMY_ZONE_COLOR = 0xb5482a;
+const MY_ZONE_COLOR = 0x4f7a3a;
 /** How long a second click on Send plan confirms passing with an empty plan. */
 const PASS_CONFIRM_MS = 5000;
 /** The tracer a bullet leaves behind it. */
@@ -592,6 +595,8 @@ export class GameScene extends Phaser.Scene {
   private groundIcons: { img: Phaser.GameObjects.Image; dots: Phaser.GameObjects.Graphics }[] = [];
   /** The animated dotted line shown while hovering an AIM marker or an aiming gun, with its ends. */
   private aimLine: Phaser.GameObjects.Graphics | null = null;
+  /** The aim zone of the character under the pointer, drawn under the tokens. */
+  private hoverZone: Phaser.GameObjects.GameObject[] = [];
   private aimLineEnds: { from: { x: number; y: number }; to: { x: number; y: number } } | null = null;
   private preview: CharView | null = null;
   /** The encoded plan the preview was last computed for. */
@@ -861,6 +866,7 @@ export class GameScene extends Phaser.Scene {
     // Everything above was destroyed with the children: drop the stale handles
     // (a destroyed Graphics would silently swallow the aim line).
     this.aimLine = null;
+    this.hoverZone = [];
     this.aimLineEnds = null;
     this.aimMarkers = new Map();
     this.groundIcons = [];
@@ -1017,8 +1023,14 @@ export class GameScene extends Phaser.Scene {
         if (this.isDragging || pointer.rightButtonReleased()) return;
         this.openSheet(i);
       });
-      img.on("pointerover", () => this.tokens[i]?.setHighlight(0xffe2a0, 1, 4));
-      img.on("pointerout", () => this.applyTokenHighlight(i));
+      img.on("pointerover", () => {
+        this.tokens[i]?.setHighlight(0xffe2a0, 1, 4);
+        this.showAimZone(i);
+      });
+      img.on("pointerout", () => {
+        this.applyTokenHighlight(i);
+        this.hideAimZone();
+      });
       const token = new CharacterToken(p.char, img, hl, CharacterToken.depthFor(i));
       // The AIM marker on this token belongs to the opponent: the line runs from the aimer to here.
       token.onAimHover = (over) => (over ? this.showAimLine(this.gunCentre(1 - i), this.tokenCentre(i)) : this.hideAimLine());
@@ -1790,12 +1802,7 @@ export class GameScene extends Phaser.Scene {
    * up while the pointer is over it.
    */
   private hexHighlight(outline: { x: number; y: number }[], sx: number, sy: number, fill: number, alpha: number, stroke: number): Phaser.GameObjects.Polygon {
-    // Pulled in a few pixels towards the centre, so the grid lines show between highlights.
-    const points = outline.map((p) => {
-      const s = this.boardToScreen(p.x, p.y);
-      const v = new Phaser.Math.Vector2(s.sx - sx, s.sy - sy);
-      return v.setLength(Math.max(0, v.length() - HEX_HIGHLIGHT_INSET));
-    });
+    const points = this.insetOutline(outline, sx, sy);
     const hex = this.add
       .polygon(sx, sy, points, fill, alpha)
       .setOrigin(0)
@@ -1807,6 +1814,40 @@ export class GameScene extends Phaser.Scene {
     hex.on("pointerover", () => hex.setFillStyle(fill, Math.min(1, alpha * 2)).setStrokeStyle(4, 0xffffff, 1).setDepth(500.5));
     hex.on("pointerout", () => hex.setFillStyle(fill, alpha).setStrokeStyle(2, stroke, 0.9).setDepth(500));
     return hex;
+  }
+
+  /**
+   * A hex outline (board pixels) as screen points around (sx, sy), pulled in
+   * a few pixels towards the centre so the grid lines show between highlights.
+   */
+  private insetOutline(outline: { x: number; y: number }[], sx: number, sy: number): Phaser.Math.Vector2[] {
+    return outline.map((p) => {
+      const s = this.boardToScreen(p.x, p.y);
+      const v = new Phaser.Math.Vector2(s.sx - sx, s.sy - sy);
+      return v.setLength(Math.max(0, v.length() - HEX_HIGHLIGHT_INSET));
+    });
+  }
+
+  /**
+   * Shows where a character can aim and shoot (its aim zone, 8.32) from
+   * where the board shows it: brick red for an enemy, green for mine, under
+   * the tokens and not clickable, so the pointer stays on the token.
+   */
+  private showAimZone(seat: number) {
+    this.hideAimZone();
+    const color = seat === this.myIndex ? MY_ZONE_COLOR : ENEMY_ZONE_COLOR;
+    const c = this.displayChars()[seat];
+    if (!c || c.status !== "alive") return;
+    for (const hex of BOARD_A.aimZone(c.hex, c.facing)) {
+      const { sx, sy } = this.hexToScreen(hex);
+      const points = this.insetOutline(BOARD_A.outline(hex), sx, sy);
+      this.hoverZone.push(this.add.polygon(sx, sy, points, color, 0.28).setOrigin(0).setStrokeStyle(2, color, 0.8).setMask(this.arrMask).setDepth(0.5));
+    }
+  }
+
+  private hideAimZone() {
+    for (const o of this.hoverZone) o.destroy();
+    this.hoverZone = [];
   }
 
   private clearChoiceOverlays() {

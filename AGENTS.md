@@ -439,7 +439,10 @@ played, victory points, since). `game/lobby.ts` sorts the games into
   stacked like a character sharing the hex (`occupantsAt`); `CharView.guns` carries
   the guns through the preview (Draw & Cock moves the gun) and the playback
   (`draw` and `wild_shot` events are folded, the turn's `start` JSON lists
-  the guns). Clicking a token opens the **character
+  the guns). Hovering a token shows that character's aim zone, where it can aim and
+shoot (`showAimZone`: brick red for an enemy, action green for mine, under
+the tokens, not clickable).
+Clicking a token opens the **character
   sheet** (`ui/characterSheet.ts`): an HTML overlay built from the design
   template `ui/characterSheet.html` (1100×850, fonts Rye / Zilla Slab from
   Google Fonts), filled with the name, token and a live status row; hands,
