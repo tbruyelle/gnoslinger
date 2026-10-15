@@ -1,4 +1,4 @@
-import { relativeToAbsoluteDir, type RelativeDirection } from "../rules";
+import { HEIGHT_OBSTACLE, blocks, relativeToAbsoluteDir, type Height, type RelativeDirection } from "../rules";
 import data from "./board_A.json";
 
 export interface HexPos {
@@ -24,6 +24,12 @@ interface BoardData {
   obstacles?: string[];
   /** Outlines of the hexes that are not regular (the halves of a split hex), in board pixels. */
   shapes?: Record<string, number[][]>;
+  /**
+   * The between table of the line of sight (rule 31): [hex, hex, obstacle]
+   * rows, the obstacle lying between the two hexes, as the generator
+   * computed them from the board image (the same rows as the realm's).
+   */
+  between?: string[][];
 }
 
 /**
@@ -41,6 +47,8 @@ export class BoardMap {
   private readonly fenceSet: Set<string>;
   private readonly obstacleSet: Set<string>;
   private readonly shapes: Record<string, number[][]>;
+  /** The obstacles between two hexes, keyed `a|b` both ways. */
+  private readonly betweenMap: Map<string, string[]>;
   /** Centre-to-corner radius of a regular hex, in board pixels. */
   readonly hexRadius: number;
 
@@ -53,6 +61,14 @@ export class BoardMap {
     this.fenceSet = new Set((d.fences ?? []).flatMap(([a, b]) => [`${a}|${b}`, `${b}|${a}`]));
     this.obstacleSet = new Set(d.obstacles ?? []);
     this.shapes = d.shapes ?? {};
+    this.betweenMap = new Map();
+    for (const [a, b, o] of d.between ?? []) {
+      for (const key of [`${a}|${b}`, `${b}|${a}`]) {
+        const row = this.betweenMap.get(key);
+        if (row) row.push(o);
+        else this.betweenMap.set(key, [o]);
+      }
+    }
     // Hexes of a column sit √3·R apart: R from the median spacing.
     const gaps = Object.entries(this.neighbors)
       .filter(([id, ns]) => ns[3] && !this.shapes[id] && !this.shapes[ns[3]])
@@ -93,6 +109,38 @@ export class BoardMap {
   /** Whether a fence runs along the hexside between two neighbouring hexes (as the realm's Board.Fenced). */
   fenced(a: string, b: string): boolean {
     return this.fenceSet.has(`${a}|${b}`);
+  }
+
+  /** Whether two hexes are neighbours. */
+  adjacent(a: string, b: string): boolean {
+    return (this.neighbors[a] ?? []).includes(b);
+  }
+
+  /**
+   * The obstacle hexes lying between two hexes for the line of sight (rule
+   * 31), as the realm's Board.Between: those every string from one hex's
+   * printed coordinate to the other's passes through, from the generated
+   * table. Empty when nothing lies between them, for the same hex twice,
+   * for an unknown hex, and to or from the obstacle itself (36.5).
+   */
+  between(a: string, b: string): string[] {
+    return this.betweenMap.get(`${a}|${b}`) ?? [];
+  }
+
+  /**
+   * Whether a character at from, of height hFrom, has a clear line of
+   * sight to a target at to, of height hTo (rule 31), as the realm's
+   * Board.LineOfSight: each obstacle between the two hexes is compared
+   * with the two heights (31.31, 31.32, see `blocks`). blocker is the first
+   * obstacle in the way, "" when the sight is clear or a hex is unknown
+   * (which blocks). The aim zone is checked apart (31.21, inAimZone).
+   */
+  lineOfSight(from: string, to: string, hFrom: Height, hTo: Height): { clear: boolean; blocker: string } {
+    if (!this.has(from) || !this.has(to)) return { clear: false, blocker: "" };
+    for (const o of this.between(from, to)) {
+      if (blocks(HEIGHT_OBSTACLE, hFrom, hTo, this.adjacent(from, o), this.adjacent(to, o))) return { clear: false, blocker: o };
+    }
+    return { clear: true, blocker: "" };
   }
 
   has(id: string): boolean {

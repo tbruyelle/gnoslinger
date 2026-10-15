@@ -73,3 +73,58 @@ describe("BOARD_A", () => {
     expect(BOARD_A.w).toBe(1600);
   });
 });
+
+describe("BOARD_A line of sight", () => {
+  const up = 5;
+  const down = 3;
+
+  it("knows which hexes the trough lies between, as the realm's Board.Between", () => {
+    for (const [a, b] of [["A-H10", "A-I11"], ["A-I10", "A-I11"], ["A-H10", "A-J11"], ["A-I10", "A-I12"], ["A-I9", "A-I12"], ["A-H9", "A-J12"]]) {
+      expect(BOARD_A.between(a, b), `${a} ${b}`).toEqual(["A-I11*"]);
+      expect(BOARD_A.between(b, a), `${b} ${a}`).toEqual(["A-I11*"]);
+    }
+    for (const [a, b] of [
+      ["A-H11", "A-I11"], ["A-J10", "A-I11"], ["A-H10", "A-J10"], ["A-I10", "A-J10"], ["A-H10", "A-H11"],
+      ["A-H11", "A-J10"], // along the trough's length
+      ["A-I11", "A-I12"], ["A-I11", "A-J11"], ["A-F3", "A-F9"],
+      ["A-I11*", "A-I10"], ["A-I11*", "A-H12"], ["A-I11*", "A-I11"],
+      ["A-I10", "A-I10"], ["A-X1", "A-I11"], ["A-I10", "A-X1"],
+    ]) {
+      expect(BOARD_A.between(a, b), `${a} ${b}`).toEqual([]);
+    }
+  });
+
+  it("applies the heights, as the realm's Board.LineOfSight", () => {
+    const los = (from: string, to: string, hFrom: number, hTo: number) => BOARD_A.lineOfSight(from, to, hFrom, hTo);
+    // I10 and I11, on the two sides of the trough, both adjacent to it.
+    expect(los("A-I10", "A-I11", up, up)).toEqual({ clear: true, blocker: "" });
+    expect(los("A-I10", "A-I11", down, down)).toEqual({ clear: false, blocker: "A-I11*" });
+    expect(los("A-I10", "A-I11", down, up)).toEqual({ clear: false, blocker: "A-I11*" });
+    expect(los("A-I10", "A-I11", up, down)).toEqual({ clear: false, blocker: "A-I11*" });
+    expect(los("A-I11", "A-I10", down, up)).toEqual({ clear: false, blocker: "A-I11*" });
+    // I9 and I12, across the trough but not adjacent to it.
+    expect(los("A-I9", "A-I12", up, up).clear).toBe(true);
+    expect(los("A-I9", "A-I12", down, down).clear).toBe(false);
+    expect(los("A-I9", "A-I12", down, up).clear).toBe(true);
+    expect(los("A-I9", "A-I12", up, down).clear).toBe(true);
+    // H10 and J11: the DOWN end adjacent to the trough blocks, the other not.
+    expect(los("A-H10", "A-J11", down, up).clear).toBe(false);
+    expect(los("A-H10", "A-J11", up, down).clear).toBe(true);
+    // Beside the trough, to or from it, and far from it: nothing blocks.
+    expect(los("A-H11", "A-I11", down, down).clear).toBe(true);
+    expect(los("A-J10", "A-I11", down, down).clear).toBe(true);
+    expect(los("A-I11*", "A-I10", down, down).clear).toBe(true);
+    expect(los("A-H12", "A-I11*", down, down).clear).toBe(true);
+    expect(los("A-F3", "A-F9", down, down).clear).toBe(true);
+    expect(los("A-F3", "A-F3", down, down).clear).toBe(true);
+    // An unknown hex blocks, with no blocker to name.
+    expect(los("A-X1", "A-I11", up, up)).toEqual({ clear: false, blocker: "" });
+    expect(los("A-I11", "", up, up)).toEqual({ clear: false, blocker: "" });
+  });
+
+  it("knows the neighbours of the trough", () => {
+    for (const id of ["A-I10", "A-J10", "A-I11", "A-H11", "A-H10"]) expect(BOARD_A.adjacent(id, "A-I11*"), id).toBe(true);
+    expect(BOARD_A.adjacent("A-I12", "A-I11*")).toBe(false);
+    expect(BOARD_A.adjacent("A-X1", "A-I11*")).toBe(false);
+  });
+});

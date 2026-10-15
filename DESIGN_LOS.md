@@ -1,11 +1,11 @@
 # Line of sight (rule 31) — implementation plan
 
 Status: plan, 2026-10-15. Steps 1 (the generator's between table), 2 (the
-hex package's sight rule), 3 (the engine's hooks) and 4 (the realm) are
-done; the client and the docs are not implemented yet. Step 4's test is a
-unit test of the realm package rather than a filetest: the fixed setup
-starts six hexes from the trough, and a unit test can put the characters
-next to it directly.
+hex package's sight rule), 3 (the engine's hooks), 4 (the realm) and 5
+(the client) are done; the docs (step 6) are not. Step 4's test is a unit
+test of the realm package rather than a filetest: the fixed setup starts
+six hexes from the trough, and a unit test can put the characters next to
+it directly.
 
 Board A has no buildings: the corral fence never blocks sight (35.1) and
 characters do not block it either, so line of sight (LOS) on board A comes

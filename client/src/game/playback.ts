@@ -180,6 +180,12 @@ const GUN_NAMES: Record<string, string> = { colt45: "Colt 45" };
 /** What a shot's miss is put down to. */
 const MISS_REASONS: Record<string, string> = { out_of_zone: "out of the aim zone", empty_hex: "empty hex" };
 
+/** What a cancel or an aim loss is put down to: a target out of sight names the obstacle in the way (rule 31). */
+function reasonText(e: TurnEvent): string {
+  if (e.reason === "no_los") return e.to ? `no line of sight, ${e.to} in the way` : "no line of sight";
+  return e.reason.replace(/_/g, " ");
+}
+
 /** What a MALFUNCTION card drawn for a shot did, by its result. */
 const MALFUNCTION_LINES: Record<string, string> = {
   no_effect: "MALFUNCTION, no effect: discarded, draws again",
@@ -249,7 +255,7 @@ export function describeEvent(e: TurnEvent, names: string[]): string {
     case "aim":
       return `${who} aims at ${e.to}${e.target >= 0 ? ` (${names[e.target] ?? `seat ${e.target}`})` : ""}: ${e.n} AIM points`;
     case "lose_aim":
-      return `${who} loses the aim (${e.reason.replace(/_/g, " ")})`;
+      return `${who} loses the aim (${reasonText(e)})`;
     case "nothing":
       // A shot at a hex nobody stands in is held, like a Shoot doing nothing.
       if (e.reason === "empty_hex") return `${who} holds fire: nobody in ${e.to}`;
@@ -274,7 +280,7 @@ export function describeEvent(e: TurnEvent, names: string[]): string {
     case "vp":
       return `${who}: ${signedVP(e.n)} VP, ${vpReason(e.reason)}`;
     case "cancel":
-      return `${who}: ${action} is cancelled (${e.reason.replace(/_/g, " ")})`;
+      return `${who}: ${action} is cancelled (${reasonText(e)})`;
     case "draw":
     {
       const name = GUN_NAMES[e.gun] ?? e.gun;

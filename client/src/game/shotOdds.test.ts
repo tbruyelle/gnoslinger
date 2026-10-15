@@ -45,3 +45,16 @@ describe("shotOdds", () => {
     expect(shotOdds(me({ gunArm: 2, otherArm: 3 }), 2, "A-F5", "", BOARD_A)).toMatchObject({ aimTime: 0, hit: 0 });
   });
 });
+
+describe("shotOdds and the line of sight", () => {
+  it("reads 0 with the target out of sight (rule 31)", () => {
+    // The marshal lies at I10 next to the trough, the Kid lies at I12 across it.
+    const lying = me({ hex: "A-I10", facing: 3, down: true, aim: 2 });
+    const kid = me({ hex: "A-I12", facing: 0, down: true });
+    expect(shotOdds(lying, 1, "A-I12", "", BOARD_A, kid)).toMatchObject({ hit: 0, bullseye: 0, aimTime: 1, range: 3, los: false, blocker: "A-I11*" });
+    // Standing, the marshal sees over it.
+    expect(shotOdds(me({ hex: "A-I10", facing: 3 }), 1, "A-I12", "", BOARD_A, kid)).toMatchObject({ los: true, blocker: "", hit: hitChance(1, 3).hit });
+    // Away from the trough the sight is clear by default.
+    expect(shotOdds(me(), 2, "A-F5", "", BOARD_A)).toMatchObject({ los: true, blocker: "" });
+  });
+});

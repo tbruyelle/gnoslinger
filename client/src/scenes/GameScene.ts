@@ -23,6 +23,8 @@ import { MAX_ACTION_POINTS, canPlay, drawDestinations, drawableGuns, encodePlan,
 import { firingGun, gunInHand, replayPlan, type CharView } from "../game/replay";
 import { SEGMENTS, segmentFills, turnSegmentCells } from "../game/segments";
 import { COCK_AIM_SHOOT_AIM_TIME, SHOOT_AIM_TIME, shotOdds } from "../game/shotOdds";
+import { canSee, standingOn } from "../game/sight";
+import { hatchSegments } from "../ui/hatch";
 import { SOUND_FILES, SOUND_VOLUME, soundKey, soundsForDelay, soundsForEvents, soundsForPreview, type SoundCue, type SoundGroup } from "../game/sounds";
 import { SHOOT_OPTIONS, isShooting, type ShootOption } from "../game/plan";
 import { closeCharacterSheet, openCharacterSheet, type GunPick } from "../ui/characterSheet";
@@ -90,6 +92,10 @@ const HEX_HIGHLIGHT_INSET = 4;
 /** The aim zone shown while the pointer is on a token: the palette's brick for an enemy, its action green for mine. */
 const ENEMY_ZONE_COLOR = 0xb5482a;
 const MY_ZONE_COLOR = 0x4f7a3a;
+/** Ink, for a hex of the aim zone out of sight (rule 31): hatched, not a target. */
+const HIDDEN_HEX_COLOR = 0x2a1c14;
+/** Pixels between the stripes of a hatched hex. */
+const HATCH_STEP = 7;
 /** How long a second click on Send plan confirms passing with an empty plan. */
 const PASS_CONFIRM_MS = 5000;
 /** The tracer a bullet leaves behind it. */
@@ -1837,13 +1843,64 @@ export class GameScene extends Phaser.Scene {
   private showAimZone(seat: number) {
     this.hideAimZone();
     const color = seat === this.myIndex ? MY_ZONE_COLOR : ENEMY_ZONE_COLOR;
-    const c = this.displayChars()[seat];
+    const chars = this.displayChars();
+    const c = chars[seat];
     if (!c || c.status !== "alive") return;
     for (const hex of BOARD_A.aimZone(c.hex, c.facing)) {
       const { sx, sy } = this.hexToScreen(hex);
       const points = this.insetOutline(BOARD_A.outline(hex), sx, sy);
-      this.hoverZone.push(this.add.polygon(sx, sy, points, color, 0.28).setOrigin(0).setStrokeStyle(2, color, 0.8).setMask(this.arrMask).setDepth(0.5));
+      // A hex out of sight (rule 31) is faint and hatched: no aim or shot can go there.
+      const seen = canSee(BOARD_A, c, hex, standingOn(chars, hex, seat)).clear;
+      this.hoverZone.push(this.add.polygon(sx, sy, points, color, seen ? 0.28 : 0.1).setOrigin(0).setStrokeStyle(2, color, 0.8).setMask(this.arrMask).setDepth(0.5));
+      if (!seen) this.hoverZone.push(this.hatch(points, sx, sy, color, 0.5, 0.6));
     }
+  }
+
+  /** Diagonal stripes over a hex outline (screen points around (sx, sy)), like the hand's hatched card sides. */
+  private hatch(points: Phaser.Math.Vector2[], sx: number, sy: number, color: number, alpha: number, depth: number): Phaser.GameObjects.Graphics {
+    const g = this.add.graphics({ x: sx, y: sy }).setMask(this.arrMask).setDepth(depth);
+    g.lineStyle(2, color, alpha);
+    for (const [a, b] of hatchSegments(points, HATCH_STEP)) g.lineBetween(a.x, a.y, b.x, b.y);
+    return g;
+  }
+
+  /**
+   * A hex of the aim zone out of sight (rule 31) while picking a target:
+   * hatched in ink and not clickable, since the realm would cancel an aim or
+   * a shot at it; hovering it says what is in the way. The objects made,
+   * the hover text included, go into `objects` to be destroyed with the pick.
+   */
+  private hiddenHex(hex: string, sx: number, sy: number, blocker: string, objects: Phaser.GameObjects.GameObject[]) {
+    const points = this.insetOutline(BOARD_A.outline(hex), sx, sy);
+    const r = (BOARD_A.hexRadius * this.displayTransform().scale * Math.sqrt(3)) / 2;
+    const poly = this.add
+      .polygon(sx, sy, points, HIDDEN_HEX_COLOR, 0.18)
+      .setOrigin(0)
+      .setStrokeStyle(2, HIDDEN_HEX_COLOR, 0.7)
+      .setMask(this.arrMask)
+      .setInteractive({ hitArea: new Phaser.Geom.Polygon(points), hitAreaCallback: Phaser.Geom.Polygon.Contains })
+      .setDepth(500);
+    let detail: Phaser.GameObjects.Text | null = null;
+    poly.on("pointerover", () => {
+      detail = this.hoverDetail(sx, sy, r, ["No line of sight", `${blocker} in the way`]);
+      objects.push(detail);
+    });
+    poly.on("pointerout", () => {
+      detail?.destroy();
+      detail = null;
+    });
+    objects.push(poly, this.hatch(points, sx, sy, HIDDEN_HEX_COLOR, 0.45, 500.2));
+  }
+
+  /** The lines shown above a hovered hex of the aim zone (below it when there is no room above). */
+  private hoverDetail(sx: number, sy: number, r: number, lines: string[]): Phaser.GameObjects.Text {
+    const detail = this.add
+      .text(sx, sy - r - 6, lines.join("\n"), { fontSize: "13px", color: "#f3e7ce", backgroundColor: "#0d0704", padding: { x: 8, y: 5 }, align: "center" })
+      .setOrigin(0.5, 1)
+      .setDepth(502);
+    detail.setX(Phaser.Math.Clamp(sx, detail.width / 2 + 8, this.scale.width - detail.width / 2 - 8));
+    if (detail.y - detail.height < 4) detail.setOrigin(0.5, 0).setY(sy + r + 6);
+    return detail;
   }
 
   private hideAimZone() {
@@ -1887,7 +1944,14 @@ export class GameScene extends Phaser.Scene {
     const fontPx = Math.round(Phaser.Math.Clamp(r * 0.62, 10, 22));
     for (const hex of BOARD_A.aimZone(me.hex, me.facing)) {
       const { sx, sy } = this.hexToScreen(hex);
-      const odds = shooting ? shotOdds(me, cardAimTime, hex, markersHex, BOARD_A) : null;
+      // The sight (rule 31) goes to the character standing there, else to the hex.
+      const standing = standingOn(chars, hex, this.myIndex);
+      const sight = canSee(BOARD_A, me, hex, standing);
+      if (!sight.clear) {
+        this.hiddenHex(hex, sx, sy, sight.blocker, objects);
+        continue;
+      }
+      const odds = shooting ? shotOdds(me, cardAimTime, hex, markersHex, BOARD_A, standing) : null;
       const circle = this.hexHighlight(BOARD_A.outline(hex), sx, sy, 0xb01010, 0.3, 0xff6040);
       // The chance shows on the hovered hex only.
       const labels: Phaser.GameObjects.Text[] = [];
@@ -1915,16 +1979,10 @@ export class GameScene extends Phaser.Scene {
         this.showAimLine(this.gunCentre(this.myIndex), { x: sx, y: sy }); // where the aim would go
         for (const l of labels) l.setVisible(true);
         if (!odds) return;
-        const lines = [
+        detail = this.hoverDetail(sx, sy, r, [
           `Hit ${odds.hit}%  ·  bullseye ${odds.bullseye}%`,
           `range ${odds.range}  ·  aim time ${odds.aimTime}`,
-        ];
-        detail = this.add
-          .text(sx, sy - r - 6, lines.join("\n"), { fontSize: "13px", color: "#f3e7ce", backgroundColor: "#0d0704", padding: { x: 8, y: 5 }, align: "center" })
-          .setOrigin(0.5, 1)
-          .setDepth(502);
-        detail.setX(Phaser.Math.Clamp(sx, detail.width / 2 + 8, this.scale.width - detail.width / 2 - 8));
-        if (detail.y - detail.height < 4) detail.setOrigin(0.5, 0).setY(sy + r + 6);
+        ]);
         objects.push(detail);
       });
       circle.on("pointerout", () => {

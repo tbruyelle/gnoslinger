@@ -205,3 +205,14 @@ describe("replay stepping", () => {
     expect(startOfTurn({ ...t, start: [] }, start)).toEqual(start);
   });
 });
+
+describe("describeEvent and the line of sight", () => {
+  it("names the obstacle in the way", () => {
+    const names = ["marshal", "dude"];
+    expect(describeEvent(ev({ p: 0, kind: "cancel", action: "shoot", reason: "no_los", to: "A-I11*" }), names)).toBe("marshal: shoot is cancelled (no line of sight, A-I11* in the way)");
+    expect(describeEvent(ev({ p: 1, kind: "lose_aim", reason: "no_los", to: "A-I11*" }), names)).toBe("dude loses the aim (no line of sight, A-I11* in the way)");
+    expect(describeEvent(ev({ p: 1, kind: "lose_aim", reason: "no_los" }), names)).toBe("dude loses the aim (no line of sight)");
+    expect(describeEvent(ev({ p: 1, kind: "lose_aim", reason: "out_of_zone" }), names)).toBe("dude loses the aim (out of zone)");
+    expect(describeEvent(ev({ p: 0, kind: "cancel", action: "advance", reason: "time" }), names)).toBe("marshal: advance is cancelled (time)");
+  });
+});
