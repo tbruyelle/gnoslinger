@@ -27,7 +27,7 @@ export const SOUND_FILES = {
   ricochet: ["missed1.wav", "missed2.wav", "missed3.mp3"],
   // The hammer falling on an empty chamber: a shot with no shell left (13.1).
   emptyGun: ["empty-gun1.wav", "empty-gun2.wav"],
-  reload: ["reload.mp3"],
+  reload: ["reload-gun1.mp3", "reload-gun2.wav", "reload-gun3.wav", "reload-gun4.wav"],
   delay: ["delay1.mp3"],
   // delay1.mp3 reversed (ffmpeg -af "atrim=0:0.29,areverse"): delay going down.
   undelay: ["delay1-reverse.mp3"],
