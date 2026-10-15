@@ -20,7 +20,7 @@ const (
 	EvUncock       = "uncock"        // Gun uncocked
 	EvAim          = "aim"           // N = AIM points after aiming, To = the hex they sit on, Target = the seat they follow (-1 for a hex)
 	EvLoseAim      = "lose_aim"      // Reason (To = the obstacle in the way for no_los)
-	EvNothing      = "nothing"       // a Shoot used to do nothing, or a shot held at a hex nobody stands in (Reason empty_hex, To = the hex): keeps the aim
+	EvNothing      = "nothing"       // a Shoot used to do nothing, or a shot held at a hex nobody stands in (Reason empty_hex, To = the hex) or at a target out of sight (Reason no_los, To = its hex, Target = its seat): keeps the aim
 	EvShot         = "shot"          // Card, Target, To = the hex shot at, Hit (final location or Miss), Range, N = aim time, Reason "" | out_of_zone | misfire (older records: Target -1 and empty_hex for a shot wasted on an empty hex)
 	EvMalfunction  = "malfunction"   // Card, Result (no_effect, misfire, jams, explodes, no_penalty), Gun, GunID
 	EvWildShot     = "wild_shot"     // Gun went off without hitting anything: uncocked, one shell less
@@ -57,7 +57,7 @@ const (
 	ReasonBroken    = "broken"      // using or loading an exploded gun (13.31)
 	ReasonNoTarget  = "no_target"   // the opponent is out of the fight (12.6)
 	ReasonOutOfZone = "out_of_zone" // the opponent is in the blind zone (8.32, 12.41)
-	ReasonNoLOS     = "no_los"      // no line of sight to the target: an obstacle in the way, by the heights (31.1)
+	ReasonNoLOS     = "no_los"      // no line of sight to the target, an obstacle in the way by the heights (31): an aim is cancelled, a shot is held, AIM points are lost
 	ReasonReveal    = "reveal"      // revealing an action other than Turn or a gun action (12.44)
 	ReasonTransfer  = "transfer"    // a new target more than one hex from the markers (12.5)
 	ReasonNoHex     = "no_hex"      // aiming at a hex that is not on the board
@@ -449,10 +449,10 @@ func fireHarmlessly(p int, g *Gun, seg int, evs *[]Event) {
 // 13.1, 13.2). A MALFUNCTION with no effect is replaced; a
 // misfire cancels the shot and a second draw may jam or blow up the gun.
 // The shooter then uncocks, spends a shell and loses the aim (13.9). A shot
-// at a hex nobody stands in when it comes up is held, as a Shoot doing
-// nothing: no card, no shell, the gun stays cocked and the aim is kept. It
-// returns the IMPACT TABLE results of a hit, inflicted at the end of the
-// segment.
+// at a hex nobody stands in when it comes up, or at a target out of sight
+// (31), is held, as a Shoot doing nothing: no card, no shell, the gun stays
+// cocked and the aim is kept. It returns the IMPACT TABLE results of a hit,
+// inflicted at the end of the segment.
 func shoot(board *hex.Board, p int, c *Character, target int, t *Character, a Action, seg int, d Drawer, evs *[]Event) []Penalty {
 	cancelAt := func(reason, to string) []Penalty {
 		*evs = append(*evs, Event{Seg: seg, Player: p, Kind: EvCancel, Action: a.Code, Reason: reason, To: to})
@@ -472,6 +472,14 @@ func shoot(board *hex.Board, p int, c *Character, target int, t *Character, a Ac
 			return nil
 		}
 	}
+	// The target, the opponent either way by now, out of sight (31) holds
+	// the shot like an empty hex: nothing fires, the aim stays where it is.
+	if t.Status == Alive && a.Target != p {
+		if clear, _ := canSee(board, c, at, t); !clear {
+			*evs = append(*evs, Event{Seg: seg, Player: p, Kind: EvNothing, Action: a.Code, To: at, Target: target, Reason: ReasonNoLOS})
+			return nil
+		}
+	}
 	slot := c.Guns.Firing()
 	if slot < 0 {
 		return cancel(ReasonNoGun)
@@ -488,11 +496,6 @@ func shoot(board *hex.Board, p int, c *Character, target int, t *Character, a Ac
 		return cancel(ReasonNotCocked)
 	case a.Target >= 0 && (a.Target == p || t.Status != Alive):
 		return cancel(ReasonNoTarget)
-	}
-	// The target, the opponent either way by now, must be in sight (31.1):
-	// behind the trough the shot is cancelled, no card drawn, no shell spent.
-	if clear, blocker := canSee(board, c, at, t); !clear {
-		return cancelAt(ReasonNoLOS, blocker)
 	}
 	spec := g.Type.Spec()
 	aim := a.AimTime(spec.OneHanded) + c.Aim

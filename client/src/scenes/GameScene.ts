@@ -1865,10 +1865,10 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * A hex of the aim zone out of sight (rule 31) while picking a target:
-   * hatched in ink and not clickable, since the realm would cancel an aim or
-   * a shot at it; hovering it says what is in the way. The objects made,
-   * the hover text included, go into `objects` to be destroyed with the pick.
+   * A hex of the aim zone out of sight (rule 31) while picking an aim:
+   * hatched in ink and not clickable, since the realm would cancel an aim
+   * at it; hovering it says what is in the way. The objects made, the hover
+   * text included, go into `objects` to be destroyed with the pick.
    */
   private hiddenHex(hex: string, sx: number, sy: number, blocker: string, objects: Phaser.GameObjects.GameObject[]) {
     const points = this.insetOutline(BOARD_A.outline(hex), sx, sy);
@@ -1947,16 +1947,20 @@ export class GameScene extends Phaser.Scene {
       // The sight (rule 31) goes to the character standing there, else to the hex.
       const standing = standingOn(chars, hex, this.myIndex);
       const sight = canSee(BOARD_A, me, hex, standing);
-      // A hex aimed at counts as upright (31.3): with its occupant out of
-      // sight but the hex itself in sight, the aim goes to the hex and covers
-      // the spot for when the occupant gets up. A shot there would be
-      // cancelled, so when shooting the hex is hidden like any other.
-      const hexOnly = !shooting && !!standing && !sight.clear && canSee(BOARD_A, me, hex).clear;
-      if (!sight.clear && !hexOnly) {
+      // A shot is never refused: at a hex nobody stands in when it comes up,
+      // or at a target out of sight, it is held (the odds read 0). An aim at
+      // a target out of sight is cancelled by the realm, so its hex is
+      // hidden, unless the hex itself is in sight: a hex aimed at counts as
+      // upright (31.3), so the aim goes to the hex and covers the spot for
+      // when the occupant gets up. Either way, with the occupant out of
+      // sight the pick names the hex, not the seat.
+      const hexOnly = !!standing && !sight.clear && (shooting || canSee(BOARD_A, me, hex).clear);
+      if (!shooting && !sight.clear && !hexOnly) {
         this.hiddenHex(hex, sx, sy, sight.blocker, objects);
         continue;
       }
       const odds = shooting ? shotOdds(me, cardAimTime, hex, markersHex, BOARD_A, standing) : null;
+      const who = standing ? charName(this.view?.players[chars.indexOf(standing)]?.char) : "";
       const circle = this.hexHighlight(BOARD_A.outline(hex), sx, sy, 0xb01010, 0.3, 0xff6040);
       // The chance shows on the hovered hex only.
       const labels: Phaser.GameObjects.Text[] = [];
@@ -1983,17 +1987,19 @@ export class GameScene extends Phaser.Scene {
       circle.on("pointerover", () => {
         this.showAimLine(this.gunCentre(this.myIndex), { x: sx, y: sy }); // where the aim would go
         for (const l of labels) l.setVisible(true);
-        if (hexOnly) {
-          const who = charName(this.view?.players[standing ? chars.indexOf(standing) : -1]?.char);
+        if (hexOnly && !shooting) {
           detail = this.hoverDetail(sx, sy, r, [`${who} is out of sight (${sight.blocker} in the way)`, `aiming at the hex ${hex}`]);
           objects.push(detail);
           return;
         }
         if (!odds) return;
-        detail = this.hoverDetail(sx, sy, r, [
-          `Hit ${odds.hit}%  ·  bullseye ${odds.bullseye}%`,
-          `range ${odds.range}  ·  aim time ${odds.aimTime}`,
-        ]);
+        const lines: string[] = [];
+        if (!odds.los) lines.push(`${standing ? who : hex} is out of sight (${odds.blocker} in the way)`);
+        lines.push(`Hit ${odds.hit}%  ·  bullseye ${odds.bullseye}%`, `range ${odds.range}  ·  aim time ${odds.aimTime}`);
+        // A shot at a hex is held when nobody stands there as it comes up, or when whoever does is out of sight.
+        if (!standing) lines.push("held if nobody stands there when it comes up");
+        else if (hexOnly) lines.push(`held while ${who} lies hidden, or if nobody is there`);
+        detail = this.hoverDetail(sx, sy, r, lines);
         objects.push(detail);
       });
       circle.on("pointerout", () => {

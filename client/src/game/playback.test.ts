@@ -216,3 +216,11 @@ describe("describeEvent and the line of sight", () => {
     expect(describeEvent(ev({ p: 0, kind: "cancel", action: "advance", reason: "time" }), names)).toBe("marshal: advance is cancelled (time)");
   });
 });
+
+describe("describeEvent and a shot held", () => {
+  it("says who is out of sight", () => {
+    const names = ["marshal", "dude"];
+    expect(describeEvent(ev({ p: 0, kind: "nothing", action: "shoot", to: "A-I11", target: 1, reason: "no_los" }), names)).toBe("marshal holds fire: dude in A-I11 is out of sight");
+    expect(describeEvent(ev({ p: 0, kind: "nothing", action: "shoot", to: "A-J11", reason: "empty_hex" }), names)).toBe("marshal holds fire: nobody in A-J11");
+  });
+});

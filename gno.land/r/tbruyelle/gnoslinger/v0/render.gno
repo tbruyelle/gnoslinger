@@ -189,8 +189,8 @@ func renderHelp(res *mux.ResponseWriter, _ *mux.Request) {
 	res.Write(md.Paragraph("Aiming and shooting need the target in your aim zone and in sight (rule 31). " +
 		"On board A only the horse trough (" + md.InlineCode("A-I11*") + ") gets in the way: it hides two characters " +
 		"lying DOWN from each other, and a DOWN character next to it from anyone across it; standing characters see " +
-		"over it. An aim or a shot at a target out of sight is cancelled, and AIM points on it are lost at the end " +
-		"of the segment."))
+		"over it. An aim at a target out of sight is cancelled and AIM points on it are lost at the end of the " +
+		"segment; a shot at it is held, nothing spent, like a shot at a hex nobody stands in when it comes up."))
 	res.Write(md.H2("Cards"))
 	var b strings.Builder
 	b.WriteString("| Card | Front | Back |\n|---|---|---|\n")
@@ -284,7 +284,14 @@ func describeEvent(g *Game, e engine.Event) string {
 			what = who + " loses the aim (" + strings.ReplaceAll(e.Reason, "_", " ") + ")"
 		}
 	case engine.EvNothing:
-		what = who + " does nothing (" + action + ")"
+		switch e.Reason {
+		case engine.ReasonEmptyHex:
+			what = who + " holds fire: nobody in " + e.To
+		case engine.ReasonNoLOS:
+			what = who + " holds fire: " + seatLabel(g, e.Target) + " in " + e.To + " is out of sight"
+		default:
+			what = who + " does nothing (" + action + ")"
+		}
 	case engine.EvShot:
 		at := "at " + e.To
 		if e.Target >= 0 {

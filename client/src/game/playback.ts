@@ -257,8 +257,9 @@ export function describeEvent(e: TurnEvent, names: string[]): string {
     case "lose_aim":
       return `${who} loses the aim (${reasonText(e)})`;
     case "nothing":
-      // A shot at a hex nobody stands in is held, like a Shoot doing nothing.
+      // A shot at a hex nobody stands in, or at a target out of sight, is held, like a Shoot doing nothing.
       if (e.reason === "empty_hex") return `${who} holds fire: nobody in ${e.to}`;
+      if (e.reason === "no_los") return `${who} holds fire: ${names[e.target] ?? `seat ${e.target}`} in ${e.to} is out of sight`;
       return `${who} does nothing (${action})`;
     case "shot": {
       // The cards it drew follow on their own lines (describeEvents).

@@ -1210,7 +1210,7 @@ func acrossTrough() State {
 	return st
 }
 
-func TestLineOfSightCancelsAimAndShot(t *testing.T) {
+func TestLineOfSightAimAndShot(t *testing.T) {
 	// Both DOWN across the trough: no sight (31.31). The aim is cancelled...
 	st := acrossTrough()
 	st.Chars[0].Down, st.Chars[1].Down = true, true
@@ -1221,17 +1221,18 @@ func TestLineOfSightCancelsAimAndShot(t *testing.T) {
 	if a := ofKind(evs, 0, EvAim); len(a) != 0 {
 		t.Errorf("aims = %v", a)
 	}
-	// ...and so is the shot: no card drawn, no shell spent, the gun stays
-	// cocked, and the aim is lost at the end of the segment (31.1).
+	// ...while the shot is held, as at a hex nobody stands in: no card, no
+	// shell, the gun stays cocked, and the aim, on the hidden Kid, goes at
+	// the end of the segment (31.1).
 	st = acrossTrough()
 	st.Chars[0].Down, st.Chars[1].Down = true, true
 	st.Chars[0].Aim = 2
 	seq := Sequence{}
 	st, evs = resolveWith(t, st, "7f:shoot:@1", "", &seq)
-	if c := ofKind(evs, 0, EvCancel); len(c) != 1 || c[0].Reason != ReasonNoLOS || c[0].To != "A-I11*" || c[0].Seg != 1 || c[0].Action != cards.Shoot {
-		t.Errorf("cancels = %v", c)
+	if n := ofKind(evs, 0, EvNothing); len(n) != 1 || n[0].Reason != ReasonNoLOS || n[0].To != "A-I12" || n[0].Target != 1 || n[0].Seg != 1 || n[0].Action != cards.Shoot {
+		t.Errorf("nothing = %v, events %v", n, evs)
 	}
-	if sh := ofKind(evs, 0, EvShot); len(sh) != 0 || st.Chars[0].Guns[0].Shells != 6 || !st.Chars[0].Guns[0].Cocked {
+	if sh := ofKind(evs, 0, EvShot); len(sh) != 0 || len(ofKind(evs, 0, EvCancel)) != 0 || st.Chars[0].Guns[0].Shells != 6 || !st.Chars[0].Guns[0].Cocked {
 		t.Errorf("shots = %v, gun = %+v", sh, st.Chars[0].Guns[0])
 	}
 	if la := ofKind(evs, 0, EvLoseAim); len(la) != 1 || la[0].Reason != ReasonNoLOS || la[0].To != "A-I11*" || la[0].Seg != 1 || la[0].Step != StepEnd || st.Chars[0].Aim != 0 {
@@ -1301,14 +1302,19 @@ func TestLineOfSightLostAtSegmentEnd(t *testing.T) {
 }
 
 func TestLineOfSightShotAtHex(t *testing.T) {
-	// A shot at a hex where the Kid lies DOWN behind the trough is
-	// cancelled; at an empty hex it is held as before.
+	// A shot at a hex where the Kid lies DOWN behind the trough is held,
+	// with markers on the hex kept (the hex stays in sight); at an empty
+	// hex it is held as before.
 	st := acrossTrough()
 	st.Chars[1].Hex, st.Chars[1].Down = "A-I11", true
+	st.Chars[0].Aim, st.Chars[0].AimHex = 2, "A-I11"
 	seq := Sequence{}
 	st, evs := resolveWith(t, st, "7f:shoot:A-I11", "", &seq)
-	if c := ofKind(evs, 0, EvCancel); len(c) != 1 || c[0].Reason != ReasonNoLOS || c[0].To != "A-I11*" || st.Chars[0].Guns[0].Shells != 6 {
-		t.Errorf("cancels = %v, gun %+v", c, st.Chars[0].Guns[0])
+	if n := ofKind(evs, 0, EvNothing); len(n) != 1 || n[0].Reason != ReasonNoLOS || n[0].To != "A-I11" || n[0].Target != 1 || st.Chars[0].Guns[0].Shells != 6 || !st.Chars[0].Guns[0].Cocked {
+		t.Errorf("nothing = %v, gun %+v", n, st.Chars[0].Guns[0])
+	}
+	if la := ofKind(evs, 0, EvLoseAim); len(la) != 0 || st.Chars[0].Aim != 2 || st.Chars[0].AimHex != "A-I11" {
+		t.Errorf("lose aim = %v, aim %d on %q", la, st.Chars[0].Aim, st.Chars[0].AimHex)
 	}
 	st = acrossTrough()
 	st.Chars[1].Hex, st.Chars[1].Down = "A-I11", true

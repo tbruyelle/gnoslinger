@@ -556,24 +556,34 @@ func TestLineOfSight(cur realm, t *testing.T) {
 	SubmitPlan(cross(cur), id, "5f:aim:@1,7f:shoot:@1")
 	testing.SetRealm(testing.NewUserRealm(bob))
 	SubmitPlan(cross(cur), id, "")
+	// The aim is cancelled; the shot is held: no card, no shell, still cocked.
 	evs := g.lastTurn().Events()
-	n := 0
+	cancels, held := 0, 0
 	for _, e := range evs {
-		if e.Kind == engine.EvCancel {
-			n++
+		switch e.Kind {
+		case engine.EvCancel:
+			cancels++
 			uassert.Equal(t, engine.ReasonNoLOS, e.Reason)
 			uassert.Equal(t, "A-I11*", e.To)
+		case engine.EvNothing:
+			held++
+			uassert.Equal(t, engine.ReasonNoLOS, e.Reason)
+			uassert.Equal(t, "A-I12", e.To)
+			uassert.Equal(t, 1, e.Target)
+		case engine.EvShot:
+			t.Errorf("a shot went off: %+v", e)
 		}
 	}
-	uassert.Equal(t, 2, n)
+	uassert.Equal(t, 1, cancels)
+	uassert.Equal(t, 1, held)
 	uassert.Equal(t, 0, g.State.Chars[0].Aim)
 	uassert.Equal(t, 6, g.State.Chars[0].Guns[0].Shells)
 	uassert.True(t, g.State.Chars[0].Guns[0].Cocked)
 	js := GameJSON(id)
 	uassert.True(t, strings.Contains(js, `"kind":"cancel","action":"cock_aim_shoot","from":"","to":"A-I11*"`), js)
-	uassert.True(t, strings.Contains(js, `"reason":"no_los"`), js)
+	uassert.True(t, strings.Contains(js, `"kind":"nothing","action":"shoot","from":"","to":"A-I12"`), js)
 	page := Render("game/" + id)
 	uassert.True(t, strings.Contains(page, "cock aim shoot is cancelled (no line of sight, A-I11* in the way)"), page)
-	uassert.True(t, strings.Contains(page, "shoot is cancelled (no line of sight, A-I11* in the way)"), page)
+	uassert.True(t, strings.Contains(page, "holds fire: dude in A-I12 is out of sight"), page)
 	uassert.True(t, strings.Contains(Render("help"), "in sight (rule 31)"))
 }

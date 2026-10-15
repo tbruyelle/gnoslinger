@@ -54,9 +54,9 @@ the heights of the two characters decide.
   stands uses the opponent's height. So a standing marshal across the
   trough from a DOWN Kid in I11 cannot aim at the Kid, but can aim at the
   hex I11 and cover the spot: the AIM points sit on the hex, a shot there
-  is cancelled while the Kid lies hidden, and pays off once he stands up.
-  The client lets the aim go to the hex in that case (the pick names the
-  hex, not the seat) and hides the hex when shooting.
+  is held while the Kid lies hidden, and the points pay off once he stands
+  up. The client lets the aim and the shot go to the hex in that case (the
+  pick names the hex, not the seat).
 
 **The line.** Rule 31.2 locates a character on his hex's *coordinate*, the
 label printed in the hex, and the string must touch both coordinates. On
@@ -97,9 +97,13 @@ boxes are only sight anchors.
 
 - An aim whose target is not visible when it executes is cancelled, like an
   aim out of the zone today.
-- A shot whose target is not visible when it executes is cancelled: no
-  card, no shell, the gun stays cocked. Rule 31.1 says cancelled, unlike an
-  out-of-zone shot which rule 11.32 makes a drawn miss. **To confirm.**
+- A shot whose target is not visible when it executes is **held**, like a
+  shot at a hex nobody stands in: nothing fires, no card, no shell, the gun
+  stays cocked and the aim stays where it is (a `nothing` event, reason
+  `no_los`, `To` the target's hex, `Target` its seat). Decided on
+  2026-10-15 over rule 31.1's "cancelled": a hex can always be shot at,
+  and the same rule applies with or without a target in it, the shot waits
+  for someone it can see.
 - At the end of every segment, a character holding AIM points without a
   clear line to the markers' target loses the aim (`lose_aim`, reason
   `no_los`), next to the existing out-of-zone check (12.41), after the
@@ -188,25 +192,27 @@ boxes are only sight anchors.
      an obstacle) and one answering "can `c` see this target" for a hex
      (upright) or a character.
    - Three hooks in `resolve.gno`: the `OptAim` branch after the zone check
-     (`cancel(ReasonNoLOS)`), `shoot` after the `no_target` check and
-     before the card is drawn (`cancel(ReasonNoLOS)`: no card, no shell,
-     stays cocked), and the segment-end loop next to the 12.41 check
-     (`loseAim(..., ReasonNoLOS, ...)`).
+     (`cancel(ReasonNoLOS)`), `shoot` where a target out of sight holds the
+     shot like an empty hex (a `nothing` event with `ReasonNoLOS`, before
+     the gun checks, nothing spent), and the segment-end loop next to the
+     12.41 check (`loseAim(..., ReasonNoLOS, ...)`).
    - Tests in `resolve_test.gno`:
-     - both DOWN across the trough: the aim is cancelled; the shot is
-       cancelled with no card drawn and the shells untouched;
+     - both DOWN across the trough: the aim is cancelled; the shot is held,
+       no card drawn, the shells untouched, the aim on the hidden Kid lost
+       at the segment's end;
      - marshal upright at I10 facing S with AIM on the Kid at I12: the Kid
        advances to I11 then drops (`1f:ahead,4b`), the aim is lost at the
        end of segment 3; the Kid merely dropping at I12 keeps it clear;
      - marshal DOWN at I10 with AIM on the Kid upright at I12 loses it at
        the end of segment 1;
      - a shot at a hex where the opponent lies DOWN behind the trough is
-       cancelled; at an empty hex it is still held (`nothing`, `empty_hex`).
+       held with the markers kept on the hex; at an empty hex it is held as
+       before (`nothing`, `empty_hex`).
 
-4. **Realm** (`r/tbruyelle/gnoslinger/v0`): a filetest
-   (`z14_line_of_sight_filetest.gno`) with a `no_los` cancel in its output,
-   the gnoweb log wording in `render.gno` ("no line of sight" rather than
-   "no los"), and a line on the help page. `make test`, `make lint`.
+4. **Realm** (`r/tbruyelle/gnoslinger/v0`): a test with a `no_los` cancel
+   and a `no_los` held shot in its output, the gnoweb log wording in
+   `render.gno` ("no line of sight" rather than "no los"), and a line on
+   the help page. `make test`, `make lint`.
 
 5. **Client** (`client/src`).
    - `board/boardA.ts`: `between(a, b)` from the JSON's `between` list (a
@@ -219,9 +225,13 @@ boxes are only sight anchors.
      line of sight from my previewed state are drawn hatched like disabled
      card sides and are not clickable, with "no line of sight (trough)" in
      the hover detail; the height of a hex holding the opponent is the
-     opponent's, except that an aim (not a shot) at a hex whose occupant is
-     out of sight while the hex is in sight goes to the hex (31.3).
-     `showAimZone` (token hover) leaves the unseen hexes out.
+     opponent's, except that an aim at a hex whose occupant is out of sight
+     while the hex is in sight goes to the hex (31.3). A shot is never
+     refused: with the occupant out of sight the pick names the hex, the
+     odds read 0 and the tooltip says the shot is held while the occupant
+     lies hidden; every shot at an empty hex says it is held if nobody
+     stands there when it comes up. `showAimZone` (token hover) leaves the
+     unseen hexes out.
    - `game/shotOdds.ts`: a `los` flag so the odds read 0% there.
    - `game/playback.ts`: `describeEvent` wording for `cancel` and
      `lose_aim` with reason `no_los`.
