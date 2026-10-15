@@ -21,6 +21,14 @@ describe("soundsForEvents", () => {
     expect(groups([ev({ kind: "shot", hit: "-", reason: "misfire" }), ev({ kind: "malfunction", result: "no_penalty" })])).toEqual(["gunshot", "ricochet"]);
     expect(groups([ev({ kind: "shot", hit: "-", reason: "misfire" }), ev({ kind: "malfunction", result: "jams" })])).toEqual([]);
     expect(groups([ev({ kind: "wound", result: "stun" }), ev({ kind: "wound", result: "kill" }), ev({ kind: "pass_out" })])).toEqual(["wounded", "dead", "fall"]);
+    // A shot with an empty gun only clicks; other cancels are silent.
+    expect(groups([ev({ kind: "cancel", action: "shoot", reason: "empty" }), ev({ kind: "cancel", reason: "not_cocked" })])).toEqual(["emptyGun"]);
+  });
+
+  it("spaces out empty guns clicking together, and after a shot fired with them", () => {
+    const empty = (p: number) => ev({ p, kind: "cancel", action: "shoot", reason: "empty" });
+    expect(soundsForEvents([empty(0), empty(1)]).map((c) => c.delayMs)).toEqual([0, 220]);
+    expect(soundsForEvents([ev({ kind: "shot", hit: "vital" }), empty(1)]).map((c) => [c.group, c.delayMs])).toEqual([["gunshot", 0], ["emptyGun", 220]]);
   });
 
   it("groans once per character when SERIOUS fatigue costs endurance", () => {

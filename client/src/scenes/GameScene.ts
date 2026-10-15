@@ -1908,7 +1908,11 @@ export class GameScene extends Phaser.Scene {
     const chars = this.displayChars();
     const seat = chars.findIndex((c, i) => c && i !== this.myIndex && c.hex === hex && c.status === "alive");
     this.pendingAims.set(this.aimMode.card, seat >= 0 ? { target: seat } : { hex });
-    if (this.pendingOpts.get(this.aimMode.card) === "shoot") this.playCues([{ group: "planShoot", delayMs: 0 }]);
+    if (this.pendingOpts.get(this.aimMode.card) === "shoot") {
+      // The plan alone tells a gun with no shell left: the shot will only click.
+      const gun = this.myIndex >= 0 ? firingGun(chars[this.myIndex]?.guns ?? []) : undefined;
+      this.playCues([{ group: gun && gun.shells === 0 ? "emptyGun" : "planShoot", delayMs: 0 }]);
+    }
     this.closeAimMode();
     this.updatePreview();
     this.renderView();

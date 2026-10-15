@@ -25,6 +25,8 @@ export const SOUND_FILES = {
   gunshot: ["gunshot1.wav", "gunshot2.wav", "gunshot3.wav", "gunshot4.mp3", "gunshot5.wav", "gunshot7.wav"],
   // A missed bullet ricocheting past the target.
   ricochet: ["missed1.wav", "missed2.wav", "missed3.mp3"],
+  // The hammer falling on an empty chamber: a shot with no shell left (13.1).
+  emptyGun: ["empty-gun1.wav", "empty-gun2.wav"],
   reload: ["reload.mp3"],
   delay: ["delay1.mp3"],
   // delay1.mp3 reversed (ffmpeg -af "atrim=0:0.29,areverse"): delay going down.
@@ -40,7 +42,7 @@ export type SoundGroup = keyof typeof SOUND_FILES;
 
 /** Volume per group: gunshots stand out, footsteps stay in the background. */
 export const SOUND_VOLUME: Record<SoundGroup, number> = {
-  pickCard: 0.6, unpickCard: 0.6, select: 0.6, step: 0.5, turn: 0.5, unholster: 0.8, cock: 0.8, aim: 0.8, planShoot: 0.8, gunshot: 1, ricochet: 0.8, reload: 0.8, delay: 0.7, undelay: 0.7, fall: 0.8, obstacle: 0.8, wounded: 0.9, dead: 0.9,
+  pickCard: 0.6, unpickCard: 0.6, select: 0.6, step: 0.5, turn: 0.5, unholster: 0.8, cock: 0.8, aim: 0.8, planShoot: 0.8, gunshot: 1, ricochet: 0.8, emptyGun: 0.9, reload: 0.8, delay: 0.7, undelay: 0.7, fall: 0.8, obstacle: 0.8, wounded: 0.9, dead: 0.9,
 };
 
 /** The Phaser audio key of one variant of a group. */
@@ -62,8 +64,8 @@ const RICOCHET_AFTER_SHOT_MS = 350;
 const OBSTACLE_AFTER_MOVE_MS = 200;
 /**
  * Between shots fired in the same step (both characters shooting on the same
- * segment), and between the wounds they cause: played at the same instant
- * the sounds merge into one.
+ * segment, empty guns clicking included), and between the wounds they cause:
+ * played at the same instant the sounds merge into one.
  */
 const SIMULTANEOUS_GAP_MS = 220;
 
@@ -110,6 +112,10 @@ export function soundsForEvents(events: TurnEvent[]): SoundCue[] {
           cues.push({ group: "gunshot", delayMs: at });
           if (e.hit === "-") cues.push({ group: "ricochet", delayMs: at + RICOCHET_AFTER_SHOT_MS });
         }
+        break;
+      case "cancel":
+        // A shot with an empty gun only clicks, spaced out like the shots fired with it.
+        if (e.reason === "empty") cues.push({ group: "emptyGun", delayMs: shots++ * SIMULTANEOUS_GAP_MS });
         break;
       case "wild_shot":
         cues.push({ group: "gunshot", delayMs: shots++ * SIMULTANEOUS_GAP_MS });
