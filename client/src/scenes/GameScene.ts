@@ -1947,7 +1947,12 @@ export class GameScene extends Phaser.Scene {
       // The sight (rule 31) goes to the character standing there, else to the hex.
       const standing = standingOn(chars, hex, this.myIndex);
       const sight = canSee(BOARD_A, me, hex, standing);
-      if (!sight.clear) {
+      // A hex aimed at counts as upright (31.3): with its occupant out of
+      // sight but the hex itself in sight, the aim goes to the hex and covers
+      // the spot for when the occupant gets up. A shot there would be
+      // cancelled, so when shooting the hex is hidden like any other.
+      const hexOnly = !shooting && !!standing && !sight.clear && canSee(BOARD_A, me, hex).clear;
+      if (!sight.clear && !hexOnly) {
         this.hiddenHex(hex, sx, sy, sight.blocker, objects);
         continue;
       }
@@ -1978,6 +1983,12 @@ export class GameScene extends Phaser.Scene {
       circle.on("pointerover", () => {
         this.showAimLine(this.gunCentre(this.myIndex), { x: sx, y: sy }); // where the aim would go
         for (const l of labels) l.setVisible(true);
+        if (hexOnly) {
+          const who = charName(this.view?.players[standing ? chars.indexOf(standing) : -1]?.char);
+          detail = this.hoverDetail(sx, sy, r, [`${who} is out of sight (${sight.blocker} in the way)`, `aiming at the hex ${hex}`]);
+          objects.push(detail);
+          return;
+        }
         if (!odds) return;
         detail = this.hoverDetail(sx, sy, r, [
           `Hit ${odds.hit}%  ·  bullseye ${odds.bullseye}%`,
@@ -1991,7 +2002,7 @@ export class GameScene extends Phaser.Scene {
         detail?.destroy();
         detail = null;
       });
-      circle.on("pointerup", () => this.resolveAim(hex));
+      circle.on("pointerup", () => this.resolveAim(hex, hexOnly));
       objects.push(circle);
     }
     this.aimMode = { card, side, objects };
@@ -2003,11 +2014,15 @@ export class GameScene extends Phaser.Scene {
     this.aimMode = null;
   }
 
-  /** A click on a hex with a character on it targets the character, else the hex. */
-  private resolveAim(hex: string) {
+  /**
+   * A click on a hex with a character on it targets the character, else the
+   * hex; hexOnly targets the hex whoever stands there (an aim over an
+   * occupant out of sight, 31.3).
+   */
+  private resolveAim(hex: string, hexOnly = false) {
     if (!this.aimMode) return;
     const chars = this.displayChars();
-    const seat = chars.findIndex((c, i) => c && i !== this.myIndex && c.hex === hex && c.status === "alive");
+    const seat = hexOnly ? -1 : chars.findIndex((c, i) => c && i !== this.myIndex && c.hex === hex && c.status === "alive");
     this.pendingAims.set(this.aimMode.card, seat >= 0 ? { target: seat } : { hex });
     if (this.pendingOpts.get(this.aimMode.card) === "shoot") {
       // The plan alone tells a gun with no shell left: the shot will only click.

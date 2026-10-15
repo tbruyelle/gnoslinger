@@ -51,7 +51,12 @@ the heights of the two characters decide.
 - "Adjacent to the trough" is the neighbour table of `A-I11*`: I10, J10,
   I11, H11 and H10.
 - A hex target counts as upright (31.3). A shot at a hex where the opponent
-  stands uses the opponent's height.
+  stands uses the opponent's height. So a standing marshal across the
+  trough from a DOWN Kid in I11 cannot aim at the Kid, but can aim at the
+  hex I11 and cover the spot: the AIM points sit on the hex, a shot there
+  is cancelled while the Kid lies hidden, and pays off once he stands up.
+  The client lets the aim go to the hex in that case (the pick names the
+  hex, not the seat) and hides the hex when shooting.
 
 **The line.** Rule 31.2 locates a character on his hex's *coordinate*, the
 label printed in the hex, and the string must touch both coordinates. On
@@ -214,8 +219,9 @@ boxes are only sight anchors.
      line of sight from my previewed state are drawn hatched like disabled
      card sides and are not clickable, with "no line of sight (trough)" in
      the hover detail; the height of a hex holding the opponent is the
-     opponent's. `showAimZone` (token hover) may dim them the same way
-     (optional).
+     opponent's, except that an aim (not a shot) at a hex whose occupant is
+     out of sight while the hex is in sight goes to the hex (31.3).
+     `showAimZone` (token hover) leaves the unseen hexes out.
    - `game/shotOdds.ts`: a `los` flag so the odds read 0% there.
    - `game/playback.ts`: `describeEvent` wording for `cancel` and
      `lose_aim` with reason `no_los`.
