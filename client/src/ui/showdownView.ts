@@ -238,7 +238,7 @@ const CSS = `
 .gv-btn{flex:1 1 auto;min-height:44px;padding:0 12px;background:#FBF4E4;color:#2A1C14;border:2px solid #2A1C14;border-radius:10px;font-size:16px;font-weight:700;cursor:pointer}
 .gv-btn:hover:not(:disabled){background:#FFFFFF}
 .gv-btn.danger{color:#8E2F1A;border-color:#8E2F1A}
-.gv-btn.primary{flex:1 1 100%;min-height:54px;background:#B5482A;color:#FBF4E4;border:3px solid #2A1C14;border-radius:12px;box-shadow:0 5px 0 #2A1C14;font-family:Rye,Georgia,serif;font-size:21px;font-weight:400;letter-spacing:1.5px}
+.gv-btn.primary{flex:1 1 100%;min-height:54px;margin-bottom:5px;background:#B5482A;color:#FBF4E4;border:3px solid #2A1C14;border-radius:12px;box-shadow:0 5px 0 #2A1C14;font-family:Rye,Georgia,serif;font-size:21px;font-weight:400;letter-spacing:1.5px}
 .gv-btn.primary:hover:not(:disabled){background:#C65634}
 .gv-bottom{grid-area:bottom;position:relative;background:#2A1C14;border-top:3px solid #5A4636;padding:8px 18px 12px;color:#F3E7CE;min-width:0;overflow:hidden;display:flex;flex-direction:column}
 .gv-hand-head{display:flex;align-items:baseline;gap:14px;margin-bottom:6px}
