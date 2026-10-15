@@ -1,7 +1,8 @@
 # Line of sight (rule 31) — implementation plan
 
-Status: plan, 2026-10-15. Steps 1 (the generator's between table) and 2
-(the hex package's sight rule) are done; the rest is not implemented yet.
+Status: plan, 2026-10-15. Steps 1 (the generator's between table), 2 (the
+hex package's sight rule) and 3 (the engine's hooks) are done; the rest is
+not implemented yet.
 
 Board A has no buildings: the corral fence never blocks sight (35.1) and
 characters do not block it either, so line of sight (LOS) on board A comes

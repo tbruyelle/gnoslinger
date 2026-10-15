@@ -13,13 +13,13 @@ const (
 	EvTurn         = "turn"          // Facing, Action (Reason "stagger" when thrown by a hit)
 	EvFlip         = "flip"          // Down, Action (empty for a DROP penalty)
 	EvDelay        = "delay"         // N gained, Reason, Card drawn (0 for crawl), Result penalty, Endurance crossed off, Delay = running total once this card is counted
-	EvCancel       = "cancel"        // Action, Reason
+	EvCancel       = "cancel"        // Action, Reason (To = the obstacle in the way for no_los)
 	EvDraw         = "draw"          // Gun moved from From (holster, a hand, or "ground" with N = its ground id) to To (a hand) and cocked, unless jammed (Result "jammed")
 	EvLoad         = "load"          // a shell loaded in the gun in both hands, N shells now, uncocked; Result "unjammed" when that completes a jammed gun
 	EvCock         = "cock"          // Gun cocked
 	EvUncock       = "uncock"        // Gun uncocked
 	EvAim          = "aim"           // N = AIM points after aiming, To = the hex they sit on, Target = the seat they follow (-1 for a hex)
-	EvLoseAim      = "lose_aim"      // Reason
+	EvLoseAim      = "lose_aim"      // Reason (To = the obstacle in the way for no_los)
 	EvNothing      = "nothing"       // a Shoot used to do nothing, or a shot held at a hex nobody stands in (Reason empty_hex, To = the hex): keeps the aim
 	EvShot         = "shot"          // Card, Target, To = the hex shot at, Hit (final location or Miss), Range, N = aim time, Reason "" | out_of_zone | misfire (older records: Target -1 and empty_hex for a shot wasted on an empty hex)
 	EvMalfunction  = "malfunction"   // Card, Result (no_effect, misfire, jams, explodes, no_penalty), Gun, GunID
@@ -57,6 +57,7 @@ const (
 	ReasonBroken    = "broken"      // using or loading an exploded gun (13.31)
 	ReasonNoTarget  = "no_target"   // the opponent is out of the fight (12.6)
 	ReasonOutOfZone = "out_of_zone" // the opponent is in the blind zone (8.32, 12.41)
+	ReasonNoLOS     = "no_los"      // no line of sight to the target: an obstacle in the way, by the heights (31.1)
 	ReasonReveal    = "reveal"      // revealing an action other than Turn or a gun action (12.44)
 	ReasonTransfer  = "transfer"    // a new target more than one hex from the markers (12.5)
 	ReasonNoHex     = "no_hex"      // aiming at a hex that is not on the board
@@ -245,7 +246,8 @@ func Resolve(board *hex.Board, st State, plans [NumPlayers]Plan, d Drawer) (Stat
 				gained[p] += applyPenalties(board, p, &st, r, seg, d, &evs)
 			}
 		}
-		// A target out of the aim zone at the end of the segment loses the aim (12.41).
+		// A target out of the aim zone (12.41) or out of sight (31.1) at the
+		// end of the segment loses the aim.
 		for p := 0; p < NumPlayers; p++ {
 			c, t := &st.Chars[p], &st.Chars[1-p]
 			if c.Status != Alive || c.Aim == 0 {
@@ -256,6 +258,14 @@ func Resolve(board *hex.Board, st State, plans [NumPlayers]Plan, d Drawer) (Stat
 			}
 			if !board.InAimZone(c.Hex, c.Facing, aimTarget(c, t)) {
 				loseAim(p, c, seg, ReasonOutOfZone, &evs)
+				continue
+			}
+			var at *Character // the markers follow the opponent...
+			if c.AimHex == "" {
+				at = t
+			}
+			if clear, blocker := canSee(board, c, c.AimHex, at); !clear { // ...or sit on a hex
+				loseAimAt(p, c, seg, ReasonNoLOS, blocker, &evs)
 			}
 		}
 
@@ -334,12 +344,18 @@ func reveal(board *hex.Board, p int, c *Character, opp *Character, a Action, seg
 }
 
 func loseAim(p int, c *Character, seg int, reason string, evs *[]Event) {
+	loseAimAt(p, c, seg, reason, "", evs)
+}
+
+// loseAimAt is loseAim with the hex the event names: the obstacle in the
+// way when the target is out of sight.
+func loseAimAt(p int, c *Character, seg int, reason, to string, evs *[]Event) {
 	if c.Aim == 0 {
 		return
 	}
 	c.Aim = 0
 	c.AimHex = ""
-	*evs = append(*evs, Event{Seg: seg, Player: p, Kind: EvLoseAim, Reason: reason})
+	*evs = append(*evs, Event{Seg: seg, Player: p, Kind: EvLoseAim, Reason: reason, To: to})
 }
 
 // cardLine is which line of a drawn result card is read.
@@ -438,10 +454,11 @@ func fireHarmlessly(p int, g *Gun, seg int, evs *[]Event) {
 // returns the IMPACT TABLE results of a hit, inflicted at the end of the
 // segment.
 func shoot(board *hex.Board, p int, c *Character, target int, t *Character, a Action, seg int, d Drawer, evs *[]Event) []Penalty {
-	cancel := func(reason string) []Penalty {
-		*evs = append(*evs, Event{Seg: seg, Player: p, Kind: EvCancel, Action: a.Code, Reason: reason})
+	cancelAt := func(reason, to string) []Penalty {
+		*evs = append(*evs, Event{Seg: seg, Player: p, Kind: EvCancel, Action: a.Code, Reason: reason, To: to})
 		return nil
 	}
+	cancel := func(reason string) []Penalty { return cancelAt(reason, "") }
 	// The target: the opponent, or the hex named, where the opponent may or
 	// may not stand when the shot comes up; nobody there, the shot is held.
 	at := t.Hex
@@ -471,6 +488,11 @@ func shoot(board *hex.Board, p int, c *Character, target int, t *Character, a Ac
 		return cancel(ReasonNotCocked)
 	case a.Target >= 0 && (a.Target == p || t.Status != Alive):
 		return cancel(ReasonNoTarget)
+	}
+	// The target, the opponent either way by now, must be in sight (31.1):
+	// behind the trough the shot is cancelled, no card drawn, no shell spent.
+	if clear, blocker := canSee(board, c, at, t); !clear {
+		return cancelAt(ReasonNoLOS, blocker)
 	}
 	spec := g.Type.Spec()
 	aim := a.AimTime(spec.OneHanded) + c.Aim
@@ -725,10 +747,11 @@ func dropAllGuns(p int, c *Character, seg int, st *State, evs *[]Event) {
 // guns on the ground). It returns the delay points gained and whether the
 // action took effect.
 func execute(board *hex.Board, p int, a Action, st *State, c *Character, opp *Character, seg int, d Drawer, evs *[]Event) (gained int, executed bool) {
-	cancel := func(reason string) (int, bool) {
-		*evs = append(*evs, Event{Seg: seg, Player: p, Kind: EvCancel, Action: a.Code, Reason: reason})
+	cancelAt := func(reason, to string) (int, bool) {
+		*evs = append(*evs, Event{Seg: seg, Player: p, Kind: EvCancel, Action: a.Code, Reason: reason, To: to})
 		return gained, false
 	}
+	cancel := func(reason string) (int, bool) { return cancelAt(reason, "") }
 	move := func(dir hex.Dir) bool {
 		to, ok := board.Neighbor(c.Hex, dir)
 		if !ok {
@@ -884,6 +907,14 @@ func execute(board *hex.Board, p int, a Action, st *State, c *Character, opp *Ch
 			}
 			if !board.InAimZone(c.Hex, c.Facing, hexAt) {
 				return cancel(ReasonOutOfZone)
+			}
+			// ...and in sight (31.1): a target behind the trough cannot be aimed at.
+			var at *Character
+			if a.Target >= 0 {
+				at = opp
+			}
+			if clear, blocker := canSee(board, c, hexAt, at); !clear {
+				return cancelAt(ReasonNoLOS, blocker)
 			}
 			c.Aim += 2
 			if c.Aim > MaxAim {
