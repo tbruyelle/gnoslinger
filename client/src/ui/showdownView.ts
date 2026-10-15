@@ -139,6 +139,8 @@ export interface ShowdownModel {
     /** The segment shown, 0 for the turn start. */
     seg: number;
     rows: TimelineRow[];
+    /** The turn shown, between the turn buttons: "3 / 7", or "3" for a live turn. */
+    turnLabel: string;
     prevTurn: boolean;
     nextTurn: boolean;
     prevSeg: boolean;
@@ -273,6 +275,7 @@ const CSS = `
 .gv-cell.now{outline:3px solid #F2B544;outline-offset:1px}
 .gv-ctl{flex:1 1 280px;display:flex;flex-direction:column;justify-content:center;gap:8px}
 .gv-ctl-row{display:flex;gap:8px}
+.gv-turn{flex:0 0 auto;min-width:3.5em;display:flex;align-items:center;justify-content:center;font-family:Rye,Georgia,serif;font-size:18px;color:#F3E7CE;white-space:nowrap}
 .gv-ghost{flex:1;min-height:44px;background:transparent;color:#F3E7CE;border:2px solid #5A4636;border-radius:10px;font-size:16px;font-weight:700;cursor:pointer}
 .gv-ghost:hover:not(:disabled){border-color:#F3E7CE}
 .gv-icon{width:50px;min-height:50px;background:#F3E7CE;border:3px solid #F3E7CE;border-radius:12px;display:flex;align-items:center;justify-content:center;cursor:pointer}
@@ -506,6 +509,7 @@ export class ShowdownView {
       `<div class="gv-rp"><div class="gv-tl"><span></span>${heads}${rows}</div>` +
       '<div class="gv-ctl"><div class="gv-ctl-row">' +
       `<button type="button" class="gv-ghost" data-act="btn" data-id="prevTurn"${dis(r.prevTurn)}>◀ Turn</button>` +
+      `<span class="gv-turn" aria-label="Turn ${esc(r.turnLabel)}">${esc(r.turnLabel)}</span>` +
       `<button type="button" class="gv-ghost" data-act="btn" data-id="nextTurn"${dis(r.nextTurn)}>Turn ▶</button></div>` +
       '<div class="gv-ctl-row">' +
       `<button type="button" class="gv-icon" data-act="btn" data-id="prevSeg" aria-label="Previous segment"${dis(r.prevSeg)}><svg width="20" height="20" viewBox="0 0 24 24" fill="#2A1C14" aria-hidden="true"><path d="M17 5 L7 12 L17 19 Z"></path></svg></button>` +

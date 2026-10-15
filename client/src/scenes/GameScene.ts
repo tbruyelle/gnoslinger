@@ -1363,6 +1363,7 @@ export class GameScene extends Phaser.Scene {
           log: this.logLines(),
           seg: pb.seg,
           rows,
+          turnLabel: pb.turns.length > 1 ? `${t.turn} / ${pb.turns[pb.turns.length - 1].turn}` : String(t.turn),
           prevTurn: pb.index > 0,
           nextTurn: pb.index < pb.turns.length - 1,
           prevSeg: !!stepBack(pos),
