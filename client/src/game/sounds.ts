@@ -37,7 +37,7 @@ export const SOUND_FILES = {
   // Climbing over a fence or another obstacle.
   obstacle: ["obstacle1.wav", "obstacle2.wav"],
   wounded: ["wounded1.wav", "wounded2.ogg"],
-  dead: ["dead1.wav", "dead2.wav", "dead3.wav"],
+  dead: ["dead1.wav", "dead2.wav", "dead3.wav", "dead4.wav", "dead5.wav"],
 } as const;
 
 export type SoundGroup = keyof typeof SOUND_FILES;
