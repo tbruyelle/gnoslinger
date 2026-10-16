@@ -1,7 +1,6 @@
 package gnoslinger
 
 import (
-	"strconv"
 	"strings"
 	"testing"
 
@@ -10,6 +9,7 @@ import (
 
 	"gno.land/p/nt/testutils/v0"
 	"gno.land/p/nt/uassert/v0"
+	profiles "gno.land/r/tbruyelle/gnoslinger/profiles/v0"
 )
 
 var (
@@ -297,8 +297,8 @@ func TestSurrender(cur realm, t *testing.T) {
 	id := CreateGame(cross(cur), "marshal", 10, 0, "A-G5", 3)
 	testing.SetRealm(testing.NewUserRealm(bob))
 	JoinGame(cross(cur), id, "the_kid", "A-E9", 0)
-	aliceVP := profiles.Get(alice.String()).(*Profile).VictoryPoints
-	bobVP := profiles.Get(bob.String()).(*Profile).VictoryPoints
+	aliceVP := profileOf(alice).VictoryPoints
+	bobVP := profileOf(bob).VictoryPoints
 	testing.SetRealm(testing.NewUserRealm(carol))
 	uassert.AbortsWithMessage(t, cur, "gnoslinger: you are not a player of this game", func() {
 		Surrender(cross(cur), id)
@@ -313,8 +313,8 @@ func TestSurrender(cur realm, t *testing.T) {
 	uassert.Equal(t, 4, g.VP[0])
 	uassert.Equal(t, -6, g.VP[1])
 	uassert.Equal(t, 0, g.Winner)
-	uassert.Equal(t, aliceVP+4, profiles.Get(alice.String()).(*Profile).VictoryPoints)
-	uassert.Equal(t, bobVP-6, profiles.Get(bob.String()).(*Profile).VictoryPoints)
+	uassert.Equal(t, aliceVP+4, profileOf(alice).VictoryPoints)
+	uassert.Equal(t, bobVP-6, profileOf(bob).VictoryPoints)
 	uassert.True(t, strings.Contains(GameJSON(id), `"vp":[4,-6],"awards":[{"p":0,"reason":"survive","points":2},{"p":0,"reason":"hold_field","points":2},{"p":1,"reason":"surrender","points":-2},{"p":1,"reason":"captured","points":-4}]`))
 	uassert.AbortsWithMessage(t, cur, "gnoslinger: game is not in progress", func() {
 		Surrender(cross(cur), id)
@@ -545,7 +545,7 @@ func TestAutoPass(cur realm, t *testing.T) {
 	// Both unable to act: the turns resolve by themselves until someone can play.
 	g.State.Chars[0].Delay = 6
 	g.State.Chars[1].Delay = 5
-	autoPass(g)
+	autoPass(cur, g)
 	uassert.Equal(t, 3, g.Turn)
 	uassert.Equal(t, 3, g.State.Chars[0].Delay) // 6 -> 3
 	uassert.Equal(t, 2, g.State.Chars[1].Delay) // 5 -> 2
@@ -556,21 +556,21 @@ func TestAutoPass(cur realm, t *testing.T) {
 func TestProfiles(cur realm, t *testing.T) {
 	dave := testutils.TestAddress("dave")
 	erin := testutils.TestAddress("erin")
-	uassert.Equal(t, "null", ProfileJSON(dave.String()))
+	_, ok := profiles.Get(dave)
+	uassert.False(t, ok)
 
 	// Creating a game makes the profile; the game counts once it starts.
 	testing.SetRealm(testing.NewUserRealm(dave))
 	id := CreateGame(cross(cur), "marshal", 10, 0, "A-G5", 3)
-	uassert.Equal(t, 0, profiles.Get(dave.String()).(*Profile).GamesPlayed)
+	uassert.Equal(t, 0, profileOf(dave).GamesPlayed)
 	CancelGame(cross(cur), id)
-	uassert.Equal(t, 0, profiles.Get(dave.String()).(*Profile).GamesPlayed)
+	uassert.Equal(t, 0, profileOf(dave).GamesPlayed)
 
 	id = CreateGame(cross(cur), "marshal", 10, 0, "A-G5", 3)
 	testing.SetRealm(testing.NewUserRealm(erin))
 	JoinGame(cross(cur), id, "the_kid", "A-E9", 0)
-	uassert.Equal(t, 1, profiles.Get(dave.String()).(*Profile).GamesPlayed)
-	uassert.Equal(t, 1, profiles.Get(erin.String()).(*Profile).GamesPlayed)
-	uassert.Equal(t, profiles.Size(), ranking.Size())
+	uassert.Equal(t, 1, profileOf(dave).GamesPlayed)
+	uassert.Equal(t, 1, profileOf(erin).GamesPlayed)
 
 	// A second game puts dave ahead of erin.
 	testing.SetRealm(testing.NewUserRealm(dave))
@@ -578,19 +578,17 @@ func TestProfiles(cur realm, t *testing.T) {
 	id = CreateGame(cross(cur), "marshal", 10, 0, "A-G5", 3)
 	testing.SetRealm(testing.NewUserRealm(alice))
 	JoinGame(cross(cur), id, "the_kid", "A-E9", 0)
-	d := profiles.Get(dave.String()).(*Profile)
-	e := profiles.Get(erin.String()).(*Profile)
-	uassert.Equal(t, 2, d.GamesPlayed)
-	uassert.True(t, rankOf(d) < rankOf(e))
-	uassert.Equal(t, profiles.Size(), ranking.Size())
+	uassert.Equal(t, 2, profileOf(dave).GamesPlayed)
+	uassert.True(t, profiles.Rank(dave) < profiles.Rank(erin))
+}
 
-	// Pages follow the ranking and give each player its rank.
-	all := PlayersJSON(0, maxPlayersPage)
-	uassert.True(t, strings.Contains(all, `"total":`+strconv.Itoa(ranking.Size())))
-	uassert.True(t, strings.Index(all, dave.String()) < strings.Index(all, erin.String()))
-	uassert.True(t, strings.Contains(ProfileJSON(dave.String()), `"rank":`+strconv.Itoa(rankOf(d))))
-	uassert.True(t, strings.Contains(PlayersJSON(rankOf(d)-1, 1), `"addr":"`+dave.String()+`"`))
-	uassert.Equal(t, `{"total":`+strconv.Itoa(ranking.Size())+`,"offset":0,"players":[]}`, PlayersJSON(0, 0))
+// profileOf is addr's profile in the profiles realm; it must exist.
+func profileOf(addr address) profiles.Profile {
+	p, ok := profiles.Get(addr)
+	if !ok {
+		panic("no profile for " + addr.String())
+	}
+	return p
 }
 
 func TestLineOfSight(cur realm, t *testing.T) {

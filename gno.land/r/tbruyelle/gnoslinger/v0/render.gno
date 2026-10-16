@@ -12,6 +12,7 @@ import (
 	"gno.land/p/tbruyelle/gnoslinger/cards/v0"
 	"gno.land/p/tbruyelle/gnoslinger/engine/v0"
 	"gno.land/p/tbruyelle/gnoslinger/hex/v0"
+	profiles "gno.land/r/tbruyelle/gnoslinger/profiles/v0"
 )
 
 const recentLimit = 20
@@ -34,23 +35,12 @@ func init() {
 	router.HandleFunc("json/plan/{id}/{addr}", func(res *mux.ResponseWriter, req *mux.Request) {
 		res.Write(PlanJSON(req.GetVar("id"), req.GetVar("addr")))
 	})
-	router.HandleFunc("json/profile/{addr}", func(res *mux.ResponseWriter, req *mux.Request) {
-		res.Write(ProfileJSON(req.GetVar("addr")))
-	})
-	router.HandleFunc("json/players/{offset}/{count}", func(res *mux.ResponseWriter, req *mux.Request) {
-		offset, err1 := strconv.Atoi(req.GetVar("offset"))
-		count, err2 := strconv.Atoi(req.GetVar("count"))
-		if err1 != nil || err2 != nil {
-			panic("gnoslinger: invalid page")
-		}
-		res.Write(PlayersJSON(offset, count))
-	})
 }
 
 // Render serves the gnoweb pages ("", "help", "game/{id}") and the raw JSON
 // views the web client reads ("json/game/{id}", "json/games/{addr}",
-// "json/history/{id}", "json/plan/{id}/{addr}", "json/profile/{addr}",
-// "json/players/{offset}/{count}").
+// "json/history/{id}", "json/plan/{id}/{addr}"); the players' profiles and
+// ranking are the profiles realm's (gno.land/r/tbruyelle/gnoslinger/profiles/v0).
 func Render(path string) string {
 	return router.Render(path)
 }
@@ -390,7 +380,7 @@ func phaseLabel(g *Game) string {
 
 // addr shows an address by its registered name when it has one.
 func addr(a address) string {
-	if name := registeredName(a); name != "" {
+	if name := profiles.Name(a); name != "" {
 		return md.Bold(sanitize.InlineText(name))
 	}
 	return md.InlineCode(sanitize.InlineText(a.String()))

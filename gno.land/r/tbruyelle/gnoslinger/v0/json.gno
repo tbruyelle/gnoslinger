@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"gno.land/p/tbruyelle/gnoslinger/engine/v0"
+	profiles "gno.land/r/tbruyelle/gnoslinger/profiles/v0"
 )
 
 // JSON views for the web client, read through Render("json/...") so the
@@ -107,7 +108,7 @@ func HistoryJSON(id string) string {
 		if i > 0 {
 			b.WriteByte(',')
 		}
-		b.WriteString(`{"addr":` + quote(p.Addr.String()) + `,"name":` + quote(registeredName(p.Addr)) + `,"char":` + quote(p.Char) + `}`)
+		b.WriteString(`{"addr":` + quote(p.Addr.String()) + `,"name":` + quote(profiles.Name(p.Addr)) + `,"char":` + quote(p.Char) + `}`)
 	}
 	b.WriteString(`],"turns":[`)
 	for i, r := range g.Turns {
@@ -123,7 +124,7 @@ func HistoryJSON(id string) string {
 func writePlayer(b *strings.Builder, g *Game, i int) {
 	p, c := g.Players[i], g.State.Chars[i]
 	b.WriteString(`{"addr":` + quote(p.Addr.String()))
-	b.WriteString(`,"name":` + quote(registeredName(p.Addr)))
+	b.WriteString(`,"name":` + quote(profiles.Name(p.Addr)))
 	b.WriteString(`,"char":` + quote(p.Char))
 	b.WriteString(`,"hex":` + quote(c.Hex))
 	b.WriteString(`,"facing":` + strconv.Itoa(int(c.Facing)))
@@ -271,7 +272,7 @@ func writeEvent(b *strings.Builder, e engine.Event) {
 //	summary = {"id","rev","phase","turn","maxTurns","timeout","winner","endReason","vp","createdAt","updatedAt","players":[{"addr","name","char","submitted"}]}
 func GamesJSON(addr string) string {
 	var b strings.Builder
-	b.WriteString(`{"name":` + quote(registeredName(address(addr))))
+	b.WriteString(`{"name":` + quote(profiles.Name(address(addr))))
 	b.WriteString(`,"open":[`)
 	n := 0
 	openGames.ReverseIterate("", "", func(_ string, v any) bool {
@@ -315,7 +316,7 @@ func writeSummary(b *strings.Builder, g *Game) {
 		if i > 0 {
 			b.WriteByte(',')
 		}
-		b.WriteString(`{"addr":` + quote(p.Addr.String()) + `,"name":` + quote(registeredName(p.Addr)) + `,"char":` + quote(p.Char) + `,"submitted":` + strconv.FormatBool(g.Submitted[i]) + `}`)
+		b.WriteString(`{"addr":` + quote(p.Addr.String()) + `,"name":` + quote(profiles.Name(p.Addr)) + `,"char":` + quote(p.Char) + `,"submitted":` + strconv.FormatBool(g.Submitted[i]) + `}`)
 	}
 	b.WriteString("]}")
 }

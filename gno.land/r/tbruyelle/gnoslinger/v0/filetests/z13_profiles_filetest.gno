@@ -5,6 +5,7 @@ package z13_profiles_filetest
 import (
 	"testing"
 
+	profiles "gno.land/r/tbruyelle/gnoslinger/profiles/v0"
 	gnoslinger "gno.land/r/tbruyelle/gnoslinger/v0"
 )
 
@@ -17,14 +18,14 @@ func main(cur realm) {
 	testing.SetRealm(testing.NewUserRealm(alice))
 	id := gnoslinger.CreateGame(cross(cur), "marshal", 10, 0, "A-G5", 3)
 	// Alice has a profile, the game has not started: no game played yet.
-	println(gnoslinger.ProfileJSON(alice.String()))
-	println(gnoslinger.ProfileJSON(bob.String()))
+	println(profiles.ProfileJSON(alice.String()))
+	println(profiles.ProfileJSON(bob.String()))
 	testing.SetRealm(testing.NewUserRealm(bob))
 	gnoslinger.JoinGame(cross(cur), id, "the_kid", "A-E9", 0)
 	gnoslinger.CreateGame(cross(cur), "marshal", 10, 0, "A-G5", 3)
-	println(gnoslinger.PlayersJSON(0, 5))
-	println(gnoslinger.PlayersJSON(1, 5))
-	println(gnoslinger.Render("json/players/0/1"))
+	println(profiles.PlayersJSON(0, 5))
+	println(profiles.PlayersJSON(1, 5))
+	println(profiles.Render("json/players/0/1"))
 }
 
 // Output:

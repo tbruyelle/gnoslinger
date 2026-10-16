@@ -11,6 +11,7 @@ import (
 	"gno.land/p/nt/avl/v0"
 	"gno.land/p/nt/seqid/v0"
 	"gno.land/p/tbruyelle/gnoslinger/engine/v0"
+	profiles "gno.land/r/tbruyelle/gnoslinger/profiles/v0"
 )
 
 const (
@@ -166,15 +167,15 @@ func (g *Game) assertInTime() {
 }
 
 // award records victory points (rule 15): each award is a VictoryPoints
-// event, adds to the seat's total and to the player's profile.
-func (g *Game) award(awards []engine.Award) {
+// event, adds to the seat's total and to the player's profile (in the
+// profiles realm, which cur, the crossing call's, gets to write).
+func (g *Game) award(cur realm, awards []engine.Award) {
 	for _, a := range awards {
 		g.Awards = append(g.Awards, a)
 		g.VP[a.Player] += a.Points
 		emit("VictoryPoints", "id", g.ID, "seat", strconv.Itoa(a.Player), "player", g.Players[a.Player].Addr.String(),
 			"reason", a.Reason, "points", strconv.Itoa(a.Points))
-		points := a.Points
-		updateProfile(g.Players[a.Player].Addr, func(pr *Profile) { pr.VictoryPoints += points })
+		profiles.AddVictoryPoints(cross(cur), g.Players[a.Player].Addr, a.Points)
 	}
 }
 

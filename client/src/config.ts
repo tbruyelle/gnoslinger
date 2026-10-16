@@ -8,6 +8,8 @@ export interface ChainConfig {
   chainName: string;
   /** Package path of the gnoslinger realm. */
   realmPath: string;
+  /** Package path of the profiles realm (players, ranking), kept across game versions. */
+  profilesPath: string;
   /** Gas overrides for transactions; undefined lets Adena pick. */
   gasWanted?: number;
   gasFee?: number;
@@ -30,6 +32,7 @@ export const CONFIG: ChainConfig = {
   chainId: str(import.meta.env.VITE_CHAIN_ID, "dev"),
   chainName: str(import.meta.env.VITE_CHAIN_NAME, "gnodev"),
   realmPath: str(import.meta.env.VITE_REALM_PATH, "gno.land/r/tbruyelle/gnoslinger/v0"),
+  profilesPath: str(import.meta.env.VITE_PROFILES_PATH, "gno.land/r/tbruyelle/gnoslinger/profiles/v0"),
   gasWanted: num(import.meta.env.VITE_GAS_WANTED),
   gasFee: num(import.meta.env.VITE_GAS_FEE),
   pollMs: num(import.meta.env.VITE_POLL_MS) ?? 2000,

@@ -27,7 +27,7 @@ interface Sent<R> {
   watched: R | null;
 }
 
-/** Typed access to the gnoslinger realm: reads through Render, writes through Adena. */
+/** Typed access to the gnoslinger realm: reads through Render, writes through Adena; the profiles live in their own realm. */
 export class RealmClient {
   private busy = false;
 
@@ -35,6 +35,7 @@ export class RealmClient {
     readonly rpc: Rpc,
     readonly wallet: Wallet,
     readonly pkgPath: string,
+    readonly profilesPath = "gno.land/r/tbruyelle/gnoslinger/profiles/v0",
   ) {}
 
   async getGame(id: string): Promise<GameView> {
@@ -52,12 +53,12 @@ export class RealmClient {
 
   /** addr's profile, null before its first game. */
   async getProfile(addr: string): Promise<Profile | null> {
-    return parseProfile(await this.rpc.qrender(this.pkgPath, `json/profile/${addr}`));
+    return parseProfile(await this.rpc.qrender(this.profilesPath, `json/profile/${addr}`));
   }
 
   /** count players of the ranking from offset (0-based), at most 50. */
   async listPlayers(offset: number, count: number): Promise<PlayersView> {
-    return parsePlayersView(await this.rpc.qrender(this.pkgPath, `json/players/${offset}/${count}`));
+    return parsePlayersView(await this.rpc.qrender(this.profilesPath, `json/players/${offset}/${count}`));
   }
 
   async listGames(addr: string): Promise<GamesView> {

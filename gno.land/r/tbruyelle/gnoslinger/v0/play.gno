@@ -50,9 +50,9 @@ func SubmitPlan(cur realm, id string, plan string) int {
 	resolved := g.Submitted[0] && g.Submitted[1]
 	var seed string
 	if resolved {
-		seed = resolveTurn(g)
+		seed = resolveTurn(cur, g)
 	}
-	autoPass(g)
+	autoPass(cur, g)
 	save(g)
 	emit("PlanSubmitted", "id", id, "turn", strconv.Itoa(turn), "player", caller.String(), "seat", strconv.Itoa(p))
 	if resolved {
@@ -65,7 +65,7 @@ func SubmitPlan(cur realm, id string, plan string) int {
 // carried delay of 5 or more leaves no time points, rule 7.3): there is
 // nothing to wait for from them. When nobody is left to wait for, the turn
 // resolves at once, and so on while that lasts.
-func autoPass(g *Game) {
+func autoPass(cur realm, g *Game) {
 	for g.Phase == PhasePlanning {
 		for p := range g.Players {
 			c := &g.State.Chars[p]
@@ -82,7 +82,7 @@ func autoPass(g *Game) {
 			return
 		}
 		turn := g.Turn
-		seed := resolveTurn(g)
+		seed := resolveTurn(cur, g)
 		emit("TurnResolved", "id", g.ID, "turn", strconv.Itoa(turn), "rev", strconv.Itoa(g.Rev+1), "seed", seed)
 	}
 }
@@ -90,7 +90,7 @@ func autoPass(g *Game) {
 // resolveTurn plays both plans with the result deck shuffled from this
 // turn's seed, stores the result and advances the game. It returns the seed
 // in hex.
-func resolveTurn(g *Game) string {
+func resolveTurn(cur realm, g *Game) string {
 	seed := engine.Seed(realmPath, g.ID, strconv.Itoa(g.Turn), g.Plans[0], g.Plans[1],
 		strconv.FormatInt(runtime.ChainHeight(), 10), strconv.FormatInt(time.Now().UnixNano(), 10))
 	var plans [engine.NumPlayers]engine.Plan
@@ -122,7 +122,7 @@ func resolveTurn(g *Game) string {
 	seedHex := enchex.EncodeToString(seed[:])
 	g.Turns = append(g.Turns, newTurnResult(g.Turn, start, g.Plans, seedHex, deck.Drawn(), evs))
 	g.State = st
-	g.award(awards)
+	g.award(cur, awards)
 	g.Plans = [engine.NumPlayers]string{}
 	g.Submitted = [engine.NumPlayers]bool{}
 	switch {
@@ -194,7 +194,7 @@ func Surrender(cur realm, id string) {
 	}
 	p := g.mustSeat(caller)
 	g.State.Chars[p].Status = engine.Out
-	g.award(engine.EndVictoryPoints(g.State))
+	g.award(cur, engine.EndVictoryPoints(g.State))
 	g.finish("surrender")
 	save(g)
 }
@@ -221,7 +221,7 @@ func ClaimTimeout(cur realm, id string) {
 		}
 		// Out of time counts as surrendering.
 		g.State.Chars[loser].Status = engine.Out
-		g.award(engine.EndVictoryPoints(g.State))
+		g.award(cur, engine.EndVictoryPoints(g.State))
 		g.finish("timeout")
 	default:
 		g.finish("abandoned")

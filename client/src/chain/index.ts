@@ -16,7 +16,7 @@ let chain: Chain | null = null;
 export async function initChain(cfg: ChainConfig = CONFIG): Promise<Chain> {
   const rpc = new Rpc(cfg.rpcUrl);
   const wallet = await connectWallet(cfg);
-  chain = { config: cfg, rpc, wallet, realm: new RealmClient(rpc, wallet, cfg.realmPath) };
+  chain = { config: cfg, rpc, wallet, realm: new RealmClient(rpc, wallet, cfg.realmPath, cfg.profilesPath) };
   return chain;
 }
 

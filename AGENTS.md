@@ -76,6 +76,7 @@ gno.land/
   p/tbruyelle/gnoslinger/cards/v0    the 12 action cards (24 sides), Enabled() = implemented actions
   p/tbruyelle/gnoslinger/engine/v0   pure rules engine: set up (setup.gno), plan DSL + validation, Resolve, EndTurn, result deck (deck.gno, fire.gno), impact table, sight heights (sight.gno)
   r/tbruyelle/gnoslinger/v0          the realm: games, lobby, SubmitPlan, JSON views, Render, filetests/
+  r/tbruyelle/gnoslinger/profiles/v0 the players' profiles and ranking, kept across game versions; written only by the allowed game realms
 client/src/
   chain/      rpc.ts (abci_query/status/tx), adena.ts (wallet), realm.ts (typed calls), poller.ts, types.ts
   rules/      cards.ts, facing.ts, sight.ts (pure card data, facing math, sight heights; mirrors the Gno packages)
@@ -93,13 +94,7 @@ assets/                     served as the Vite public dir (boards, tokens, cards
 `Game{ID, Players[2]{Addr, Char}, State engine.State, Turn, MaxTurns, Phase,
 Plans[2], Submitted[2], LastTurn *TurnResult, Winner, EndReason, Awards
 []engine.Award, VP[2], Rev, CreatedAt, UpdatedAt}` stored in an `avl.Tree` by zero-padded `seqid`;
-`byPlayer` (address → ids) and `openGames` indexes. Each address that creates
-or joins a game gets a `Profile{Addr, GamesPlayed, VictoryPoints, CreatedAt}`
-(`profile.gno`, `profiles` by address, `ranking` sorted by victory points then
-games played, both descending, then address): `GamesPlayed` goes up for both
-seats when a game starts (`JoinGame`), so a cancelled showdown does not count;
-`VictoryPoints` adds up the points of the player's finished games (may be
-negative, `desc` centres the ranking key on 0). `Rev` is bumped on every
+`byPlayer` (address → ids) and `openGames` indexes. `Rev` is bumped on every
 change and is what clients poll. Every resolved turn is kept in `Turns`
 (`TurnResult{Turn, Plans, Seed, StartEnc, CardsEnc, EventsEnc}`, at most
 MaxTurns; the start snapshot, the cards drawn and the events are stored in
@@ -108,22 +103,37 @@ through `Start()`, `Cards()`, `Events()`: as structs a turn cost over 17 KB
 of storage deposit, encoded about a tenth).
 
 ### Storage deposit
-Measured on gnodev on 2026-10-10 (storage price 100 ugnot/byte; gnokey
-prints `STORAGE DELTA` and `STORAGE FEE` for each call):
+Measured on gnodev on 2026-10-16 (storage price 100 ugnot/byte; gnokey
+prints `STORAGE DELTA` and `STORAGE FEE` for each call), the same calls
+run on the code before and after the profiles moved to their own realm,
+each on a fresh node:
 
-| Call | Bytes | Deposit |
-|---|---|---|
-| `CreateGame` | 18,527 | 1.85 GNOT |
-| `JoinGame` | 1,382 | 0.14 GNOT |
-| first `SubmitPlan` of a turn (plan stored) | 50–85 | ~0.007 GNOT |
-| resolving `SubmitPlan`, both pass | 1,971 | 0.20 GNOT |
-| resolving, both advance + run | 1,876 | 0.19 GNOT |
-| resolving, both Draw & Cock | 1,825 | 0.18 GNOT |
-| resolving, aim + shoot + aim each | 2,679 | 0.27 GNOT |
+| Call | Bytes, profiles in the game realm | Bytes, profiles realm | Deposit |
+|---|---|---|---|
+| `CreateGame`, the player's first game (new profile) | 20,915 | 20,850 | 2.09 GNOT |
+| `JoinGame`, the player's first game (new profile) | 7,284 | 7,272 | 0.73 GNOT |
+| `CreateGame`, returning player | 16,641 | 16,648 | 1.66 GNOT |
+| `JoinGame`, returning player | −947 | −949 | refund 0.09 GNOT |
+| first `SubmitPlan` of a turn (plan stored) | 38–85 | 35–85 | ~0.007 GNOT |
+| resolving `SubmitPlan`, both pass | 1,965 | 1,985 | 0.20 GNOT |
+| resolving, both advance + run | 1,884 | 1,884 | 0.19 GNOT |
+| resolving, both Draw & Cock | 1,829 | 1,839 | 0.18 GNOT |
+| resolving, aim + shoot + aim each | 2,161 | 2,095 | 0.21 GNOT |
+| `Surrender` (scored, 4 awards) | 2,406 | 2,408 | 0.24 GNOT |
+| deploying the profiles realm (`addpkg`, once, the deployer) | | 36,402 | 3.64 GNOT |
 
-A turn costs about 1.9–2.8 KB (0.19–0.28 GNOT), nearly all of it paid by
-the player whose plan resolves it. Even a turn where both pass costs ~1.9
-KB: the base is most likely the `TurnResult` kept for replays and the
+The profiles realm adds nothing measurable to the players' calls: the
+differences, a few dozen bytes either way, come from the turn's random
+cards (the events stored) and the timestamps, not from the realm crossing.
+Its one cost is its deployment. A player's first game costs about 4.3 KB
+more to create and 8.2 KB more to join than a later one: the new profile,
+its ranking entry and the address's first `byPlayer` entry. A join of a
+returning player frees bytes, the game leaving `openGames`.
+
+A turn costs about 1.8–2.8 KB (0.18–0.28 GNOT; an earlier aim + shoot +
+aim turn, with more hits, measured 2,679), nearly all of it paid by the
+player whose plan resolves it. Even a turn where both pass costs ~1.9 KB:
+the base is most likely the `TurnResult` kept for replays and the
 rewritten `Game` (not broken down further); events (combat: shots, wounds,
 their cards) add a few hundred bytes. A 20-turn game is roughly 40–55 KB
 (4–5.5 GNOT) on top of create and join.
@@ -143,6 +153,30 @@ JoinGame refuse it. Each may face any direction. Nobody is alerted
 The empty seat of a waiting game has `"hex":""` in the JSON. The client
 mirrors the table in `game/setup.ts` (`SETUPS`, `setupZone`,
 `defaultFacing`, `opponentOf`).
+
+### Profiles (`r/tbruyelle/gnoslinger/profiles/v0`)
+The profiles live in a realm of their own so that a new version of the game
+realm (new rules, `gnoslinger/v1`) keeps the scores. Each address that
+creates or joins a game gets a `Profile{Addr, GamesPlayed, VictoryPoints,
+CreatedAt}` (`profiles` by address, `ranking` sorted by victory points then
+games played, both descending, then address): `GamesPlayed` goes up for both
+seats when a game starts (`JoinGame`), so a cancelled showdown does not
+count; `VictoryPoints` adds up the points of the player's awards (may be
+negative, `desc` centres the ranking key on 0). The game realm writes through
+the crossing functions `Ensure`, `AddGamePlayed` and `AddVictoryPoints`
+(`profiles.X(cross(cur), ...)`; that is why `autoPass`, `resolveTurn` and
+`Game.award` take the crossing call's `cur`), which panic unless the calling
+realm (`cur.Previous().PkgPath()`) is on the allowlist (`games`; `init`
+allows `gno.land/r/tbruyelle/gnoslinger/v0`). The admin, the deployer at
+first (`unsafe.OriginCaller()`; test1 on gnodev), manages it: `Allow(pkgPath)`
+when a new game version is deployed, `Disallow(pkgPath)` to stop scoring an
+old one (its CreateGame, JoinGame and resolving SubmitPlan then panic),
+`SetAdmin(addr)`. Reads: `Get(addr) (Profile, bool)` (a copy), `Rank`,
+`Count`, `Games`, `IsGame`, `Admin`, `Name` (the address's name in
+`gno.land/r/sys/users`, also used by the game realm), `ProfileJSON`,
+`PlayersJSON` and `Render` (below). Upgrading the rules: deploy
+`gnoslinger/v1`, `Allow` it, point `VITE_REALM_PATH` at it, then `Disallow`
+v0 once its running games are over.
 
 ### Crossing functions (called with MsgCall, args are strings)
 | Function | Notes |
@@ -165,9 +199,9 @@ the RPC, clients poll).
 `Render("json/history/{id}")` (every resolved turn with its starting state,
 plans, seed, drawn cards and events, for replays) and
 `Render("json/plan/{id}/{addr}")` (the plan an address submitted for the
-turn in progress, shown by the client while waiting),
-`Render("json/profile/{addr}")` (`null` before the address's first game) and
-`Render("json/players/{offset}/{count}")` (a page of the ranking, at most
+turn in progress, shown by the client while waiting); in the profiles
+realm, `Render("json/profile/{addr}")` (`null` before the address's first
+game) and `Render("json/players/{offset}/{count}")` (a page of the ranking, at most
 50, `{total, offset, players}`; each profile carries its `rank` and `name`,
 the address's name in `gno.land/r/sys/users`, where `r/sys/namereg`
 registers them, resolved when the JSON is built, "" if none; every player of
@@ -175,7 +209,8 @@ registers them, resolved when the JSON is built, "" if none; every player of
 `json/games/{addr}` the listed address's own: the client and the gnoweb pages
 show a player by name, else by address, `playerLabel`) return raw JSON through `vm/qrender`
 (`vm/qeval` would Go-quote the string). `Render("")`, `game/{id}`, `help` are
-gnoweb pages. `GameJSON`, `GamesJSON`, `HistoryJSON`, `ProfileJSON`, `PlayersJSON`, `GameRev` are plain
+gnoweb pages, and so is the profiles realm's `Render("")` (the top 50, the
+games scored). `GameJSON`, `GamesJSON`, `HistoryJSON`, `GameRev` are plain
 getters for tests and gnokey.
 
 ### Plan string
@@ -367,7 +402,8 @@ holds the field (15.63). Those awards close the turn's log as `vp` events
 (`EvVP`, Seg 6, N = points, Reason = the award). `Surrender` and a
 `timeout` claim score `EndVictoryPoints` at once (no turn). No Ally killed,
 Run away, money bags or special rules. `Game.award` records each award
-(`Awards`, `VP` totals, a `VictoryPoints` event, the profile's total);
+(`Awards`, `VP` totals, a `VictoryPoints` event, the profile's total in
+the profiles realm);
 `finish` gives the win to the most points, equal points a draw. The game
 JSON carries `vp` and `awards` (`{p, reason, points}`), the summaries `vp`.
 The client shows the `vp` events in the log of the turn (`describeEvent`),
@@ -551,7 +587,9 @@ Clicking a token opens the **character
   from the shot's final `hit`; `hit.png`, a plain "HIT!", only for a
   location without an image), or `missed.png` bursts beside the target (`jammed.png` or `exploded.png` beside the shooter when the second MALFUNCTION jams or blows up the gun; an exploded gun's icon is struck through in red and no gun card can use it). Throwing and brawling stay disabled.
 - Config: `client/.env.local` (see `.env.example`): `VITE_RPC_URL`,
-  `VITE_CHAIN_ID`, `VITE_CHAIN_NAME`, `VITE_REALM_PATH`, `VITE_POLL_MS`,
+  `VITE_CHAIN_ID`, `VITE_CHAIN_NAME`, `VITE_REALM_PATH`,
+  `VITE_PROFILES_PATH` (the profiles realm, where `getProfile` and
+  `listPlayers` read), `VITE_POLL_MS`,
   optional `VITE_GAS_WANTED`/`VITE_GAS_FEE`. Without `VITE_GAS_WANTED` every
   call goes out with a fixed 100M gas limit (`DEFAULT_GAS_WANTED`): Adena's
   own estimate has no margin, and a `SubmitPlan` that resolves the turn can

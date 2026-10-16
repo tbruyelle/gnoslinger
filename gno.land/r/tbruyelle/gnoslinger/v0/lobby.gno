@@ -7,6 +7,7 @@ import (
 
 	"gno.land/p/tbruyelle/gnoslinger/engine/v0"
 	"gno.land/p/tbruyelle/gnoslinger/hex/v0"
+	profiles "gno.land/r/tbruyelle/gnoslinger/profiles/v0"
 )
 
 // CreateGame opens a showdown with the caller in seat 0 playing charKey, a
@@ -45,7 +46,7 @@ func CreateGame(cur realm, charKey string, maxTurns int, timeoutMinutes int, sta
 	g.State.SetUp(0, startHex, hex.Dir(facing))
 	openGames.Set(id, g)
 	index(caller, id)
-	ensureProfile(caller)
+	profiles.Ensure(cross(cur), caller)
 	save(g)
 	emit("GameCreated", "id", id, "creator", caller.String(), "char", charKey, "maxTurns", strconv.Itoa(maxTurns),
 		"timeoutMinutes", strconv.Itoa(int(timeout/time.Minute)), "hex", startHex, "facing", strconv.Itoa(facing))
@@ -78,7 +79,7 @@ func JoinGame(cur realm, id string, charKey string, startHex string, facing int)
 	index(caller, id)
 	// The game starts: it counts as played for both seats.
 	for _, p := range g.Players {
-		updateProfile(p.Addr, func(pr *Profile) { pr.GamesPlayed++ })
+		profiles.AddGamePlayed(cross(cur), p.Addr)
 	}
 	save(g)
 	emit("PlayerJoined", "id", id, "player", caller.String(), "char", charKey, "hex", startHex, "facing", strconv.Itoa(facing))

@@ -82,3 +82,23 @@ describe("RealmClient.send", () => {
     await expect(p).rejects.toThrow("Transaction cancelled");
   });
 });
+
+describe("RealmClient reads", () => {
+  it("reads the games from the game realm and the profiles from the profiles realm", async () => {
+    const PROFILES = "gno.land/r/x/gnoslinger/profiles/v0";
+    const asked: string[] = [];
+    const rpc = {
+      qrender: async (pkg: string, path: string) => {
+        asked.push(`${pkg}:${path}`);
+        if (path.startsWith("json/profile/")) return "null";
+        if (path.startsWith("json/players/")) return JSON.stringify({ total: 0, offset: 0, players: [] });
+        return JSON.stringify({ open: [], mine: [] });
+      },
+    } as unknown as Rpc;
+    const realm = new RealmClient(rpc, fakeWallet(async () => ({}) as never), PKG, PROFILES);
+    expect(await realm.getProfile(ME)).toBeNull();
+    expect((await realm.listPlayers(0, 5)).total).toBe(0);
+    await realm.listGames(ME);
+    expect(asked).toEqual([`${PROFILES}:json/profile/${ME}`, `${PROFILES}:json/players/0/5`, `${PKG}:json/games/${ME}`]);
+  });
+});
