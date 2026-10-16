@@ -2584,7 +2584,8 @@ export class GameScene extends Phaser.Scene {
     const me = this.committed[this.myIndex];
     const before = this.preview ?? me;
     const plan = this.currentPlan();
-    this.preview = replayPlan(me, plan, BOARD_A, this.displayGround().filter((g) => g.hex === me.hex));
+    // The chain's ground: the board's (displayGround) has the planned pick-up lifted off already.
+    this.preview = replayPlan(me, plan, BOARD_A, this.view?.ground ?? []);
     this.refreshTokens(true);
     const encoded = encodePlan(plan);
     const prev = this.previewPlan;

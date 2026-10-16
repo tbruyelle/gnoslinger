@@ -34,9 +34,11 @@ export function copyChar(c: CharView): CharView {
 /**
  * Previews where a plan would leave a character if every action executed:
  * each relative choice is resolved against the state left by the previous
- * one, exactly as the realm replays the committed plan.
+ * one, exactly as the realm replays the committed plan. ground is the
+ * weapons lying on the board as the chain has them: a pick-up finds its gun
+ * in the hex the character stands in by then, as the realm checks it.
  */
-export function replayPlan(start: CharView, plan: PlanEntry[], board: BoardMap, groundHere: GroundGunView[] = []): CharView {
+export function replayPlan(start: CharView, plan: PlanEntry[], board: BoardMap, ground: GroundGunView[] = []): CharView {
   const s = copyChar(start);
   for (const e of plan) {
     const def = getActionDef(e);
@@ -77,7 +79,7 @@ export function replayPlan(start: CharView, plan: PlanEntry[], board: BoardMap, 
       // Draw & Cock: the gun (from a holster or a hand), or the one picked up from the hex, goes to the chosen box, cocked.
       const loc = HAND_LOCATIONS[e.hand ?? 0];
       if (e.groundGun !== undefined) {
-        const lying = groundHere.find((x) => x.id === e.groundGun)?.guns[0];
+        const lying = ground.find((x) => x.id === e.groundGun && x.hex === s.hex)?.guns[0];
         if (lying && loc) s.guns.push({ ...lying, id: Math.max(0, ...s.guns.map((x) => x.id)) + 1, location: loc, cocked: !lying.jammed });
         continue;
       }
