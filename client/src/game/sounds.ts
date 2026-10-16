@@ -22,7 +22,7 @@ export const SOUND_FILES = {
   aim: ["aim1.wav"],
   // A shot's target picked while planning (the shot itself waits for the cards).
   planShoot: ["plan-shoot.wav"],
-  gunshot: ["gunshot1.wav", "gunshot2.wav", "gunshot3.wav", "gunshot4.mp3", "gunshot5.wav", "gunshot7.wav"],
+  gunshot: ["gunshot1.wav", "gunshot2.wav", "gunshot3.wav", "gunshot4.mp3", "gunshot5.wav"],
   // A missed bullet ricocheting past the target.
   ricochet: ["missed1.wav", "missed2.wav", "missed3.mp3"],
   // The hammer falling on an empty chamber: a shot with no shell left (13.1).
@@ -34,7 +34,7 @@ export const SOUND_FILES = {
   fall: ["drop1.ogg", "drop2.wav"],
   // Climbing over a fence or another obstacle.
   obstacle: ["obstacle1.wav", "obstacle2.wav"],
-  wounded: ["serious1.wav", "serious2.ogg"],
+  wounded: ["wounded1.wav", "wounded2.ogg"],
   dead: ["dead1.wav", "dead2.wav", "dead3.wav"],
 } as const;
 
