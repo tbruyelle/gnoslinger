@@ -1206,7 +1206,11 @@ export class GameScene extends Phaser.Scene {
   /**
    * Where an occupant of a hex goes: the hex centre, shifted along the
    * diagonal when the hex is shared; a gun on the ground also lies off to
-   * the lower-right side of the hex rather than in its middle.
+   * the lower-right side of the hex rather than in its middle. At rest,
+   * characters sharing the hex fan out among themselves, whatever lies
+   * there (a gun dropped by one killed there would otherwise push it back
+   * to the centre); spread under the pointer, every occupant takes its own
+   * place so each can be told apart.
    */
   private occupantScreenPos(chars: CharView[], ground: GroundGunView[], hex: string, key: string): { sx: number; sy: number } {
     const { sx, sy } = this.hexToScreen(hex);
@@ -1214,8 +1218,11 @@ export class GameScene extends Phaser.Scene {
     const aside = key[0] === "g" ? d * GROUND_ASIDE : 0;
     const all = this.occupantsAt(chars, ground, hex);
     if (all.length < 2) return { sx: sx + aside, sy: sy + aside };
-    const frac = this.spreadHex === hex ? STACK_SPREAD : STACK_REST;
-    const shift = d * frac * ((2 * all.indexOf(key)) / (all.length - 1) - 1);
+    const spread = this.spreadHex === hex;
+    const frac = spread ? STACK_SPREAD : STACK_REST;
+    const seats = all.filter((k) => k[0] === "s");
+    const row = !spread && key[0] === "s" && seats.length > 1 ? seats : all;
+    const shift = d * frac * ((2 * row.indexOf(key)) / (row.length - 1) - 1);
     return { sx: sx + shift + aside, sy: sy + shift + aside };
   }
 
