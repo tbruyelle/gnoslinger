@@ -200,6 +200,9 @@ class CharacterToken {
 
   /** In-flight position tweens, retargeted by moveTo without touching the rotation. */
   private posTweens: Phaser.Tweens.Tween[] = [];
+  /** The ring's breathing while the character awaits its player's move (setPulse), and its radius at rest. */
+  private pulseTween: Phaser.Tweens.Tween | null = null;
+  private readonly ringRadius: number;
   /** Hover handlers for the gun icon and the AIM markers (by aimer seat), set by the scene. */
   onGunHover: ((over: boolean) => void) | null = null;
   onAimHover: ((aimer: number, over: boolean) => void) | null = null;
@@ -218,6 +221,7 @@ class CharacterToken {
     highlight.setDepth(depth);
     sprite.setDepth(depth + 1);
     this.baseScale = sprite.scaleX;
+    this.ringRadius = highlight.radius;
   }
 
   /**
@@ -280,6 +284,21 @@ class CharacterToken {
   killTweens(tweens: Phaser.Tweens.TweenManager) {
     for (const p of this.parts) tweens.killTweensOf(p);
     this.posTweens = [];
+    this.pulseTween = null;
+    this.highlight.setRadius(this.ringRadius);
+  }
+
+  /** Makes the ring breathe, growing and shrinking around the token, while the character awaits its player's move; off stops it. */
+  setPulse(tweens: Phaser.Tweens.TweenManager, on: boolean) {
+    if (on === (this.pulseTween !== null)) return;
+    if (!on) {
+      this.pulseTween?.stop();
+      this.pulseTween = null;
+      this.highlight.setRadius(this.ringRadius);
+      return;
+    }
+    const r = this.ringRadius;
+    this.pulseTween = tweens.add({ targets: this.highlight, radius: { from: r, to: r * 1.055 }, duration: 750, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
   }
 
   /** Tweens the sprite; the other parts follow it every frame. */
@@ -1385,12 +1404,13 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  /** The resting highlight of a token: a white ring on my character, a ring in its seat's colour on the others. */
+  /** The resting highlight of a token: a ring in its seat's colour (the colour the AIM markers' frames use too), wider and breathing on my character while it is my move. */
   private applyTokenHighlight(i: number) {
     const t = this.tokens[i];
     if (!t) return;
-    if (i === this.myIndex) t.setHighlight(0xffffff, this.mode === "select" || this.mode === "setup" ? 0.9 : 0.4);
-    else t.setHighlight(seatColorNum(i), 0.9);
+    const mine = i === this.myIndex && (this.mode === "select" || this.mode === "setup");
+    t.setHighlight(seatColorNum(i), 0.9, mine ? 5 : 3);
+    t.setPulse(this.tweens, mine);
   }
 
   private refreshView() {

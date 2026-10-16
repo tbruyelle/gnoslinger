@@ -30,7 +30,8 @@ and knock outs name seats (`AimAt`, `KilledBy`, `Hurt`).
 ## Across the screens: telling characters apart
 
 1. **Seat and team colours.** *Done for four seats:* `client/src/ui/seats.ts`
-   holds the palette, indigo, brick, action green and ochre, apart in hue
+   holds the palette, indigo, brick, action green and teal (the palette's
+   gold and ochre vanish on the board's tan), apart in hue
    and in lightness so it holds for colour-blind players; it drives the
    panels' rule, the token rings, the timeline, the sheet and the AIM
    markers' rings. *Left:* four more colours for 8 seats; in team modes,

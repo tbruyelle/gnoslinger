@@ -545,10 +545,11 @@ played, victory points, since). `game/lobby.ts` sorts the games into
   the resolution log on the right, and a timeline (one row per character,
   `turnSegmentCells`, thinner rows past two, the blue pointer over the segment shown, a click on a
   segment jumps there) with the controls along the bottom. Every seat has
-  a colour (`ui/seats.ts`, `SEAT_COLORS`: indigo, brick, green, ochre,
-  apart in hue and lightness): the panels' rule, the token ring of the
-  others (mine stays white), the timeline's dot, the character sheet's
-  accent and the frame of its AIM markers. Clicking a
+  a colour (`ui/seats.ts`, `SEAT_COLORS`: indigo, brick, green, teal,
+  apart in hue and lightness): the panels' rule, the token rings (mine wider
+  and growing and shrinking while it is my move, `setPulse`; never another colour,
+  since the AIM markers' frames use the same ones), the timeline's dot, the character
+  sheet's accent and the frame of its AIM markers. Clicking a
   character panel opens its sheet. The hand builds an
   ordered plan with a live preview (`replayPlan`) and relative-direction hex
   picks (move choices and the aim zone highlight whole hexes,
