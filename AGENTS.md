@@ -649,7 +649,8 @@ costing endurance at the turn start plays a `wounded*` groan, crossing a
 fence or going onto or off an obstacle an `obstacle*` sound) and while planning,
 for what the plan alone decides (`soundsForPreview`: steps, climbing over a
 fence or an obstacle, turns, going down,
-drawing, cocking, aiming, loading; shots wait for the cards, picking a
+drawing, picking a gun up from the ground (`ground_pick1.wav`, in
+playback too, instead of the holster sound), cocking, aiming, loading; shots wait for the cards, picking a
 shot's target plays `plan-shoot.wav`, a card added to the plan
 `pick-card.mp3` and one taken out `pick-card-reverse.mp3`, both converted
 from `pick-card.aiff`, an option button of Cock/Aim/Shoot `select.mp3`);

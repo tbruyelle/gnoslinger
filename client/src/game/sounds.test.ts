@@ -15,6 +15,7 @@ describe("soundsForEvents", () => {
     expect(groups([ev({ kind: "flip", down: true }), ev({ kind: "flip", down: false })])).toEqual(["fall"]);
     expect(groups([ev({ kind: "draw", from: "holstered" })])).toEqual(["unholster", "cock"]);
     expect(groups([ev({ kind: "draw", result: "jammed" })])).toEqual(["unholster"]);
+    expect(groups([ev({ kind: "draw", from: "ground", n: 2 })])).toEqual(["groundPick", "cock"]);
     expect(groups([ev({ kind: "cock" }), ev({ kind: "aim" }), ev({ kind: "load" })])).toEqual(["cock", "aim", "reload"]);
     expect(groups([ev({ kind: "shot", hit: "vital" }), ev({ kind: "wild_shot" })])).toEqual(["gunshot", "gunshot"]);
     expect(groups([ev({ kind: "shot", hit: "-" })])).toEqual(["gunshot", "ricochet"]);
@@ -88,6 +89,8 @@ describe("soundsForPreview", () => {
     expect(groups(char({ down: true }), char())).toEqual([]);
     expect(groups(char(), char({ guns: [colt({ location: "gun_hand", cocked: true })] }))).toEqual(["unholster", "cock"]);
     expect(groups(char(), char({ guns: [colt({ location: "gun_hand", jammed: true })] }))).toEqual(["unholster"]);
+    // A gun that was not on the sheet comes from the ground.
+    expect(groups(char({ guns: [] }), char({ guns: [colt({ id: 2, location: "gun_hand", cocked: true })] }))).toEqual(["groundPick", "cock"]);
     expect(groups(char({ guns: [colt({ location: "gun_hand" })] }), char({ guns: [colt({ location: "gun_hand", cocked: true })] }))).toEqual(["cock"]);
     expect(groups(char({ guns: [colt({ location: "both_hands", shells: 5 })] }), char({ guns: [colt({ location: "both_hands" })] }))).toEqual(["reload"]);
   });

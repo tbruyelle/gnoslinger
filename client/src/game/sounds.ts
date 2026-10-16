@@ -18,6 +18,8 @@ export const SOUND_FILES = {
   step: ["advance1.wav", "advance2.wav", "advance3.wav", "advance4.wav"],
   turn: ["turn1.wav"],
   unholster: ["unholster-gun1.wav", "unholster-gun2.wav"],
+  // A Draw & Cock picking a gun up from the ground (instead of the holster).
+  groundPick: ["ground_pick1.wav"],
   cock: ["cock-gun1.wav", "cock-gun2.wav", "cock-gun3.wav"],
   aim: ["aim1.wav"],
   // A shot's target picked while planning (the shot itself waits for the cards).
@@ -42,7 +44,7 @@ export type SoundGroup = keyof typeof SOUND_FILES;
 
 /** Volume per group: gunshots stand out, footsteps stay in the background. */
 export const SOUND_VOLUME: Record<SoundGroup, number> = {
-  pickCard: 0.6, unpickCard: 0.6, select: 0.6, step: 0.5, turn: 0.5, unholster: 0.8, cock: 0.8, aim: 0.8, planShoot: 0.8, gunshot: 1, ricochet: 0.8, emptyGun: 0.9, reload: 0.8, delay: 0.7, undelay: 0.7, fall: 0.8, obstacle: 0.8, wounded: 0.9, dead: 0.9,
+  pickCard: 0.6, unpickCard: 0.6, select: 0.6, step: 0.5, turn: 0.5, unholster: 0.8, groundPick: 0.8, cock: 0.8, aim: 0.8, planShoot: 0.8, gunshot: 1, ricochet: 0.8, emptyGun: 0.9, reload: 0.8, delay: 0.7, undelay: 0.7, fall: 0.8, obstacle: 0.8, wounded: 0.9, dead: 0.9,
 };
 
 /** The Phaser audio key of one variant of a group. */
@@ -93,7 +95,7 @@ export function soundsForEvents(events: TurnEvent[]): SoundCue[] {
         if (e.down) cues.push({ group: "fall", delayMs: 0 });
         break;
       case "draw":
-        cues.push({ group: "unholster", delayMs: 0 });
+        cues.push({ group: e.from === "ground" ? "groundPick" : "unholster", delayMs: 0 });
         if (e.result !== "jammed") cues.push({ group: "cock", delayMs: COCK_AFTER_DRAW_MS });
         break;
       case "cock":
@@ -158,7 +160,7 @@ export function soundsForEvents(events: TurnEvent[]): SoundCue[] {
 /**
  * The sounds of a plan step while planning, from the preview before and
  * after it: only what the plan alone decides (moves, climbing over an
- * obstacle, turns, going down, drawing, cocking, aiming, loading); shots and penalties wait for the cards
+ * obstacle, turns, going down, drawing or picking a gun up, cocking, aiming, loading); shots and penalties wait for the cards
  * drawn.
  */
 export function soundsForPreview(before: CharView, after: CharView, crossesObstacle?: (from: string, to: string) => boolean): SoundCue[] {
@@ -173,7 +175,8 @@ export function soundsForPreview(before: CharView, after: CharView, crossesObsta
   for (const g of after.guns) {
     const b = before.guns.find((x) => x.id === g.id);
     if (!b || b.location !== g.location) {
-      cues.push({ group: "unholster", delayMs: 0 });
+      // Not on the sheet before: picked up from the ground.
+      cues.push({ group: b ? "unholster" : "groundPick", delayMs: 0 });
       if (g.cocked) cues.push({ group: "cock", delayMs: COCK_AFTER_DRAW_MS });
     } else if (g.shells > b.shells) {
       cues.push({ group: "reload", delayMs: 0 });
