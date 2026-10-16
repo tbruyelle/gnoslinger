@@ -698,9 +698,13 @@ character tokens `char_*.png` 95×95, action cards `action_card_a{1-12}[_back].p
 markers `aim{2,4,6,8}.gif` (from the VASSAL module), sound effects `sounds/`
 (played during turn playback: `game/sounds.ts` maps events to groups of
 variants, `GameScene.playSounds` picks one at random; a miss, misfires
-included, adds a `missed*` ricochet after the gunshot; the wounds of a
-segment groan once (`wounded*`), whoever is hit and however many effects
-the hits have, or cry `dead*` if one of them kills; a shot cancelled for
+included, adds a `missed*` ricochet after the gunshot; each character hit
+in a segment groans once (`wounded*`), however many effects the hits
+have, or cries `dead*` if one of them kills it, when it reacts
+(`woundDelays`: 350 ms after the shot that hit it, two characters due at
+once one after the other, 220 ms apart), and its token waits for that
+moment to fall, grey out, lose its endurance and drop its guns
+(`refreshTokens`'s hold); a shot cancelled for
 an empty gun (reason `empty`) plays `empty-gun*`, as does picking the target
 of a shot whose gun the preview shows empty, instead of `plan-shoot.wav`; SERIOUS fatigue
 costing endurance at the turn start plays a `wounded*` groan, crossing a

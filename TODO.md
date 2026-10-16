@@ -54,7 +54,7 @@
 - >4 players (the showdown's set up stops at four characters) and teams, 
   see DESIGN_SHOWDOWNS.md and DESIGN_MULTIPLAYER.md
   - >2 players in the same hex
-  - the players pick their character
+  - review start position
 - add winning/losing burst
 - show tips (or highlight a card with some text)
   - when no gun: show need to draw and cock

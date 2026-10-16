@@ -24,7 +24,7 @@ import { firingGun, gunInHand, replayPlan, type CharView } from "../game/replay"
 import { SEGMENTS, segmentFills, turnSegmentCells } from "../game/segments";
 import { COCK_AIM_SHOOT_AIM_TIME, SHOOT_AIM_TIME, shotOdds } from "../game/shotOdds";
 import { canSee, standingOn } from "../game/sight";
-import { SOUND_FILES, SOUND_VOLUME, shotDelays, soundKey, soundsForDelay, soundsForEvents, soundsForPreview, type SoundCue, type SoundGroup } from "../game/sounds";
+import { SOUND_FILES, SOUND_VOLUME, shotDelays, soundKey, soundsForDelay, soundsForEvents, soundsForPreview, woundDelays, type SoundCue, type SoundGroup } from "../game/sounds";
 import { SHOOT_OPTIONS, isShooting, type ShootOption } from "../game/plan";
 import { closeCharacterSheet, openCharacterSheet, type GunPick } from "../ui/characterSheet";
 import { ShowdownView, showdownLayout, type BoardRect, type CharPanel, type HandSide, type ShowdownLayout, type ShowdownModel, type TimelineRow } from "../ui/showdownView";
@@ -116,6 +116,16 @@ const SHOT_LINE_COLOR = 0xffffff;
 const STACK_REST = 0.12;
 const STACK_SPREAD = 0.42;
 const STACK_MS = 180;
+
+/**
+ * What a step's refresh keeps as it is for a while: the tokens of the seats
+ * named (ms before they show their new state: a character hit reacts when
+ * its groan or death cry plays) and the guns, by ground id, they drop.
+ */
+interface Hold {
+  seats: Map<number, number>;
+  ground: Map<number, number>;
+}
 
 /** Paints a gun icon: full colour when cocked, greyed out when not, and a red dot per loaded chamber along the bottom edge (dark once spent). */
 function paintGun(gun: GunView, img: Phaser.GameObjects.Image, dots: Phaser.GameObjects.Graphics, size: number): number {
@@ -631,8 +641,8 @@ export class GameScene extends Phaser.Scene {
   private aimMode: { card: CardNumber; side: CardSide; objects: Phaser.GameObjects.GameObject[] } | null = null;
   /** The AIM markers on hexes, by the seat holding the aim. */
   private aimMarkers: Map<number, Phaser.GameObjects.Image> = new Map();
-  /** The guns lying in hexes, as drawn (index = position in displayGround()). */
-  private groundIcons: { img: Phaser.GameObjects.Image; dots: Phaser.GameObjects.Graphics }[] = [];
+  /** The guns lying in hexes, as drawn (index = position in displayGround(); null while one waits to be shown). */
+  private groundIcons: ({ img: Phaser.GameObjects.Image; dots: Phaser.GameObjects.Graphics } | null)[] = [];
   /** The animated dotted line shown while hovering an AIM marker or an aiming gun, with its ends. */
   private aimLine: Phaser.GameObjects.Graphics | null = null;
   /** The aim zone of the character under the pointer, drawn under the tokens. */
@@ -1189,35 +1199,59 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  /** Moves the tokens to the current display state, animated or not. */
-  private refreshTokens(animate: boolean) {
+  /**
+   * Moves the tokens to the current display state, animated or not. With
+   * hold, the tokens of the seats named (and the guns they drop) keep their
+   * old look for that many ms, then show the new state: a character hit
+   * falls, bleeds and greys out as its groan or death cry plays, its DEL
+   * badge pulsing then. A hold is dropped if the board is rebuilt or the
+   * replay moves on meanwhile.
+   */
+  private refreshTokens(animate: boolean, hold?: Hold) {
     const chars = this.displayChars();
     this.hideAimLine();
     this.refreshAimMarkers(chars);
-    this.refreshGround(chars, this.displayGround());
+    this.refreshGround(chars, this.displayGround(), hold);
+    const pb = this.playback;
+    const gen = pb?.anim;
     this.tokens.forEach((t, i) => {
       if (!t || !chars[i]) return;
       const c = chars[i];
-      const { sx, sy } = this.tokenScreenPos(chars, i);
-      const angle = dirIndexToAngle(c.facing, t.charKey);
-      t.killTweens(this.tweens);
-      // Status, delay and gun first, so new markers travel with the token.
-      t.setOverlay(this, overlayKey(c), this.arrMask);
-      t.setDelay(this, c.delay, this.arrMask);
-      t.setGun(this, gunInHand(c.guns), this.arrMask);
-      t.setEndurance(this, c.endurance, this.arrMask);
-      t.setTargetAims(this, this.aimersOn(chars, i), this.arrMask);
-      t.setStatus(c.status);
-      // Standing on an obstacle raises the character (36.5): drawn a bit bigger.
-      t.setLift(this.tweens, BOARD_A.obstacle(c.hex) ? OBSTACLE_LIFT : 1, animate ? 450 : 0);
-      if (animate) {
-        t.moveTo(this.tweens, sx, sy, 450);
-        t.rotateTo(this.tweens, angle, 300);
-      } else {
-        t.setPosition(sx, sy);
-        t.setAngle(angle);
+      const apply = () => {
+        const { sx, sy } = this.tokenScreenPos(chars, i);
+        const angle = dirIndexToAngle(c.facing, t.charKey);
+        const had = t.delayShown();
+        t.killTweens(this.tweens);
+        // Status, delay and gun first, so new markers travel with the token.
+        t.setOverlay(this, overlayKey(c), this.arrMask);
+        t.setDelay(this, c.delay, this.arrMask);
+        t.setGun(this, gunInHand(c.guns), this.arrMask);
+        t.setEndurance(this, c.endurance, this.arrMask);
+        t.setTargetAims(this, this.aimersOn(chars, i), this.arrMask);
+        t.setStatus(c.status);
+        // Standing on an obstacle raises the character (36.5): drawn a bit bigger.
+        t.setLift(this.tweens, BOARD_A.obstacle(c.hex) ? OBSTACLE_LIFT : 1, animate ? 450 : 0);
+        if (animate) {
+          t.moveTo(this.tweens, sx, sy, 450);
+          t.rotateTo(this.tweens, angle, 300);
+        } else {
+          t.setPosition(sx, sy);
+          t.setAngle(angle);
+        }
+        this.applyTokenHighlight(i);
+        return had;
+      };
+      const wait = animate ? (hold?.seats.get(i) ?? 0) : 0;
+      if (wait <= 0) {
+        apply();
+        return;
       }
-      this.applyTokenHighlight(i);
+      this.time.delayedCall(wait, () => {
+        if (this.tokens[i] !== t || this.playback !== pb || (pb && pb.anim !== gen)) return;
+        const had = apply();
+        if (c.delay !== had && c.delay > 0) t.pulseBadge(this.tweens);
+        this.playCues(soundsForDelay([had], [c]));
+      });
     });
   }
 
@@ -1279,23 +1313,35 @@ export class GameScene extends Phaser.Scene {
     return this.occupantScreenPos(chars, this.displayGround(), chars[i].hex, `s${i}`);
   }
 
-  /** Draws the guns lying in hexes, below the tokens, with the token icon's rendering, stacked like a character sharing the hex. */
-  private refreshGround(chars: CharView[], ground: GroundGunView[]) {
+  /**
+   * Draws the guns lying in hexes, below the tokens, with the token icon's
+   * rendering, stacked like a character sharing the hex; a gun a held seat
+   * drops this step (hold.ground, by ground id) shows up when its owner
+   * falls.
+   */
+  private refreshGround(chars: CharView[], ground: GroundGunView[], hold?: Hold) {
     for (const o of this.groundIcons) {
-      o.img.destroy();
-      o.dots.destroy();
+      o?.img.destroy();
+      o?.dots.destroy();
     }
-    this.groundIcons = [];
+    const icons: typeof this.groundIcons = ground.map(() => null);
+    this.groundIcons = icons;
     const size = this.tokenDiameter() * GUN_SIZE;
     ground.forEach((g, j) => {
       const gun = g.guns[0];
       const key = `gun_${gun?.type}`;
       if (!gun || !this.textures.exists(key)) return;
-      const { sx, sy } = this.occupantScreenPos(chars, ground, g.hex, `g${j}`);
-      const img = this.add.image(sx, sy, key).setOrigin(0.5).setMask(this.arrMask).setDepth(0.8);
-      const dots = this.add.graphics({ x: sx, y: sy }).setMask(this.arrMask).setDepth(0.8);
-      img.setAlpha(paintGun(gun, img, dots, size));
-      this.groundIcons.push({ img, dots });
+      const draw = () => {
+        if (this.groundIcons !== icons) return; // redrawn meanwhile
+        const { sx, sy } = this.occupantScreenPos(chars, ground, g.hex, `g${j}`);
+        const img = this.add.image(sx, sy, key).setOrigin(0.5).setMask(this.arrMask).setDepth(0.8);
+        const dots = this.add.graphics({ x: sx, y: sy }).setMask(this.arrMask).setDepth(0.8);
+        img.setAlpha(paintGun(gun, img, dots, size));
+        icons[j] = { img, dots };
+      };
+      const wait = hold?.ground.get(g.id) ?? 0;
+      if (wait > 0) this.time.delayedCall(wait, draw);
+      else draw();
     });
   }
 
@@ -2842,14 +2888,19 @@ export class GameScene extends Phaser.Scene {
     // appears or changes pulses once the new state is shown.
     const vanishing = this.tokens.filter((t, i) => t && t.delayShown() > 0 && (after[i]?.delay ?? 0) === 0);
     for (const t of vanishing) t?.fadeBadge(this.tweens, 400);
+    // A character hit reacts when its groan or death cry plays (woundDelays):
+    // its token, and the guns it drops, wait for that.
+    const reacts = woundDelays(events);
+    const hold: Hold = { seats: reacts, ground: new Map(events.flatMap((e) => (e.kind === "drop_gun" && reacts.has(e.p) ? [[e.n, reacts.get(e.p)!] as const] : []))) };
     const settle = () => {
       const before = this.tokens.map((t) => t?.delayShown() ?? 0);
-      this.refreshTokens(true);
+      this.refreshTokens(true, hold);
       const now = this.displayChars();
       now.forEach((c, i) => {
-        if (c && c.delay !== before[i] && c.delay > 0) this.tokens[i]?.pulseBadge(this.tweens);
+        if (c && !reacts.has(i) && c.delay !== before[i] && c.delay > 0) this.tokens[i]?.pulseBadge(this.tweens);
       });
-      this.playCues(soundsForDelay(before, now));
+      // The held seats' DEL badges sound when they change (refreshTokens).
+      this.playCues(soundsForDelay(before.map((b, i) => (reacts.has(i) ? (now[i]?.delay ?? b) : b)), now));
       for (const e of events) {
         if (e.kind === "cock") this.tokens[e.p]?.cockGun(this.tweens);
       }
@@ -2895,10 +2946,12 @@ export class GameScene extends Phaser.Scene {
     for (const e of events) {
       if (e.kind === "delay" && e.reason === "serious" && e.endurance > 0 && chars[e.p]) this.bloodStains(this.tokenScreenPos(chars, e.p), 2 * e.endurance);
     }
-    // The tokens move in 450 ms once settled; the guns going off one after
-    // the other (shotDelays), their bullets and bursts need a beat more.
+    // The tokens move in 450 ms once settled, the characters hit once they
+    // react (woundDelays); the guns going off one after the other
+    // (shotDelays), their bullets and bursts need a beat more.
     const lastShot = Math.max(-1, ...shotDelays(events).filter((d): d is number => d !== undefined));
-    return fade + (aim ? 150 : 0) + STEP_MOVE_MS + (lastShot >= 0 ? lastShot + STEP_SHOT_MS : 0);
+    const lastReact = Math.max(0, ...reacts.values());
+    return fade + (aim ? 150 : 0) + lastReact + STEP_MOVE_MS + (lastShot >= 0 ? lastShot + STEP_SHOT_MS : 0);
   }
 
   /**

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { GunView, TurnEvent } from "../chain/types";
 import type { CharView } from "./replay";
-import { shotDelays, soundsForDelay, soundsForEvents, soundsForPreview } from "./sounds";
+import { shotDelays, soundsForDelay, soundsForEvents, soundsForPreview, woundDelays } from "./sounds";
 
 const ev = (partial: Partial<TurnEvent>): TurnEvent => ({
   seg: 1, p: 0, kind: "move", action: "", from: "", to: "", facing: 0, down: false, n: 0, delay: 0, reason: "", card: 0, result: "", endurance: 0, target: 1, hit: "", range: 0, gun: "", gunId: 0, step: 0, ...partial,
@@ -64,14 +64,30 @@ describe("soundsForEvents", () => {
     expect(ricochet.delayMs).toBeGreaterThan(shots[1].delayMs);
   });
 
-  it("plays one wound sound per segment, the death cry if any wound kills", () => {
+  it("plays one wound sound per character hit, the death cry if a wound kills it", () => {
     // A GUN hit: STUN, GUN HAND, SERIOUS and GUN ARM.
     const gunHit = ["stun", "gun_hand", "serious", "gun_arm"].map((result) => ev({ seg: 5, p: 1, kind: "wound", result }));
     expect(groups(gunHit)).toEqual(["wounded"]);
-    // Both hit on the same segment, one killed.
-    expect(groups([ev({ seg: 3, kind: "wound", result: "stun" }), ev({ seg: 3, p: 1, kind: "wound", result: "kill" })])).toEqual(["dead"]);
+    // Both hit on the same segment, one killed: each reacts in turn.
+    const both = soundsForEvents([ev({ seg: 3, kind: "wound", result: "stun" }), ev({ seg: 3, p: 1, kind: "wound", result: "kill" })]);
+    expect(both.map((c) => [c.group, c.delayMs])).toEqual([["wounded", 350], ["dead", 570]]);
     // Two segments shown together: one each.
     expect(groups([ev({ seg: 2, kind: "wound", result: "leg" }), ev({ seg: 4, kind: "wound", result: "arm" })])).toEqual(["wounded", "wounded"]);
+  });
+
+  it("times each character's reaction after the shot that hit it, for the sounds and the tokens alike", () => {
+    // Seat 0 shoots seat 2, seat 1 shoots seat 3 (220 ms later); the hits land 350 ms after each shot.
+    const events = [
+      ev({ kind: "shot", target: 2, hit: "BODY" }),
+      ev({ kind: "shot", p: 1, target: 3, hit: "BODY" }),
+      ev({ p: 2, kind: "wound", result: "stun" }),
+      ev({ p: 3, kind: "wound", result: "kill" }),
+    ];
+    expect([...woundDelays(events)]).toEqual([[2, 350], [3, 570]]);
+    expect(soundsForEvents(events).map((c) => [c.group, c.delayMs])).toEqual([["gunshot", 0], ["gunshot", 220], ["wounded", 350], ["dead", 570]]);
+    // Hit by shots shown earlier (another step): the reactions follow the step, one after the other.
+    expect([...woundDelays([ev({ p: 3, kind: "wound", result: "kill" }), ev({ p: 1, kind: "wound", result: "leg" })])]).toEqual([[3, 350], [1, 570]]);
+    expect(woundDelays([ev({ kind: "move" })]).size).toBe(0);
   });
 
   it("plays wounds after the gunshot", () => {

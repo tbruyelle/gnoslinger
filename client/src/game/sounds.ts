@@ -102,14 +102,42 @@ export function shotDelays(events: TurnEvent[]): (number | undefined)[] {
   });
 }
 
+/**
+ * When each character hit in a step reacts, in ms after the step is shown,
+ * by seat: WOUND_AFTER_SHOT_MS after the shot that hit it when that shot is
+ * in the step (the bullet lands), else after the step is shown; two
+ * characters due at the same instant react one after the other,
+ * SIMULTANEOUS_GAP_MS apart, in event order. One reaction per character,
+ * however many effects its hits have (a GUN hit is STUN, GUN HAND, SERIOUS
+ * and GUN ARM). The groans and death cries and the tokens' falls share
+ * this timing.
+ */
+export function woundDelays(events: TurnEvent[]): Map<number, number> {
+  const shotAt = new Map<number, number>(); // the seat hit -> when the shot went off
+  shotDelays(events).forEach((d, i) => {
+    const e = events[i];
+    if (d !== undefined && e.kind === "shot" && e.hit !== "-" && e.target >= 0 && !shotAt.has(e.target)) shotAt.set(e.target, d);
+  });
+  const out = new Map<number, number>();
+  const taken = new Set<number>();
+  for (const e of events) {
+    if ((e.kind !== "wound" && e.kind !== "pass_out") || out.has(e.p)) continue;
+    let at = (shotAt.get(e.p) ?? 0) + WOUND_AFTER_SHOT_MS;
+    while (taken.has(at)) at += SIMULTANEOUS_GAP_MS;
+    taken.add(at);
+    out.set(e.p, at);
+  }
+  return out;
+}
+
 /** The sounds of one step's events, in the order they happen. */
 export function soundsForEvents(events: TurnEvent[]): SoundCue[] {
   const cues: SoundCue[] = [];
   const bled = new Set<number>();
   const climbed = new Set<number>();
-  // One wound sound per segment, whoever is hit and however many effects
-  // the hits have (a GUN hit is STUN, GUN HAND, SERIOUS and GUN ARM).
-  const wounded = new Map<number, SoundCue>();
+  // One wound sound per character hit in a segment, when it reacts (woundDelays).
+  const wounded = new Map<string, SoundCue>();
+  const reacts = woundDelays(events);
   const delays = shotDelays(events);
   events.forEach((e, i) => {
     const at = delays[i] ?? 0;
@@ -151,14 +179,14 @@ export function soundsForEvents(events: TurnEvent[]): SoundCue[] {
         cues.push({ group: "gunshot", delayMs: at });
         break;
       case "wound": {
-        // A kill among them makes it the death cry.
-        const cue = wounded.get(e.seg);
+        // A kill among a character's wounds makes its groan the death cry.
+        const cue = wounded.get(`${e.seg}/${e.p}`);
         if (cue) {
           if (e.result === "kill") cue.group = "dead";
           break;
         }
-        const first: SoundCue = { group: e.result === "kill" ? "dead" : "wounded", delayMs: WOUND_AFTER_SHOT_MS };
-        wounded.set(e.seg, first);
+        const first: SoundCue = { group: e.result === "kill" ? "dead" : "wounded", delayMs: reacts.get(e.p) ?? WOUND_AFTER_SHOT_MS };
+        wounded.set(`${e.seg}/${e.p}`, first);
         cues.push(first);
         break;
       }
