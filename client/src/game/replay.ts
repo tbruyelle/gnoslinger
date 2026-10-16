@@ -47,6 +47,7 @@ export function replayPlan(start: CharView, plan: PlanEntry[], board: BoardMap, 
     if (gunAction && !e.opt) continue; // option not picked yet: nothing to show
     if (!(def.name === "Turn" || (gunAction && (e.opt === "aim" || e.opt === "shoot")))) {
       s.aim = 0;
+      s.aimAt = -1;
       s.aimHex = "";
     }
     if (gunAction) {
@@ -62,7 +63,8 @@ export function replayPlan(start: CharView, plan: PlanEntry[], board: BoardMap, 
         case "aim":
           if (!e.hex && e.target === undefined) break; // the target is not picked yet: nothing to show
           s.aim = Math.min(MAX_AIM, s.aim + 2);
-          s.aimHex = e.hex ?? ""; // "" when the markers follow a character
+          s.aimAt = e.target ?? -1; // the seat the markers follow, -1 for a hex
+          s.aimHex = e.hex ?? "";
           break;
         case "shoot":
           if (g.cocked && g.shells > 0 && !g.jammed) {
@@ -70,6 +72,7 @@ export function replayPlan(start: CharView, plan: PlanEntry[], board: BoardMap, 
             g.shells--;
           }
           s.aim = 0;
+          s.aimAt = -1;
           s.aimHex = "";
           break;
       }

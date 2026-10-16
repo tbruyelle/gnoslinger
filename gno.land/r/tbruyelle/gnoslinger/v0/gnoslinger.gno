@@ -1,7 +1,8 @@
-// Package gnoslinger is the on-chain lobby and referee of 2-player Gunslinger
-// showdowns (the 1982 Avalon Hill gunfight game). Players create and join
-// games and submit their turn plans; the realm resolves each turn with the
-// pure engine package and keeps the result for the web client to animate.
+// Package gnoslinger is the on-chain lobby and referee of Gunslinger
+// showdowns (the 1982 Avalon Hill gunfight game) of two to four players.
+// Players create and join games and submit their turn plans; the realm
+// resolves each turn with the pure engine package and keeps the result for
+// the web client to animate.
 package gnoslinger
 
 import (
@@ -32,9 +33,9 @@ const (
 type Phase int
 
 const (
-	// PhaseWaiting: the creator is waiting for an opponent.
+	// PhaseWaiting: the seats are filling up.
 	PhaseWaiting Phase = iota
-	// PhasePlanning: both seated; collecting the plans of the current turn.
+	// PhasePlanning: every seat taken; collecting the plans of the current turn.
 	PhasePlanning
 	// PhaseFinished: over, see Game.EndReason.
 	PhaseFinished
@@ -53,33 +54,35 @@ func (p Phase) String() string {
 	return "?"
 }
 
-// Player is a seat: the address that controls it and its character token.
+// Player is a seat: the address that controls it (empty while nobody took
+// it) and its character token.
 type Player struct {
 	Addr address
 	Char string
 }
 
 // TurnResult is the outcome of one resolved turn, kept so the client can
-// replay it: the state the turn started from, the plans, and what happened.
-// Seed lets anyone re-run the resolution; Cards is the trace of the result
-// cards drawn from the deck it shuffles, in order. The start snapshot, the
-// cards and the events are kept in the engine's compact text encodings: as
-// structs they cost a hundred times more storage (see engine/encode.gno).
+// replay it: the state the turn started from, the plans (one per seat),
+// and what happened. Seed lets anyone re-run the resolution; Cards is the
+// trace of the result cards drawn from the deck it shuffles, in order. The
+// start snapshot, the cards and the events are kept in the engine's compact
+// text encodings: as structs they cost a hundred times more storage (see
+// engine/encode.gno).
 type TurnResult struct {
 	Turn      int
-	Plans     [engine.NumPlayers]string
+	Plans     []string
 	Seed      string
 	StartEnc  string // engine.EncodeChars
 	CardsEnc  string // engine.EncodeInts
 	EventsEnc string // engine.EncodeEvents
 }
 
-func newTurnResult(turn int, start [engine.NumPlayers]engine.Character, plans [engine.NumPlayers]string, seed string, cards []int, evs []engine.Event) *TurnResult {
+func newTurnResult(turn int, start []engine.Character, plans []string, seed string, cards []int, evs []engine.Event) *TurnResult {
 	return &TurnResult{Turn: turn, Plans: plans, Seed: seed, StartEnc: engine.EncodeChars(start), CardsEnc: engine.EncodeInts(cards), EventsEnc: engine.EncodeEvents(evs)}
 }
 
-// Start is the state of both seats when the turn began.
-func (r *TurnResult) Start() [engine.NumPlayers]engine.Character { return engine.DecodeChars(r.StartEnc) }
+// Start is the state of every seat when the turn began.
+func (r *TurnResult) Start() []engine.Character { return engine.DecodeChars(r.StartEnc) }
 
 // Cards is the result cards drawn during the turn, in order.
 func (r *TurnResult) Cards() []int { return engine.DecodeInts(r.CardsEnc) }
@@ -87,24 +90,25 @@ func (r *TurnResult) Cards() []int { return engine.DecodeInts(r.CardsEnc) }
 // Events is what happened during the turn, in order.
 func (r *TurnResult) Events() []engine.Event { return engine.DecodeEvents(r.EventsEnc) }
 
-// Game is one showdown.
+// Game is one showdown. Players, Plans, Submitted and VP have one entry
+// per seat, the seats filling up in the order the players join.
 type Game struct {
 	ID        string
-	Players   [engine.NumPlayers]Player
+	Players   []Player
 	State     engine.State
 	Turn      int // 1-based
 	MaxTurns  int
 	Timeout   time.Duration // inactivity after which ClaimTimeout succeeds
 	Phase     Phase
-	Plans     [engine.NumPlayers]string // current turn, canonical form
-	Submitted [engine.NumPlayers]bool
+	Plans     []string // current turn, canonical form
+	Submitted []bool
 	Turns     []*TurnResult // resolved turns, in order (at most MaxTurns)
-	Winner    int // seat index, -1 for none: the most victory points, -1 on a tie
+	Winner    int           // seat index, -1 for none: the most victory points, -1 on a tie
 	EndReason string
 	// Awards are the victory points earned and lost so far (rule 15), at
 	// the end of each turn and of the showdown; VP adds them up per seat.
-	Awards []engine.Award
-	VP     [engine.NumPlayers]int
+	Awards    []engine.Award
+	VP        []int
 	Rev       int // bumped on every change; clients poll it
 	CreatedAt time.Time
 	UpdatedAt time.Time
@@ -114,7 +118,7 @@ var (
 	games     = avl.NewTree() // id -> *Game
 	gameSeq   seqid.ID
 	byPlayer  = avl.NewTree() // address -> []string game ids, newest first
-	openGames = avl.NewTree() // id -> *Game while waiting for an opponent
+	openGames = avl.NewTree() // id -> *Game while a seat is free
 )
 
 func getGame(id string) *Game {
@@ -127,6 +131,9 @@ func getGame(id string) *Game {
 	}
 	return v.(*Game)
 }
+
+// seats is the number of seats of the game, taken or not.
+func (g *Game) seats() int { return len(g.Players) }
 
 // seat returns the seat of addr in g, or -1.
 func (g *Game) seat(addr address) int {
@@ -144,6 +151,38 @@ func (g *Game) mustSeat(addr address) int {
 		panic("gnoslinger: you are not a player of this game")
 	}
 	return p
+}
+
+// freeSeat is the first seat nobody took, -1 once every seat is taken.
+func (g *Game) freeSeat() int {
+	for i, p := range g.Players {
+		if p.Addr == "" {
+			return i
+		}
+	}
+	return -1
+}
+
+// seated counts the seats taken.
+func (g *Game) seated() int {
+	n := 0
+	for _, p := range g.Players {
+		if p.Addr != "" {
+			n++
+		}
+	}
+	return n
+}
+
+// allIn reports whether the turn has every plan it waits for: one from
+// each character still in the fight.
+func (g *Game) allIn() bool {
+	for p := range g.Players {
+		if g.State.Chars[p].Status == engine.Alive && !g.Submitted[p] {
+			return false
+		}
+	}
+	return true
 }
 
 // lastTurn is the most recently resolved turn, or nil.
@@ -179,17 +218,23 @@ func (g *Game) award(cur realm, awards []engine.Award) {
 	}
 }
 
-// finish ends the game: the most victory points win, a tie (a game nobody
-// played included) being a draw.
+// finish ends the game: the most victory points win, a tie for the most (a
+// game nobody played included) being a draw.
 func (g *Game) finish(reason string) {
 	g.Phase = PhaseFinished
 	g.EndReason = reason
 	g.Winner = -1
-	switch {
-	case g.VP[0] > g.VP[1]:
-		g.Winner = 0
-	case g.VP[1] > g.VP[0]:
-		g.Winner = 1
+	best, tie := 0, false
+	for p, v := range g.VP {
+		switch {
+		case g.Winner < 0 || v > best:
+			g.Winner, best, tie = p, v, false
+		case v == best:
+			tie = true
+		}
+	}
+	if tie {
+		g.Winner = -1
 	}
 	w := ""
 	if g.Winner >= 0 {
@@ -231,10 +276,4 @@ func unindex(addr address, id string) {
 		return
 	}
 	byPlayer.Set(addr.String(), ids)
-}
-
-func assertCharKey(charKey string) {
-	if !engine.IsCharKey(charKey) {
-		panic("gnoslinger: unknown character " + charKey)
-	}
 }

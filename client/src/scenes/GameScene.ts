@@ -29,9 +29,10 @@ import { SHOOT_OPTIONS, isShooting, type ShootOption } from "../game/plan";
 import { closeCharacterSheet, openCharacterSheet, type GunPick } from "../ui/characterSheet";
 import { ShowdownView, showdownLayout, type BoardRect, type CharPanel, type HandSide, type ShowdownLayout, type ShowdownModel, type TimelineRow } from "../ui/showdownView";
 import { showToast } from "../ui/toast";
-import { charName, formatDuration } from "../game/lobby";
-import { defaultFacing, setupZone, startingChar } from "../game/setup";
+import { charName, formatDuration, seatsTaken } from "../game/lobby";
+import { defaultFacing, nextSeat, seatChar, setupZone, startingChar } from "../game/setup";
 import { vpRecap, vpResult } from "../game/vp";
+import { seatColor, seatColorNum } from "../ui/seats";
 
 // ── Layout constants ────────────────────────────────────────────────────────
 
@@ -50,10 +51,12 @@ type Mode = "sync" | "setup" | "select" | "submitting" | "waiting" | "playback" 
 
 /**
  * What the lobby hands the scene to set a character up on the board before
- * signing (game/setup.ts): a showdown to call, with the form's options, or
- * one to join.
+ * signing (game/setup.ts): a showdown to call, with the form's options
+ * (seats, turns, time), or one to join, in the seat the lobby saw free
+ * (the board follows the chain: the seat moves on if someone takes it
+ * first).
  */
-export type SetupRequest = { kind: "create"; charKey: string; turns: number; timeoutMinutes: number } | { kind: "join"; charKey: string };
+export type SetupRequest = { kind: "create"; charKey: string; seats: number; turns: number; timeoutMinutes: number } | { kind: "join"; seat: number; charKey: string };
 
 /** Depth of the setup zone's highlights: under the aim zone shown on token hover (0.5) and the tokens (from 1). */
 const SETUP_ZONE_DEPTH = 0.3;
@@ -169,8 +172,8 @@ class CharacterToken {
   private gunAlpha = 1;
   /** Extra rotation of the icon, for the recoil of a shot. */
   private recoil = 0;
-  /** The opponent's AIM marker when it follows this token, at the corner mirroring the gun icon. */
-  private aim: Phaser.GameObjects.Image | null = null;
+  /** The AIM markers of the characters aiming at this one, by aimer seat: at the corner mirroring the gun icon, fanned along the rim, each framed in its aimer's colour. */
+  private aims = new Map<number, { img: Phaser.GameObjects.Image; ring: Phaser.GameObjects.Rectangle }>();
   /** The endurance bar above the token, shown once boxes are crossed off; shown is the value it displays (tweened). */
   private bar: { bg: Phaser.GameObjects.Rectangle; fill: Phaser.GameObjects.Rectangle } | null = null;
   private shown = MAX_ENDURANCE;
@@ -187,9 +190,9 @@ class CharacterToken {
 
   /** In-flight position tweens, retargeted by moveTo without touching the rotation. */
   private posTweens: Phaser.Tweens.Tween[] = [];
-  /** Hover handlers for the gun icon and the AIM marker, set by the scene. */
+  /** Hover handlers for the gun icon and the AIM markers (by aimer seat), set by the scene. */
   onGunHover: ((over: boolean) => void) | null = null;
-  onAimHover: ((over: boolean) => void) | null = null;
+  onAimHover: ((aimer: number, over: boolean) => void) | null = null;
 
   /**
    * Each token owns a band of 5 depths (ring, sprite, DOWN overlay, gun, DEL
@@ -237,7 +240,10 @@ class CharacterToken {
     this.overlay?.setScale(this.sprite.scaleX);
     const d = this.sprite.displayWidth;
     this.badge?.setDisplaySize(d * 0.42, d * 0.42);
-    this.aim?.setDisplaySize(d * AIM_SIZE, d * AIM_SIZE);
+    for (const a of this.aims.values()) {
+      a.img.setDisplaySize(d * AIM_SIZE, d * AIM_SIZE);
+      a.ring.setSize(d * AIM_SIZE + 4, d * AIM_SIZE + 4);
+    }
     if (this.gun && this.gunPainted > 0) {
       this.gun.setDisplaySize(d * GUN_SIZE, d * GUN_SIZE);
       this.shells?.setScale((d * GUN_SIZE) / this.gunPainted);
@@ -256,7 +262,7 @@ class CharacterToken {
     if (this.badge) list.push(this.badge);
     if (this.gun) list.push(this.gun);
     if (this.shells) list.push(this.shells);
-    if (this.aim) list.push(this.aim);
+    for (const a of this.aims.values()) list.push(a.img, a.ring);
     if (this.bar) list.push(this.bar.bg, this.bar.fill);
     return list;
   }
@@ -310,10 +316,12 @@ class CharacterToken {
         .setAngle((1 - this.gunIn) * 360 + this.recoil);
       this.shells?.setPosition(this.gun.x, this.gun.y).setAlpha(this.gunIn).setAngle(this.gun.angle);
     }
-    if (this.aim) {
-      const a = Phaser.Math.DegToRad(this.aimAngle());
+    let k = 0;
+    for (const marker of this.aims.values()) {
+      const a = Phaser.Math.DegToRad(this.aimAngle(k++));
       const r = this.sprite.displayWidth * GUN_RADIUS;
-      this.aim.setPosition(x + Math.cos(a) * r, y + Math.sin(a) * r);
+      marker.img.setPosition(x + Math.cos(a) * r, y + Math.sin(a) * r);
+      marker.ring.setPosition(marker.img.x, marker.img.y);
     }
     if (this.bar) {
       const d = this.sprite.displayWidth;
@@ -381,10 +389,12 @@ class CharacterToken {
   /**
    * Screen angle of the gun corner's mirror image across the vertical axis
    * of the upright figure: the other top corner, 135° from the arrow
-   * toward the figure's head.
+   * toward the figure's head. The k-th marker goes further round the rim,
+   * away from the gun and the badge, 40° a step.
    */
-  private aimAngle(): number {
-    return this.arrowAngle() + (CHAR_ARROW_DIR[this.charKey] === 5 ? 135 : -135);
+  private aimAngle(k = 0): number {
+    const side = CHAR_ARROW_DIR[this.charKey] === 5 ? 1 : -1;
+    return this.arrowAngle() + side * (135 + 40 * k);
   }
 
   /** Screen angle of the bottom corner below the gun corner in the upright frame: 45° from the arrow toward the feet. */
@@ -392,30 +402,42 @@ class CharacterToken {
     return this.arrowAngle() + (CHAR_ARROW_DIR[this.charKey] === 5 ? -45 : 45);
   }
 
-  /** Shows the AIM marker of the points the opponent holds on this character (none for 0). */
-  setTargetAim(scene: Phaser.Scene, n: number, mask: Phaser.Display.Masks.GeometryMask) {
-    const key = aimMarkerKey(n);
-    if (n <= 0 || !scene.textures.exists(key)) {
-      this.aim?.destroy();
-      this.aim = null;
-      return;
+  /** Shows the AIM markers of the points held on this character, one per aimer (seat and points), in seat order; none for nobody. */
+  setTargetAims(scene: Phaser.Scene, aims: { seat: number; n: number }[], mask: Phaser.Display.Masks.GeometryMask) {
+    const keep = new Set(aims.filter((a) => a.n > 0 && scene.textures.exists(aimMarkerKey(a.n))).map((a) => a.seat));
+    for (const [seat, a] of this.aims) {
+      if (keep.has(seat)) continue;
+      a.img.destroy();
+      a.ring.destroy();
+      this.aims.delete(seat);
     }
     const size = this.sprite.displayWidth * AIM_SIZE;
-    if (!this.aim) {
-      this.aim = scene.add.image(this.sprite.x, this.sprite.y, key).setOrigin(0.5).setMask(mask).setDepth(this.depth + 4).setInteractive();
-      this.aim.on("pointerover", () => this.onAimHover?.(true));
-      this.aim.on("pointerout", () => this.onAimHover?.(false));
-    } else if (this.aim.texture.key !== key) {
-      this.aim.setTexture(key);
+    for (const { seat, n } of aims) {
+      if (!keep.has(seat)) continue;
+      const key = aimMarkerKey(n);
+      let a = this.aims.get(seat);
+      if (!a) {
+        // The frame: a square outline in the aimer's colour, just outside the marker, under every marker so none covers another's.
+        const ring = scene.add.rectangle(this.sprite.x, this.sprite.y, size + 4, size + 4).setStrokeStyle(3, seatColorNum(seat), 1).setMask(mask).setDepth(this.depth + 4);
+        const img = scene.add.image(this.sprite.x, this.sprite.y, key).setOrigin(0.5).setMask(mask).setDepth(this.depth + 4.5).setInteractive();
+        img.on("pointerover", () => this.onAimHover?.(seat, true));
+        img.on("pointerout", () => this.onAimHover?.(seat, false));
+        a = { img, ring };
+        this.aims.set(seat, a);
+      } else if (a.img.texture.key !== key) {
+        a.img.setTexture(key);
+      }
+      a.img.setDisplaySize(size, size).setAlpha(1); // undo a fade-out if the aim came back
+      a.ring.setSize(size + 4, size + 4).setAlpha(1);
     }
-    this.aim.setDisplaySize(size, size).setAlpha(1); // undo a fade-out if the aim came back
     this.follow();
   }
 
-  /** Drifts the AIM marker up and fades it away, when the aim is lost. */
-  fadeAim(tweens: Phaser.Tweens.TweenManager, duration: number) {
-    if (!this.aim) return;
-    tweens.add({ targets: this.aim, y: this.aim.y - this.sprite.displayWidth * 0.5, alpha: 0, duration, ease: "Cubic.easeIn" });
+  /** Drifts an aimer's AIM marker up and fades it away, when that aim is lost. */
+  fadeAim(seat: number, tweens: Phaser.Tweens.TweenManager, duration: number) {
+    const a = this.aims.get(seat);
+    if (!a) return;
+    tweens.add({ targets: [a.img, a.ring], y: a.img.y - this.sprite.displayWidth * 0.5, alpha: 0, duration, ease: "Cubic.easeIn" });
   }
 
   /** Drifts the DEL badge up and fades it away, when the delay is gone. */
@@ -431,11 +453,13 @@ class CharacterToken {
     tweens.add({ targets: this.badge, scaleX: scaleX * 1.35, scaleY: scaleY * 1.35, duration: 170, yoyo: true, ease: "Quad.easeOut" });
   }
 
-  /** Zooms the AIM marker in and out once, when the aim grows. */
-  pulseAim(tweens: Phaser.Tweens.TweenManager) {
-    if (!this.aim) return;
-    const { scaleX, scaleY } = this.aim;
-    tweens.add({ targets: this.aim, scaleX: scaleX * 1.35, scaleY: scaleY * 1.35, duration: 170, yoyo: true, ease: "Quad.easeOut" });
+  /** Zooms an aimer's AIM marker in and out once, when that aim grows. */
+  pulseAim(seat: number, tweens: Phaser.Tweens.TweenManager) {
+    const a = this.aims.get(seat);
+    if (!a) return;
+    const { scaleX, scaleY } = a.img;
+    tweens.add({ targets: a.img, scaleX: scaleX * 1.35, scaleY: scaleY * 1.35, duration: 170, yoyo: true, ease: "Quad.easeOut" });
+    tweens.add({ targets: a.ring, scaleX: 1.35, scaleY: 1.35, duration: 170, yoyo: true, ease: "Quad.easeOut" });
   }
 
   /** Greys out a character that is out of the fight. */
@@ -681,7 +705,7 @@ export class GameScene extends Phaser.Scene {
   init(data: { gameID?: string; setup?: SetupRequest }) {
     this.gameID = data.gameID ?? "";
     this.setup = data.setup
-      ? { req: data.setup, seat: data.setup.kind === "create" ? 0 : 1, hex: null, facing: defaultFacing(data.setup.charKey), zone: [], ghost: null, busy: false }
+      ? { req: data.setup, seat: data.setup.kind === "create" ? 0 : data.setup.seat, hex: null, facing: defaultFacing(data.setup.charKey), zone: [], ghost: null, busy: false }
       : null;
     this.view = null;
     this.myIndex = -1;
@@ -817,6 +841,7 @@ export class GameScene extends Phaser.Scene {
     const first = this.view === null;
     this.view = view;
     this.netError = null;
+    if (this.setup?.req.kind === "join" && view.phase === "waiting") this.syncJoinSeat(view);
     this.myIndex = this.setup ? this.setup.seat : seatOf(view, this.chain.wallet.address);
     await this.ensureTextures([...view.players.map((p) => p.char), ...(this.setup ? [this.setup.req.charKey] : [])]);
     if (!this.scene.isActive()) return;
@@ -837,7 +862,7 @@ export class GameScene extends Phaser.Scene {
     }
     // A turn we have not shown yet resolved: replay it from the positions we
     // were showing before the change.
-    if (view.lastTurn && view.lastTurn.turn !== this.shownResultTurn && this.committed.length === 2 && !this.playback) {
+    if (view.lastTurn && view.lastTurn.turn !== this.shownResultTurn && this.committed.length > 0 && !this.playback) {
       this.startPlayback([view.lastTurn], true);
       return;
     }
@@ -870,16 +895,19 @@ export class GameScene extends Phaser.Scene {
   private applyState(reset: boolean) {
     const view = this.view;
     if (!view) return;
-    // Joining: I set my character up in the empty seat while the showdown
-    // waits for a player; once it went on without me, I only watch.
+    // Joining: I set my character up in the next free seat while the
+    // showdown waits for players; once it went on without me, I only
+    // watch; once the chain shows me seated, the set up is over.
     if (this.setup?.req.kind === "join" && view.phase !== "waiting") {
-      showToast(this, view.phase === "planning" ? "Another player joined this showdown first" : "This showdown is over", "info");
+      showToast(this, view.phase === "planning" ? "The seats filled up without you" : "This showdown is over", "info");
+      this.endSetup();
+    } else if (this.setup?.req.kind === "join" && seatOf(view, this.chain.wallet.address) >= 0) {
       this.endSetup();
     }
     const turnChanged = view.turn !== this.renderedTurn;
     this.committed = view.players.map((p) => ({
       hex: p.hex, facing: p.facing, down: p.down, delay: p.delay, status: p.status,
-      aim: p.aim, aimHex: p.aimHex, endurance: p.endurance, serious: p.serious, gunArm: p.gunArm, otherArm: p.otherArm, leg: p.leg,
+      aim: p.aim, aimAt: p.aimAt ?? -1, aimHex: p.aimHex, endurance: p.endurance, serious: p.serious, gunArm: p.gunArm, otherArm: p.otherArm, leg: p.leg,
       guns: p.guns.map((g) => ({ ...g })),
     }));
     this.renderedTurn = view.turn;
@@ -913,7 +941,8 @@ export class GameScene extends Phaser.Scene {
     if (!setup) return;
     await this.ensureTextures([setup.req.charKey]);
     if (!this.scene.isActive() || this.setup !== setup) return;
-    this.committed = [startingChar("", setup.facing), startingChar("", 0)];
+    const seats = setup.req.kind === "create" ? setup.req.seats : 2;
+    this.committed = Array.from({ length: seats }, (_, i) => startingChar("", i === setup.seat ? setup.facing : 0));
     this.myIndex = setup.seat;
     this.mode = "setup";
     this.buildTokens();
@@ -928,6 +957,25 @@ export class GameScene extends Phaser.Scene {
     this.setup?.ghost?.destroy();
     this.setup = null;
     if (this.view) this.myIndex = seatOf(this.view, this.chain.wallet.address);
+  }
+
+  /**
+   * Joining: my seat is the first the chain shows free. When someone took
+   * the one I was setting up in, I move on to the next and its character,
+   * as the realm will seat me, and set up again in its hexes.
+   */
+  private syncJoinSeat(view: GameView) {
+    const setup = this.setup;
+    if (!setup || setup.req.kind !== "join" || setup.busy) return;
+    const seat = nextSeat(view.players);
+    if (seat < 0 || seat === setup.seat) return;
+    const charKey = seatChar(seat);
+    const taken = view.players[setup.seat];
+    if (setup.hex && taken?.addr) showToast(this, `${charName(taken.char)} was taken first: you play ${charName(charKey)}, take position again`, "info");
+    setup.req = { kind: "join", seat, charKey };
+    setup.seat = seat;
+    setup.hex = null;
+    setup.facing = defaultFacing(charKey);
   }
 
   /** The character token of a seat: the chain's, or the one I am setting up in it. */
@@ -1079,7 +1127,7 @@ export class GameScene extends Phaser.Scene {
         t.setDelay(this, 0, this.arrMask);
         t.setGun(this, null, this.arrMask);
         t.setEndurance(this, MAX_ENDURANCE, this.arrMask);
-        t.setTargetAim(this, 0, this.arrMask);
+        t.setTargetAims(this, [], this.arrMask);
       }
     }
     this.tokens = [];
@@ -1121,21 +1169,21 @@ export class GameScene extends Phaser.Scene {
         this.hideAimZone();
       });
       const token = new CharacterToken(charKey, img, hl, CharacterToken.depthFor(i));
-      // The AIM marker on this token belongs to the opponent: the line runs from the aimer to here.
-      token.onAimHover = (over) => (over ? this.showAimLine(this.gunCentre(1 - i), this.tokenCentre(i)) : this.hideAimLine());
+      // An AIM marker on this token belongs to another character: the line runs from that aimer to here.
+      token.onAimHover = (aimer, over) => (over ? this.showAimLine(this.gunCentre(aimer), this.tokenCentre(i)) : this.hideAimLine());
       // The gun of an aiming character: the line runs from the aimer to its target.
       token.onGunHover = (over) => {
         const chars = this.displayChars();
         const c = chars[i];
         if (!over || !c || c.aim <= 0) return this.hideAimLine();
-        const target = this.aimOnToken(chars, i) ? this.tokenCentre(1 - i) : this.hexCentre(c.aimHex);
+        const target = this.aimOnToken(chars, i) ? this.tokenCentre(c.aimAt) : this.hexCentre(c.aimHex);
         this.showAimLine(this.gunCentre(i), target);
       };
       token.setOverlay(this, overlayKey(c), this.arrMask);
       token.setDelay(this, c.delay, this.arrMask);
       token.setGun(this, gunInHand(c.guns), this.arrMask, false); // built in place: no entrance
       token.setEndurance(this, c.endurance, this.arrMask, false);
-      token.setTargetAim(this, this.incomingAim(chars, i), this.arrMask);
+      token.setTargetAims(this, this.aimersOn(chars, i), this.arrMask);
       token.setStatus(c.status);
       this.tokens.push(token);
     });
@@ -1158,7 +1206,7 @@ export class GameScene extends Phaser.Scene {
       t.setDelay(this, c.delay, this.arrMask);
       t.setGun(this, gunInHand(c.guns), this.arrMask);
       t.setEndurance(this, c.endurance, this.arrMask);
-      t.setTargetAim(this, this.incomingAim(chars, i), this.arrMask);
+      t.setTargetAims(this, this.aimersOn(chars, i), this.arrMask);
       t.setStatus(c.status);
       // Standing on an obstacle raises the character (36.5): drawn a bit bigger.
       t.setLift(this.tweens, BOARD_A.obstacle(c.hex) ? OBSTACLE_LIFT : 1, animate ? 450 : 0);
@@ -1291,12 +1339,12 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  /** The resting highlight of a token: a white ring on my character, none on the others. */
+  /** The resting highlight of a token: a white ring on my character, a ring in its seat's colour on the others. */
   private applyTokenHighlight(i: number) {
     const t = this.tokens[i];
     if (!t) return;
     if (i === this.myIndex) t.setHighlight(0xffffff, this.mode === "select" || this.mode === "setup" ? 0.9 : 0.4);
-    else t.setHighlight(GOLD, 0);
+    else t.setHighlight(seatColorNum(i), 0.9);
   }
 
   private refreshView() {
@@ -1326,10 +1374,11 @@ export class GameScene extends Phaser.Scene {
       case "submitting":
         return "Signing your plan…";
       case "waiting": {
-        if (view.phase === "waiting") return "Waiting for a second player…";
+        if (view.phase === "waiting") return `Waiting for players (${seatsTaken(view)})…`;
         const me = this.myIndex >= 0 ? view.players[this.myIndex] : null;
-        if (me && me.delay >= MAX_ACTION_POINTS) return `Too much delay to act this turn (${me.delay}): you pass, waiting for the opponent…`;
-        return "Plan sent, waiting for the opponent…";
+        const pending = this.pendingNames();
+        if (me && me.delay >= MAX_ACTION_POINTS) return `Too much delay to act this turn (${me.delay}): you pass, waiting for ${pending}…`;
+        return `Plan sent, waiting for ${pending}…`;
       }
       case "playback": {
         const pb = this.playback;
@@ -1344,6 +1393,12 @@ export class GameScene extends Phaser.Scene {
       case "ended":
         return this.overLine();
     }
+  }
+
+  /** The characters whose plan the turn still waits for, "the others" when there are none to name. */
+  private pendingNames(): string {
+    const names = (this.view?.players ?? []).filter((p, i) => i !== this.myIndex && p.addr && p.status === "alive" && !p.submitted).map((p) => charName(p.char));
+    return names.join(", ") || "the others";
   }
 
   /** How the game ended: the reason, the winner and the victory points. */
@@ -1411,6 +1466,7 @@ export class GameScene extends Phaser.Scene {
     const charKey = this.charOf(seat);
     return {
       seat,
+      color: seatColor(seat),
       name: charName(charKey),
       charKey,
       you: seat === this.myIndex,
@@ -1444,7 +1500,7 @@ export class GameScene extends Phaser.Scene {
       title: view
         ? `Game ${view.id} · Turn ${view.turn} of ${view.maxTurns}`
         : calling
-          ? `New showdown · ${calling.turns} turns · ${formatDuration(calling.timeoutMinutes * 60)} per turn`
+          ? `New showdown · ${calling.seats} players · ${calling.turns} turns · ${formatDuration(calling.timeoutMinutes * 60)} per turn`
           : `Game ${this.gameID}`,
       status: view || this.mode === "setup" ? this.statusLine() : "Loading…",
       statusTone: tone,
@@ -1468,6 +1524,7 @@ export class GameScene extends Phaser.Scene {
         return {
           name: names[seat],
           charKey: p.char,
+          color: seatColor(seat),
           cells: cells.map((c) => ({ fill: c.fill, exec: c.exec, label: c.fill === "delay" ? "delay" : c.action >= 0 ? shortAction(entries[c.action]) : "" })),
         };
       });
@@ -1525,7 +1582,7 @@ export class GameScene extends Phaser.Scene {
   /** The header's right end: the RPC error, else who sits in each seat (me by my character, a seat I am setting up in included). */
   private headerRight(): string {
     if (this.netError) return `RPC offline: ${this.netError}`;
-    const seats = this.view ? this.view.players.length : this.setup ? 2 : 0;
+    const seats = this.view ? this.view.players.length : this.setup?.req.kind === "create" ? this.setup.req.seats : 0;
     const labels: string[] = [];
     for (let i = 0; i < seats; i++) {
       const p = this.view?.players[i];
@@ -1567,7 +1624,7 @@ export class GameScene extends Phaser.Scene {
     const lines = (plan: PlanEntry[]) => plan.map((e) => ({ name: getActionDef(e).name, detail: planDetail(e, names), cost: getActionDef(e).cost }));
     const replay = { id: "replay", label: "Replay", tone: "plain" as const, disabled: !view.lastTurn };
     const me = this.myIndex >= 0 ? view.players[this.myIndex] : null;
-    const opponents = view.players.filter((p, i) => i !== this.myIndex && p.addr).map((p) => charName(p.char)).join(", ") || "your opponent";
+    const pending = this.pendingNames();
 
     if (this.mode === "select" && this.outOfTime()) {
       const sentBy = view.players.filter((p, i) => i !== this.myIndex && p.addr && p.submitted).map((p) => charName(p.char));
@@ -1577,7 +1634,7 @@ export class GameScene extends Phaser.Scene {
         lines: [],
         empty: "Your plan did not come in time: the turn takes no more plans.",
         note: sentBy.length
-          ? `${sentBy.join(", ")} sent a plan: closing the showdown makes you lose it.`
+          ? `${sentBy.join(", ")} sent a plan: closing the showdown puts you out of the fight${view.players.length > 2 ? "; the others fight on" : ""}.`
           : "Nobody sent a plan: the showdown ends without a winner once closed.",
         warn: true,
         buttons: [{ id: "claim", label: "Close the showdown", tone: sentBy.length ? "danger" : "primary" }, replay, lobby],
@@ -1612,14 +1669,15 @@ export class GameScene extends Phaser.Scene {
       };
     }
     if (this.mode === "waiting" && view.phase === "waiting") {
+      const left = view.players.length - view.players.filter((p) => p.addr).length;
       return {
-        title: "Waiting for a player",
-        points: "",
+        title: "Waiting for players",
+        points: seatsTaken(view),
         lines: [],
-        empty: "Your showdown is open: it starts when a second player joins.",
-        note: "",
+        empty: `The showdown is open: it starts once ${left > 1 ? `${left} more players join` : "one more player joins"}.`,
+        note: this.myIndex === 0 ? "" : "Only the player who called the showdown can cancel it.",
         warn: false,
-        buttons: [{ id: "cancel", label: "Cancel the showdown", tone: "danger" }, lobby],
+        buttons: [...(this.myIndex === 0 ? [{ id: "cancel", label: "Cancel the showdown", tone: "danger" as const }] : []), lobby],
       };
     }
     if (this.mode === "waiting") {
@@ -1633,8 +1691,8 @@ export class GameScene extends Phaser.Scene {
       const due = view.timeoutAt > 0 && Date.now() / 1000 > view.timeoutAt;
       const passed = me && me.delay >= MAX_ACTION_POINTS;
       const note = due
-        ? `Out of time for ${opponents}: you may claim the showdown.`
-        : `Waiting for ${opponents}. ${view.timeoutAt > 0 ? `After ${new Date(view.timeoutAt * 1000).toLocaleString()}, you may claim the showdown.` : ""}`;
+        ? `Out of time for ${pending}: you may claim the showdown.`
+        : `Waiting for ${pending}. ${view.timeoutAt > 0 ? `After ${new Date(view.timeoutAt * 1000).toLocaleString()}, you may claim the showdown.` : ""}`;
       return {
         title: "Your plan",
         points: "sent",
@@ -1783,6 +1841,8 @@ export class GameScene extends Phaser.Scene {
       ground: this.displayGround().filter((g) => g.hex === c.hex),
       aim: c.aim,
       aimHex: c.aimHex,
+      aimTarget: c.aim > 0 && c.aimAt >= 0 ? charName(this.charOf(c.aimAt)) : "",
+      aimedBy: this.aimersOn(this.displayChars(), seat).map((a) => `${charName(this.charOf(a.seat))} ${a.n}`),
       endurance: c.endurance,
       serious: c.serious,
       gunArm: c.gunArm,
@@ -2049,7 +2109,7 @@ export class GameScene extends Phaser.Scene {
     try {
       if (setup.req.kind === "create") {
         const chain = this.chain;
-        const r = await chain.realm.createGame(setup.req.charKey, setup.req.turns, setup.req.timeoutMinutes, setup.hex, setup.facing);
+        const r = await chain.realm.createGame(setup.req.seats, setup.req.turns, setup.req.timeoutMinutes, setup.hex, setup.facing);
         // The tx result was not indexed in time: the game is the newest of ours.
         const id = r.gameID ?? (await chain.realm.listGames(chain.wallet.address)).mine[0]?.id ?? null;
         if (!this.scene.isActive()) return;
@@ -2060,7 +2120,7 @@ export class GameScene extends Phaser.Scene {
         }
         this.scene.restart({ gameID: id });
       } else {
-        await this.chain.realm.joinGame(this.gameID, setup.req.charKey, setup.hex, setup.facing);
+        await this.chain.realm.joinGame(this.gameID, setup.hex, setup.facing);
         if (!this.scene.isActive()) return;
         this.endSetup();
         this.mode = "sync";
@@ -2158,8 +2218,8 @@ export class GameScene extends Phaser.Scene {
     // When shooting, the chance of hitting each hex.
     const shooting = this.pendingOpts.get(card) === "shoot";
     const cardAimTime = getActionDef({ card, side }).name === "Shoot" ? SHOOT_AIM_TIME : COCK_AIM_SHOOT_AIM_TIME;
-    const opp = chars[1 - this.myIndex];
-    const markersHex = me.aimHex || (opp?.hex ?? "");
+    // Where my AIM markers sit: on the character they follow, or on a hex.
+    const markersHex = me.aim > 0 && me.aimAt >= 0 ? (chars[me.aimAt]?.hex ?? "") : me.aimHex;
     const fontPx = Math.round(Phaser.Math.Clamp(r * 0.62, 10, 22));
     for (const hex of BOARD_A.aimZone(me.hex, me.facing)) {
       const { sx, sy } = this.hexToScreen(hex);
@@ -2257,7 +2317,7 @@ export class GameScene extends Phaser.Scene {
     this.renderView();
   }
 
-  /** Draws the AIM markers on aimed hexes; markers following the opponent ride on its token (setTargetAim). */
+  /** Draws the AIM markers on aimed hexes; markers following a character ride on its token (setTargetAims). */
   private refreshAimMarkers(chars: CharView[]) {
     for (const o of this.aimMarkers.values()) o.destroy();
     this.aimMarkers = new Map();
@@ -2272,14 +2332,14 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  /** Drifts seat's AIM marker up and fades it away, wherever it sits. */
+  /** Drifts seat's AIM marker up and fades it away, wherever it sits: on a hex, or on the token it follows. */
   private fadeAim(seat: number, duration: number) {
     const marker = this.aimMarkers.get(seat);
     if (marker) {
       this.tweens.add({ targets: marker, y: marker.y - this.tokenDiameter() * 0.5, alpha: 0, duration, ease: "Cubic.easeIn" });
       return;
     }
-    this.tokens[1 - seat]?.fadeAim(this.tweens, duration);
+    for (const t of this.tokens) t?.fadeAim(seat, this.tweens, duration);
   }
 
   /** Zooms seat's AIM marker in and out once, wherever it sits. */
@@ -2290,7 +2350,7 @@ export class GameScene extends Phaser.Scene {
       this.tweens.add({ targets: marker, scaleX: scaleX * 1.35, scaleY: scaleY * 1.35, duration: 170, yoyo: true, ease: "Quad.easeOut" });
       return;
     }
-    this.tokens[1 - seat]?.pulseAim(this.tweens);
+    for (const t of this.tokens) t?.pulseAim(seat, this.tweens);
   }
 
   /**
@@ -2493,15 +2553,15 @@ export class GameScene extends Phaser.Scene {
     if (this.aimLineEnds) this.drawAimLine(time);
   }
 
-  /** Whether seat i's AIM markers ride on the opponent's token (an aim at the character, no hex). */
+  /** Whether seat i's AIM markers ride on another character's token (an aim at the character, no hex). */
   private aimOnToken(chars: CharView[], i: number): boolean {
     const c = chars[i];
-    return !!c && c.aim > 0 && !c.aimHex && !!chars[1 - i];
+    return !!c && c.aim > 0 && c.aimAt >= 0 && c.aimAt !== i && !!chars[c.aimAt];
   }
 
-  /** The AIM points the opponent of seat i holds on seat i's token (markers that ride on it). */
-  private incomingAim(chars: CharView[], i: number): number {
-    return this.aimOnToken(chars, 1 - i) ? chars[1 - i].aim : 0;
+  /** The AIM points held on seat i's token, by the seats whose markers ride on it, in seat order. */
+  private aimersOn(chars: CharView[], i: number): { seat: number; n: number }[] {
+    return chars.flatMap((c, q) => (c && this.aimOnToken(chars, q) && c.aimAt === i ? [{ seat: q, n: c.aim }] : []));
   }
 
   /**
@@ -2607,7 +2667,7 @@ export class GameScene extends Phaser.Scene {
     const seat = this.myIndex;
     const chars = this.displayChars();
     const from = this.gunCentre(seat);
-    const target = this.aimOnToken(chars, seat) ? this.tokenCentre(1 - seat) : this.hexCentre(chars[seat].aimHex);
+    const target = this.aimOnToken(chars, seat) ? this.tokenCentre(chars[seat].aimAt) : this.hexCentre(chars[seat].aimHex);
     this.showAimLine(from, target);
     this.pulseAim(seat);
     this.time.delayedCall(320, () => this.hideAimLine());

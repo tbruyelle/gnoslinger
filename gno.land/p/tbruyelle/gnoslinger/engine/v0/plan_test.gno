@@ -73,7 +73,7 @@ func TestParsePlanRejects(t *testing.T) {
 		"1f,", ",1f", "1f,,2f", "1f, 2f", " 1f", "1f ",
 		"1f:ahead:ahead", "9f:1", "9f:0:0", "9f:-1:0", "9f:ahead", "1f:0", "9f:1:3", "9f:1:x", "9f:1:0:0", "9f:g0:0", "9f:gx:0", "9f:g:0", "9f:g1",
 		"5f", "5f:nothing", "5f:ahead", "5f:fire", "7f:aim", "7f:cock", "7f:ahead", "6f:1:0", "1f:shoot",
-		"5f:aim", "5f:aim:", "5f:aim:a-f6", "5f:aim:A-F6:x", "5f:cock:A-F6", "5f:aim:@2", "5f:aim:@-1", "5f:aim:@x", "5f:aim:@", "7f:shoot", "5f:shoot", "7f:shoot:", "7f:shoot:@2",
+		"5f:aim", "5f:aim:", "5f:aim:a-f6", "5f:aim:A-F6:x", "5f:cock:A-F6", "5f:aim:@4", "5f:aim:@-1", "5f:aim:@x", "5f:aim:@", "7f:shoot", "5f:shoot", "7f:shoot:", "7f:shoot:@4",
 		strings.Repeat("1f,", 60),
 	} {
 		if p, err := ParsePlan(s); err == nil {

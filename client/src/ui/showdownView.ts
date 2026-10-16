@@ -59,6 +59,8 @@ export interface GunLine {
 /** A character as the side panels show it. */
 export interface CharPanel {
   seat: number;
+  /** The seat's colour (ui/seats.ts), the panel's rule. */
+  color: string;
   name: string;
   charKey: string;
   you: boolean;
@@ -107,6 +109,8 @@ export interface Button {
 export interface TimelineRow {
   name: string;
   charKey: string;
+  /** The seat's colour, as a dot before the name. */
+  color: string;
   /** exec: the action executes on this segment (the others with it prepare it). */
   cells: { fill: SegFill; label: string; exec: boolean }[];
 }
@@ -264,12 +268,17 @@ const CSS = `
 .gv-side.later em{background:#8A7A66}
 .gv-preview{position:fixed;z-index:310;pointer-events:none;border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.6)}
 .gv-rp{display:flex;gap:16px 24px;align-items:stretch;height:100%}
-.gv-tl{flex:999 1 520px;min-width:0;display:grid;grid-template-columns:9rem repeat(5,minmax(0,1fr));gap:8px 9px;align-items:center;align-content:center}
+.gv-tl{--cell:54px;flex:999 1 520px;min-width:0;display:grid;grid-template-columns:9rem repeat(5,minmax(0,1fr));gap:8px 9px;align-items:center;align-content:center}
+.gv-tl.compact{--cell:34px;gap:5px 9px}
+.gv-tl.compact .gv-cell{font-size:14px}
+.gv-tl.compact .gv-rowname{font-size:15px}
+.gv-tl.compact .gv-rowname img{width:28px;height:28px}
+.gv-dot{width:10px;height:10px;flex-shrink:0;border-radius:50%;border:2px solid #F3E7CE}
 .gv-head{min-height:44px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:2px;background:transparent;border:0;color:#F3E7CE;font-family:Rye,Georgia,serif;font-size:18px;cursor:pointer}
 .gv-head:hover{color:#F2B544}
 .gv-rowname{display:flex;align-items:center;gap:9px;font-size:17px;font-weight:700;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .gv-rowname img{width:36px;height:36px;flex-shrink:0}
-.gv-cell{height:54px;border:2px solid #5A4636;border-radius:9px;display:flex;align-items:center;justify-content:center;padding:0 6px;font-size:16px;font-weight:700;color:#F3E7CE;text-align:center;line-height:1.1;overflow:hidden}
+.gv-cell{height:var(--cell);border:2px solid #5A4636;border-radius:9px;display:flex;align-items:center;justify-content:center;padding:0 6px;font-size:16px;font-weight:700;color:#F3E7CE;text-align:center;line-height:1.1;overflow:hidden}
 .gv-cell.action{background:#4F7A3A;border-color:#F3E7CE}
 .gv-cell.prep{background:#B7D3A3;color:#2A1C14;border-color:#F3E7CE;font-weight:500;font-style:italic}
 .gv-cell.delay{background:#B5482A;border-color:#F3E7CE}
@@ -382,9 +391,9 @@ export class ShowdownView {
       this.right.innerHTML = this.logHtml(m);
       this.bottom.innerHTML = this.replayHtml(m);
     } else {
-      // My plan goes with my character and the segment tracker; the other characters fill the right.
+      // My plan goes with my character and the segment tracker; the other characters fill the right, compact when they are several.
       this.left.innerHTML = m.left.map((c) => this.charHtml(c, false)).join("") + this.planHtml(m);
-      this.right.innerHTML = m.others.map((c) => this.charHtml(c, false)).join("");
+      this.right.innerHTML = m.others.map((c) => this.charHtml(c, m.others.length > 1)).join("");
       this.bottom.innerHTML = this.handHtml(m);
     }
   }
@@ -420,7 +429,7 @@ export class ShowdownView {
       : `<div class="gv-end"><div class="gv-endrow"><span>Endurance</span><span>${c.endurance} / ${c.maxEndurance}</span></div><div class="gv-boxes">${boxes}</div></div>` +
         `<div class="gv-stats"><div${c.delay ? ' class="hot"' : ""}><b>${c.delay}</b><small>DELAY</small></div><div><b>${c.aim}</b><small>AIM</small></div><div><b>${c.wounds}</b><small>WOUNDS</small></div></div>` +
         guns;
-    const rule = c.you ? "#33307F" : "#8E2F1A";
+    const rule = c.color;
     return (
       `<button type="button" class="gv-panel gv-char${small ? " gv-small" : ""}${c.out ? " out" : ""}" style="--rule:${rule}" data-act="sheet" data-seat="${c.seat}" aria-label="${esc(c.name)}: open the character sheet">` +
       `<div class="gv-who">${tokenImg(c.charKey)}<div class="gv-who-txt">${c.you ? '<span class="gv-kicker">YOUR CHARACTER</span>' : ""}` +
@@ -501,13 +510,13 @@ export class ShowdownView {
     const rows = r.rows
       .map(
         (row) =>
-          `<span class="gv-rowname">${tokenImg(row.charKey)}${esc(row.name)}</span>` +
+          `<span class="gv-rowname"><i class="gv-dot" style="background:${esc(row.color)}"></i>${tokenImg(row.charKey)}${esc(row.name)}</span>` +
           row.cells.map((c, i) => `<div class="gv-cell ${c.fill}${c.fill === "action" && !c.exec ? " prep" : ""}${i + 1 === r.seg ? " now" : ""}">${esc(c.label)}</div>`).join(""),
       )
       .join("");
     const dis = (on: boolean) => (on ? "" : " disabled");
     return (
-      `<div class="gv-rp"><div class="gv-tl"><span></span>${heads}${rows}</div>` +
+      `<div class="gv-rp"><div class="gv-tl${r.rows.length > 2 ? " compact" : ""}"><span></span>${heads}${rows}</div>` +
       '<div class="gv-ctl"><div class="gv-ctl-row">' +
       `<button type="button" class="gv-ghost" data-act="btn" data-id="prevTurn"${dis(r.prevTurn)}>◀ Turn</button>` +
       `<span class="gv-turn" aria-label="Turn ${esc(r.turnLabel)}">${esc(r.turnLabel)}</span>` +

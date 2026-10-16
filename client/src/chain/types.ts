@@ -9,6 +9,10 @@ export type EventKind =
 /** Seg of the events recorded after segment 5 (cancels, passing out, the serious-wound check, victory points); turn-start events have seg 0. */
 export const END_OF_TURN_SEG = 6;
 
+/** The seats a game may have (the realm's engine.MinPlayers and MaxPlayers). */
+export const MIN_SEATS = 2;
+export const MAX_SEATS = 4;
+
 export interface PlayerView {
   addr: string;
   /** Registered name (namereg, in gno.land/r/sys/users), "" if none. */
@@ -26,8 +30,9 @@ export interface PlayerView {
   playedRun: boolean;
   /** A Run was played on the previous turn: required to Sprint (rule 9.23). */
   ranLastTurn: boolean;
-  /** AIM points (0-8) and the hex the markers sit on, "" when they are on the opponent and follow it. */
+  /** AIM points (0-8); the seat the markers follow (-1 when they sit on a hex, or without aim), and the hex they sit on ("" when they follow a seat). */
   aim: number;
+  aimAt: number;
   aimHex: string;
   /** Endurance boxes left (20 at the start); wounds and fatigue cross them off. */
   endurance: number;
@@ -40,7 +45,7 @@ export interface PlayerView {
 }
 
 /** Wound and aim fields shared by the live view and the turn-start snapshots. */
-export type WoundFields = Pick<PlayerView, "aim" | "aimHex" | "endurance" | "serious" | "gunArm" | "otherArm" | "leg">;
+export type WoundFields = Pick<PlayerView, "aim" | "aimAt" | "aimHex" | "endurance" | "serious" | "gunArm" | "otherArm" | "leg">;
 
 /** A weapon lying in a hex; id is its ground id, "g<id>" in a plan. */
 export interface GroundGunView {
@@ -84,7 +89,7 @@ export interface TurnEvent {
   result: string;
   /** Endurance boxes crossed off by a wound or fatigue card. */
   endurance: number;
-  /** Seat shot at, for shots. */
+  /** Seat shot at (whoever stood in the hex named, for a shot at a hex) or aimed at, -1 for a hex. */
   target: number;
   /** Final hit location of a shot ("-" for a miss). */
   hit: string;
@@ -127,7 +132,7 @@ export interface TurnResult {
   cards: number[];
   plans: string[];
   events: TurnEvent[];
-  /** State of both seats at the start of the turn. */
+  /** State of every seat at the start of the turn. */
   start: StartChar[];
 }
 
@@ -149,6 +154,7 @@ export interface GameView {
   /** Inactivity, in seconds, after which anyone may claim the timeout. */
   timeout: number;
   board: string;
+  /** One entry per seat (2 to 4), in the order the players joined; addr "" for a seat nobody took yet. */
   players: PlayerView[];
   /** Weapons lying on the board. */
   ground: GroundGunView[];
@@ -189,9 +195,8 @@ export interface GameSummary {
   vp?: number[];
   createdAt: number;
   updatedAt: number;
-  /** submitted: the seat's plan for the turn in progress is in. */
-  /** name: the registered name, "" if none. */
-  players: { addr: string; name?: string; char: string; submitted?: boolean }[];
+  /** One entry per seat, addr "" for a seat nobody took yet; submitted: the seat's plan for the turn in progress is in; name: the registered name, "" if none; status: alive, out, killed or passed_out. */
+  players: { addr: string; name?: string; char: string; status?: PlayerStatus; submitted?: boolean }[];
 }
 
 export interface GamesView {
@@ -228,7 +233,7 @@ export function parseGameView(json: string): GameView {
   if (!isRecord(v)) bad("not an object");
   if (typeof v.id !== "string" || typeof v.rev !== "number" || typeof v.turn !== "number") bad("header");
   if (v.phase !== "waiting" && v.phase !== "planning" && v.phase !== "finished") bad("phase");
-  if (!Array.isArray(v.players) || v.players.length !== 2) bad("players");
+  if (!Array.isArray(v.players) || v.players.length < MIN_SEATS || v.players.length > MAX_SEATS) bad("players");
   v.players.forEach(checkPlayer);
   if (v.lastTurn !== null) {
     if (!isRecord(v.lastTurn) || !Array.isArray(v.lastTurn.events)) bad("lastTurn");

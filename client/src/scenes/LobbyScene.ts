@@ -10,7 +10,7 @@ import { SOUND_FILES, SOUND_VOLUME, soundKey } from "../game/sounds";
 import { LobbyView, PLAYERS_PAGE, type LobbyDialog } from "../ui/lobbyView";
 import { showToast } from "../ui/toast";
 import { installWalletNotices } from "../ui/walletNotices";
-import { SETUPS, opponentOf } from "../game/setup";
+import { MAX_PLAYERS, MIN_PLAYERS, SETUPS, nextSeat, seatChar } from "../game/setup";
 import type { SetupRequest } from "./GameScene";
 
 /** All character tokens, for the picker that will come back later. */
@@ -28,10 +28,13 @@ const DEFAULT_TIMEOUT_INDEX = 3;
 /** Game lengths offered for a new game (the realm takes 10 to 30). */
 const TURN_OPTIONS = [10, 15, 20, 25, 30];
 const DEFAULT_TURNS = 20;
+/** Seats offered for a new game: 2 to as many characters as the showdown has. */
+const SEAT_OPTIONS = Array.from({ length: MAX_PLAYERS - MIN_PLAYERS + 1 }, (_, i) => MIN_PLAYERS + i);
+const DEFAULT_SEATS = MIN_PLAYERS;
 /** Players shown in the lobby's top players panel. */
 const TOP_PLAYERS = 5;
 
-/** The character a creator plays until players can pick their own: the showdown's first side (the joiner gets the other, game/setup.ts). */
+/** The character a creator plays: the showdown's first seat's (the players joining take the next ones in order, game/setup.ts). */
 export const CREATOR_CHAR = SETUPS[0].char;
 
 const SUBTITLE = "showdowns on the gno.land chain";
@@ -51,7 +54,7 @@ const SPLASH_RED = 0xb5482a;
 const SPLASH_DARK_RED = 0x8e2f1a;
 const RYE = "Rye, Georgia, serif";
 const ZILLA = "'Zilla Slab', Rockwell, Georgia, serif";
-const SPLASH_LINE = "Two gunfighters, five segments a turn, one hand of cards. Every turn is settled on chain.";
+const SPLASH_LINE = "Gunfighters, five segments a turn, one hand of cards. Every turn is settled on chain.";
 /** Room the lines under the cover need: tagline, the line on the game, the button, and a gap above the credit. */
 const SPLASH_BELOW_COVER = 215;
 /** Western music played once on entering the lobby (not on the splash), loaded on demand. */
@@ -88,6 +91,7 @@ export class LobbyScene extends Phaser.Scene {
   /** Bumped by each dialog request, so a late answer cannot replace a newer dialog. */
   private dialogSeq = 0;
   private balance: string | null = null;
+  private seats = DEFAULT_SEATS;
   private turns = DEFAULT_TURNS;
   private timeoutIndex = DEFAULT_TIMEOUT_INDEX;
   /** The lobby screen, an HTML overlay (the splash stays on the canvas). */
@@ -127,14 +131,16 @@ export class LobbyScene extends Phaser.Scene {
       open: (id) => this.scene.start("GameScene", { gameID: id }),
       // Calling and joining go through the board first, where the player takes position (GameScene's set up).
       join: (id) => {
-        // The joiner plays the character of the showdown the creator did not take.
-        const creator = this.games?.open.find((g) => g.id === id)?.players[0]?.char ?? CREATOR_CHAR;
-        this.scene.start("GameScene", { gameID: id, setup: { kind: "join", charKey: opponentOf(creator) } satisfies SetupRequest });
+        // The joiner takes the next free seat, playing its character (the board checks again against the chain).
+        const players = this.games?.open.find((g) => g.id === id)?.players ?? [];
+        const seat = Math.max(0, nextSeat(players));
+        this.scene.start("GameScene", { gameID: id, setup: { kind: "join", seat, charKey: seatChar(seat) } satisfies SetupRequest });
       },
       create: () =>
         this.scene.start("GameScene", {
-          setup: { kind: "create", charKey: CREATOR_CHAR, turns: this.turns, timeoutMinutes: TIMEOUT_OPTIONS[this.timeoutIndex].minutes } satisfies SetupRequest,
+          setup: { kind: "create", charKey: CREATOR_CHAR, seats: this.seats, turns: this.turns, timeoutMinutes: TIMEOUT_OPTIONS[this.timeoutIndex].minutes } satisfies SetupRequest,
         }),
+      setSeats: (seats) => (this.seats = seats),
       setTurns: (turns) => (this.turns = turns),
       setTimeout: (index) => (this.timeoutIndex = index),
       openProfile: (addr, fromPage) => void this.openProfile(addr, fromPage),
@@ -342,6 +348,8 @@ export class LobbyScene extends Phaser.Scene {
       locked: walletLocked(),
       games: this.games,
       creatorChar: CREATOR_CHAR,
+      seats: this.seats,
+      seatOptions: SEAT_OPTIONS,
       turns: this.turns,
       turnOptions: TURN_OPTIONS,
       timeoutIndex: this.timeoutIndex,

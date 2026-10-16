@@ -1,6 +1,7 @@
-// Package engine is the pure, deterministic rules engine of a 2-player
-// gunfight: plan parsing and validation, and the 5-segment resolution of a
-// turn. It has no chain dependency so it can be unit-tested with gno test.
+// Package engine is the pure, deterministic rules engine of a gunfight of
+// two to four characters: plan parsing and validation, and the 5-segment
+// resolution of a turn. It has no chain dependency so it can be unit-tested
+// with gno test.
 package engine
 
 import "gno.land/p/tbruyelle/gnoslinger/hex/v0"
@@ -14,8 +15,10 @@ const (
 	// actions, passing out, the end-of-showdown check); turn-start events
 	// (SERIOUS fatigue, aim lost on the first reveal) have Seg 0.
 	EndOfTurn = Segments + 1
-	// NumPlayers is the number of seats in a game.
-	NumPlayers = 2
+	// MinPlayers and MaxPlayers bound the seats of a game: the showdown's
+	// characters (Setups) fill the seats in order, each a side of its own.
+	MinPlayers = 2
+	MaxPlayers = 4
 )
 
 // Status is the participation state of a character.
@@ -53,6 +56,10 @@ const StartEndurance = 20
 // MaxAim is the most AIM points a character can hold on a target (12.3).
 const MaxAim = 8
 
+// NoSeat is the seat value for "nobody": AIM markers on a hex, a wound or a
+// death nobody inflicted.
+const NoSeat = -1
+
 // Character is the mutable state of one gunslinger.
 type Character struct {
 	Hex    string
@@ -71,9 +78,11 @@ type Character struct {
 	Dropped bool
 	// Guns carried (section 10).
 	Guns Guns
-	// Aim is the AIM points on the target (12.2) and AimHex where they sit:
-	// a hex, or "" when they are on the opponent and move along with it (12.3).
+	// Aim is the AIM points on the target (12.2). AimAt is the seat of the
+	// character the markers follow, wherever it goes (12.3), NoSeat when
+	// they sit on the hex AimHex. Both are meaningless while Aim is 0.
 	Aim    int
+	AimAt  int
 	AimHex string
 	// Endurance is the boxes left on the sheet (14.2); wound and fatigue
 	// cards cross them off.
@@ -87,6 +96,14 @@ type Character struct {
 	GunArm   int
 	OtherArm int
 	Leg      int
+	// Who did it, for the victory points (15.2, 15.3): the seat whose hit
+	// killed the character (NoSeat for none), the seat that gave the last
+	// SERIOUS and LEG wound (the fatigue those wounds cost later is put down
+	// to it), and the endurance boxes each seat's hits crossed off.
+	KilledBy  int
+	SeriousBy int
+	LegBy     int
+	Hurt      [MaxPlayers]int
 }
 
 // GroundGun is a weapon lying in a hex (10.21). ID identifies it on the
@@ -98,21 +115,76 @@ type GroundGun struct {
 	Gun Gun
 }
 
-// State is the whole game state the engine acts on.
+// State is the whole game state the engine acts on: one character per
+// seat, in seat order.
 type State struct {
-	Chars     [NumPlayers]Character
+	Chars     []Character
 	Ground    []GroundGun
 	GroundSeq int // last ground id handed out
 }
 
-// NewState is a showdown before anyone set up: both characters upright with
-// their starting guns and endurance, standing nowhere yet (Hex "") until
-// SetUp gives each its hex and facing ([H3], setup.gno).
-func NewState() State {
-	return State{Chars: [NumPlayers]Character{
-		{Guns: startingGuns(), Endurance: StartEndurance},
-		{Guns: startingGuns(), Endurance: StartEndurance},
-	}}
+// NewState is a showdown of n characters before anyone set up: each
+// upright with its starting guns and endurance, standing nowhere yet (Hex
+// "") until SetUp gives it its hex and facing ([H3], setup.gno).
+func NewState(n int) State {
+	chars := make([]Character, n)
+	for i := range chars {
+		chars[i] = newCharacter()
+	}
+	return State{Chars: chars}
+}
+
+// newCharacter is a character's sheet at the start of a showdown.
+func newCharacter() Character {
+	return Character{Guns: startingGuns(), Endurance: StartEndurance, AimAt: NoSeat, KilledBy: NoSeat, SeriousBy: NoSeat, LegBy: NoSeat}
+}
+
+// char is the character of a seat, nil for a seat the state does not have.
+func (s *State) char(seat int) *Character {
+	if seat < 0 || seat >= len(s.Chars) {
+		return nil
+	}
+	return &s.Chars[seat]
+}
+
+// CloneChars copies the characters field by field. A plain copy of the
+// slice is not enough on a node: a character written earlier in the same
+// transaction stays shared with the live state, so a turn's stored start
+// would show its end position.
+func CloneChars(cs []Character) []Character {
+	out := make([]Character, len(cs))
+	for i, c := range cs {
+		out[i] = Character{
+			Hex:         c.Hex,
+			Facing:      c.Facing,
+			Down:        c.Down,
+			Delay:       c.Delay,
+			Status:      c.Status,
+			PlayedFoot:  c.PlayedFoot,
+			PlayedRun:   c.PlayedRun,
+			RanLastTurn: c.RanLastTurn,
+			Dropped:     c.Dropped,
+			Aim:         c.Aim,
+			AimAt:       c.AimAt,
+			AimHex:      c.AimHex,
+			Endurance:   c.Endurance,
+			Exhausted:   c.Exhausted,
+			Serious:     c.Serious,
+			GunArm:      c.GunArm,
+			OtherArm:    c.OtherArm,
+			Leg:         c.Leg,
+			KilledBy:    c.KilledBy,
+			SeriousBy:   c.SeriousBy,
+			LegBy:       c.LegBy,
+		}
+		for j, g := range c.Guns {
+			out[i].Guns[j] = Gun{ID: g.ID, Type: g.Type, Location: g.Location, Cocked: g.Cocked, Shells: g.Shells, Jammed: g.Jammed, Exploded: g.Exploded}
+		}
+		for j, n := range c.Hurt {
+			out[i].Hurt[j] = n
+		}
+	}
+	return out
 }
 
 // Budget is the time points seat p may plan this turn: the carried delay
@@ -139,8 +211,9 @@ func AliveCount(s State) int {
 // EndTurn is the end-of-turn upkeep (rule 5.6): half of the delay points
 // are removed, rounded up, the per-turn flags are cleared, and a character
 // left with more delay than endurance for the second turn in a row passes
-// out (14.2; checked after the halving).
+// out (14.2; checked after the halving). The state given is left as it is.
 func EndTurn(s State) (State, []Event) {
+	s.Chars = CloneChars(s.Chars)
 	var evs []Event
 	for p := range s.Chars {
 		c := &s.Chars[p]
@@ -160,7 +233,7 @@ func EndTurn(s State) (State, []Event) {
 		if c.Exhausted >= 2 {
 			c.Status = PassedOut
 			c.Down = true
-			c.Aim = 0
+			clearAim(c)
 			evs = append(evs, Event{Seg: EndOfTurn, Player: p, Kind: EvPassOut, Down: true})
 			dropAllGuns(p, c, EndOfTurn, &s, &evs)
 		}
@@ -170,8 +243,10 @@ func EndTurn(s State) (State, []Event) {
 
 // EndShowdown is the end-of-game check (14.5): every character with SERIOUS
 // wounds draws a result card and is killed when its DELAY number plus the
-// wound points reaches four.
+// wound points reaches four; the enemy who gave the wound gets the kill
+// (15.2). The state given is left as it is.
 func EndShowdown(s State, d Drawer) (State, []Event) {
+	s.Chars = CloneChars(s.Chars)
 	var evs []Event
 	for p := range s.Chars {
 		c := &s.Chars[p]
@@ -185,14 +260,28 @@ func EndShowdown(s State, d Drawer) (State, []Event) {
 		}
 		evs = append(evs, Event{Seg: EndOfTurn, Player: p, Kind: EvSeriousCheck, Card: card.N, N: n + c.Serious})
 		if n+c.Serious >= 4 {
-			c.Status = Killed
-			c.Down = true
-			c.Aim = 0
-			c.Delay = 0
-			c.Endurance = 0
+			kill(c, c.SeriousBy)
 			evs = append(evs, Event{Seg: EndOfTurn, Player: p, Kind: EvWound, Result: string(Kill)})
 			dropAllGuns(p, c, EndOfTurn, &s, &evs)
 		}
 	}
 	return s, evs
+}
+
+// kill takes a character out of the game (14.6), killed by seat by (NoSeat
+// when nobody's hit did it): down, no delay marker, no endurance left.
+func kill(c *Character, by int) {
+	c.Status = Killed
+	c.Down = true
+	clearAim(c)
+	c.Delay = 0
+	c.Endurance = 0
+	c.KilledBy = by
+}
+
+// clearAim takes the AIM markers off the sheet.
+func clearAim(c *Character) {
+	c.Aim = 0
+	c.AimAt = NoSeat
+	c.AimHex = ""
 }

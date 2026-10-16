@@ -29,7 +29,7 @@ export function startOfTurn(t: TurnResult, fallback: CharView[]): CharView[] {
   if (!t.start || t.start.length === 0) return fallback.map(copyChar);
   return t.start.map((c) => ({
     hex: c.hex, facing: c.facing, down: c.down, delay: c.delay, status: c.status ?? "alive",
-    aim: c.aim ?? 0, aimHex: c.aimHex ?? "", endurance: c.endurance ?? 20, serious: c.serious ?? 0, gunArm: c.gunArm ?? 0, otherArm: c.otherArm ?? 0, leg: c.leg ?? 0,
+    aim: c.aim ?? 0, aimAt: c.aimAt ?? -1, aimHex: c.aimHex ?? "", endurance: c.endurance ?? 20, serious: c.serious ?? 0, gunArm: c.gunArm ?? 0, otherArm: c.otherArm ?? 0, leg: c.leg ?? 0,
     guns: (c.guns ?? []).map((g) => ({ ...g })),
   }));
 }
@@ -83,7 +83,11 @@ export function snapshotAfterSegment(start: CharView[], events: TurnEvent[], seg
           gun.cocked = false;
           gun.shells = Math.max(0, gun.shells - 1);
         }
-        if (e.kind === "shot") c.aimHex = "";
+        if (e.kind === "shot") {
+          // Revealing the shot moved the markers onto its target (12.5); the aim is spent right after (lose_aim).
+          c.aimAt = e.target;
+          c.aimHex = "";
+        }
         break;
       case "cock":
         if (gun) gun.cocked = true;
@@ -110,10 +114,12 @@ export function snapshotAfterSegment(start: CharView[], events: TurnEvent[], seg
         break;
       case "aim":
         c.aim = e.n;
+        c.aimAt = e.target;
         c.aimHex = e.target >= 0 ? "" : e.to;
         break;
       case "lose_aim":
         c.aim = 0;
+        c.aimAt = -1;
         c.aimHex = "";
         break;
       case "wound":
@@ -122,6 +128,8 @@ export function snapshotAfterSegment(start: CharView[], events: TurnEvent[], seg
             c.status = "killed";
             c.down = true;
             c.aim = 0;
+            c.aimAt = -1;
+            c.aimHex = "";
             c.delay = 0;
             c.endurance = 0;
             break;
@@ -143,6 +151,8 @@ export function snapshotAfterSegment(start: CharView[], events: TurnEvent[], seg
         c.status = "passed_out";
         c.down = true;
         c.aim = 0;
+        c.aimAt = -1;
+        c.aimHex = "";
         break;
     }
   }

@@ -11,8 +11,11 @@ The game runs **on the gno.land chain**: a Gno realm holds every game and
 resolves the turns; a Phaser web app is the interface and signs its
 transactions with the **Adena** wallet. There is no game server.
 
-Current milestone: **board A only, exactly 2 players, one character each**,
-each player picking where its character stands when calling or joining,
+Current milestone: **board A only, 2 to 4 players, one character each, every
+character a side of its own** (the creator picks the number of seats; the
+seats take the showdown's characters in the order the players join: the
+marshal, the kid, el jefe, axe), each player picking where its character
+stands when calling or joining,
 the foot actions (advance, back up, run, spin around, sprint, turn,
 leap/drop, get up/down) and the Colt 45 gun play (Draw & Cock,
 Cock/Aim/Shoot, Shoot, Load) with the full hit, wound and penalty rules, and
@@ -91,19 +94,25 @@ assets/                     served as the Vite public dir (boards, tokens, cards
 ## Realm
 
 ### Data
-`Game{ID, Players[2]{Addr, Char}, State engine.State, Turn, MaxTurns, Phase,
-Plans[2], Submitted[2], LastTurn *TurnResult, Winner, EndReason, Awards
-[]engine.Award, VP[2], Rev, CreatedAt, UpdatedAt}` stored in an `avl.Tree` by zero-padded `seqid`;
-`byPlayer` (address → ids) and `openGames` indexes. `Rev` is bumped on every
+`Game{ID, Players[]{Addr, Char}, State engine.State, Turn, MaxTurns, Phase,
+Plans[], Submitted[], LastTurn *TurnResult, Winner, EndReason, Awards
+[]engine.Award, VP[], Rev, CreatedAt, UpdatedAt}` stored in an `avl.Tree` by zero-padded `seqid`;
+`Players`, `Plans`, `Submitted` and `VP` have one entry per seat (2 to 4,
+`engine.MinPlayers`..`MaxPlayers`), the seats filling up in the order the
+players join (`Addr` "" while free; `seats`, `freeSeat`, `seated`,
+`allIn`); `State.Chars` is a slice of the same length.
+`byPlayer` (address → ids) and `openGames` (a seat is free) indexes. `Rev` is bumped on every
 change and is what clients poll. Every resolved turn is kept in `Turns`
-(`TurnResult{Turn, Plans, Seed, StartEnc, CardsEnc, EventsEnc}`, at most
+(`TurnResult{Turn, Plans[], Seed, StartEnc, CardsEnc, EventsEnc}`, at most
 MaxTurns; the start snapshot, the cards drawn and the events are stored in
 the engine's compact text encodings, `engine/v0/encode.gno`, read back
 through `Start()`, `Cards()`, `Events()`: as structs a turn cost over 17 KB
 of storage deposit, encoded about a tenth).
 
 ### Storage deposit
-Measured on gnodev on 2026-10-16 (storage price 100 ugnot/byte; gnokey
+Measured on gnodev on 2026-10-16, before the seats (two-player games; a
+game of 3 or 4 stores a character, a plan and a VP total more per seat,
+and its turns one more character snapshot each) (storage price 100 ugnot/byte; gnokey
 prints `STORAGE DELTA` and `STORAGE FEE` for each call), the same calls
 run on the code before and after the profiles moved to their own realm,
 each on a fresh node:
@@ -141,18 +150,22 @@ their cards) add a few hundred bytes. A 20-turn game is roughly 40–55 KB
 ### Set up
 Rule 3.4 and the SET UP of a showdown (`engine/v0/setup.gno`, [H3]): each
 character of the showdown has its own hexes to set up in and a default
-facing, `engine.Setups` (`CharSetup{Char, Hexes, Facing}`, `SetupOf`,
-`CanSetUp`, `ShowdownChars`): the **marshal** inside the corral in
-**G5-G9** looking NW, **the_kid** in **E5-E9** looking SE (showdown 1's
-line-up, two columns apart; a flat-top grid has no W or E). The creator
-sets up first, in any order of characters; the joiner must take the other
-one. A character with no entry is not in the showdown, so CreateGame and
-JoinGame refuse it. Each may face any direction. Nobody is alerted
-(29.21): both start upright with the loaded Colt 45 holstered
-(`engine.NewState` leaves the seats in no hex, `State.SetUp` places one).
-The empty seat of a waiting game has `"hex":""` in the JSON. The client
-mirrors the table in `game/setup.ts` (`SETUPS`, `setupZone`,
-`defaultFacing`, `opponentOf`).
+facing, `engine.Setups` (`CharSetup{Char, Hexes, Facing}`, one per seat in
+seat order; `SeatChar`, `SetupOf`, `CanSetUp`, `ShowdownChars`): seat 0 the
+**marshal** inside the corral in **G5-G9** looking NW, seat 1 **the_kid**
+in **E5-E9** looking SE (showdown 1's line-up, two columns apart; a
+flat-top grid has no W or E), seat 2 **el_jefe** in **I5-I9** looking NW,
+seat 3 **axe** in **C5-C9** looking SE (the same line-up carried on,
+each facing the middle; the rules' showdown 1 has no set up beyond two
+sides, so these two zones are this project's choice). The creator is seat
+0 and picks how many seats the game has (2 to 4); each player joining
+takes the first free seat and its character, so the characters are fixed
+by join order. Each may face any direction. Nobody is alerted (29.21):
+all start upright with the loaded Colt 45 holstered (`engine.NewState(n)`
+leaves the seats in no hex, `State.SetUp` places one). A free seat of a
+waiting game has `"addr":""` and `"hex":""` in the JSON. The client
+mirrors the table in `game/setup.ts` (`SETUPS`, `MIN_PLAYERS`,
+`MAX_PLAYERS`, `seatChar`, `nextSeat`, `setupZone`, `defaultFacing`).
 
 ### Profiles (`r/tbruyelle/gnoslinger/profiles/v0`)
 The profiles live in a realm of their own so that a new version of the game
@@ -181,16 +194,16 @@ v0 once its running games are over.
 ### Crossing functions (called with MsgCall, args are strings)
 | Function | Notes |
 |---|---|
-| `CreateGame(cur, charKey, maxTurns, timeoutMinutes, startHex, facing) string` | seat 0, a character of the showdown standing in one of its hexes (`startHex`) facing 0 N … 5 NW; 10 to 30 turns (the client sends 20); 0 timeout = 2 days (5 min to 30 days); phase `waiting` |
-| `JoinGame(cur, id, charKey, startHex, facing)` | seat 1, the character the creator did not take, in one of its hexes; phase `planning`; refused once the game's timeout has passed |
-| `CancelGame(cur, id)` | creator, while waiting; deletes the game (and its `byPlayer` entry) so the creator gets the CreateGame storage deposit back; the client returns to the lobby once the game view answers "game not found" |
-| `SubmitPlan(cur, id, plan) int` | refused once the turn's timeout has passed (`assertInTime`: the game can only be claimed then, so a late plan cannot win it by claiming right after); validates, stores; the **second** plan resolves the turn in the same tx; returns Rev. A player with 5 or more delay cannot play anything and is passed automatically (`autoPass`, event `PlanPassed`), so the other plan alone resolves the turn; with both passed, turns resolve by themselves until someone can act |
-| `Surrender(cur, id)` | rule 15.4, while the plans are collected (the start of a turn): the character is `Out`, the game ends and is scored (`surrender`) |
-| `ClaimTimeout(cur, id)` | anyone, after the game's timeout without progress (`time.Now()`, lazy: no timers on chain); waiting → `expired`, one plan in → `timeout` (the other is `Out`, scored as a surrender), none → `abandoned` (not scored) |
+| `CreateGame(cur, seats, maxTurns, timeoutMinutes, startHex, facing) string` | 2 to 4 seats; the caller in seat 0 as the showdown's first character (the marshal), standing in one of its hexes (`startHex`) facing 0 N … 5 NW; 10 to 30 turns (the client sends 20); 0 timeout = 2 days (5 min to 30 days); phase `waiting` |
+| `JoinGame(cur, id, startHex, facing)` | the first free seat and its character (the kid, then el jefe, then axe), in one of its hexes; the last seat taken starts the game (phase `planning`, `GamesPlayed` for every seat); refused once the game's timeout has passed, and to a player already seated |
+| `CancelGame(cur, id)` | creator, while a seat is free (players may have joined); deletes the game (and every seated player's `byPlayer` entry) so the creator gets the CreateGame storage deposit back; the client returns to the lobby once the game view answers "game not found" |
+| `SubmitPlan(cur, id, plan) int` | refused once the turn's timeout has passed (`assertInTime`: the game can only be claimed then, so a late plan cannot win it by claiming right after), and from a character out of the fight; validates (a target must be a seat of the game, not one's own), stores; the plan that completes the turn (one from each character still in the fight, `allIn`) resolves it in the same tx; returns Rev. A player with 5 or more delay cannot play anything and is passed automatically (`autoPass`, event `PlanPassed`); with everyone passed, turns resolve by themselves until someone can act |
+| `Surrender(cur, id)` | rule 15.4, while the plans are collected (the start of a turn): the character is `Out` (nobody can shoot it, it plays no more). With one character left in the fight the game ends and is scored (`surrender`); with more, the showdown goes on without it and the turn resolves if the others' plans are in |
+| `ClaimTimeout(cur, id)` | anyone, after the game's timeout without progress (`time.Now()`, lazy: no timers on chain); waiting → `expired`; no plan in → `abandoned` (not scored); otherwise the alive seats without a plan are `Out` (out of time counts as surrendering): one character left → `timeout`, scored; more → the turn resolves with the plans in and the showdown goes on (the clock restarts) |
 
 Errors are panics prefixed `gnoslinger: `; the client extracts them from the
 tx result log. Events: `GameCreated`, `PlayerJoined`, `PlanSubmitted`,
-`PlanPassed`, `TurnResolved`, `VictoryPoints` (`id seat player reason
+`PlanPassed`, `PlayerSurrendered`, `TurnResolved`, `VictoryPoints` (`id seat player reason
 points`, one per award, points < 0 for a loss), `GameEnded` (informational; there is no event subscription on
 the RPC, clients poll).
 
@@ -207,7 +220,9 @@ the address's name in `gno.land/r/sys/users`, where `r/sys/namereg`
 registers them, resolved when the JSON is built, "" if none; every player of
 `json/game`, `json/games` and `json/history` carries that `name` too, and
 `json/games/{addr}` the listed address's own: the client and the gnoweb pages
-show a player by name, else by address, `playerLabel`) return raw JSON through `vm/qrender`
+show a player by name, else by address, `playerLabel`; every seat's `aimAt`
+says which seat its AIM markers follow, -1 for a hex or no aim, and the
+summaries' players carry their `status`) return raw JSON through `vm/qrender`
 (`vm/qeval` would Go-quote the string). `Render("")`, `game/{id}`, `help` are
 gnoweb pages, and so is the profiles realm's `Render("")` (the top 50, the
 games scored). `GameJSON`, `GamesJSON`, `HistoryJSON`, `GameRev` are plain
@@ -227,8 +242,10 @@ fresh id on the new sheet, the first player winning a contested gun, 11.11), or 
 the option: Cock/Aim/Shoot `5f:cock|uncock`, `5f:aim:<target>` or
 `5f:shoot:<target>`, Shoot `7f:shoot:<target>` or a bare `7f` (does nothing,
 keeps the aim); a target is a hex of the aim zone (`A-F6`) or a character
-by seat (`@1`; the client turns a click on an occupied hex into this). A
-shot at a hex hits the character standing there when it comes up; with
+by seat (`@1`; the client turns a click on an occupied hex into this; the
+realm refuses a seat the game does not have, and one's own). A
+shot at a hex hits the character standing there when it comes up (the
+first alive one in seat order when two share it); with
 nobody there, or with that character out of sight (rule 31, below), it is
 held, like a Shoot doing nothing: no card, no shell, the gun stays cocked
 and the aim is kept (a `nothing` event, Reason `empty_hex`, or `no_los`
@@ -258,8 +275,10 @@ use the convention above. Tokens are drawn rotated by
 
 ### Resolution (engine.Resolve)
 For each segment 1–5 and each alive player, the next action executes once when
-`usedTime + cost + delay ≤ segment`, **shots first** (7.52), seat 0 before
-seat 1. Delay gained in a segment applies from the next one. Moving while
+`usedTime + cost + delay ≤ segment`, **shots first** (7.52), in seat
+order. `engine.Resolve(board, st, plans []Plan, d)` takes one plan per
+seat and leaves the state given as it is (`CloneChars`; so do `EndTurn`
+and `EndShowdown`). Delay gained in a segment applies from the next one. Moving while
 down costs 2 delay (crawl); Sprint goes straight ahead and draws a delay
 card; Leap/Drop draws two; ending a move in an occupied hex makes both
 characters draw one (rule 9.24); moving (crawling too) or staggering
@@ -302,7 +321,8 @@ fired (`broken`). Cock/Aim/Shoot cocks, uncocks, aims
 or shoots; Shoot shoots or does nothing. Aims and shots name a target the
 same way (11.31). **Aiming** puts 2 AIM points (max
 8) on the target named, a character (the markers then follow it wherever
-it goes, `Character.AimHex` is "") or a hex (`AimHex` holds it); the target
+it goes: `Character.AimAt` is its seat, `AimHex` "") or a hex (`AimHex`
+holds it, `AimAt` is `NoSeat`, -1); the target
 must be in the aim zone when the aim executes or the action is cancelled. The gun must be in a box it fires from
 (one-handed: gun hand or both hands) or the action is cancelled; a shot also
 needs it cocked and loaded. **Aim** is lost when revealing any action but a
@@ -391,26 +411,34 @@ points); the crawl penalty is a fixed +2 with `Card` 0. Tests use
 **Victory points** (rule 15, `engine/v0/victory.gno`), each character a
 side of its own, are scored at the end of every turn: `TurnVictoryPoints`
 compares the characters before the turn (the `start` snapshot) and after
-it: Killed −8 and the enemy Kill enemy +2; passing out 0 and the enemy Knock
-out enemy +1 when it lost endurance boxes (all crossed off by the enemy with
-two characters; a character down and out can no longer be hit, so a knock
-out is never followed by a kill). When the showdown ends with the turn,
+it: Killed −8 and Kill enemy +2 to the enemy whose hit killed it
+(`Character.KilledBy`, set by the killing shot, or for a SERIOUS death at
+the end by `SeriousBy`); passing out 0 and Knock out enemy +1 to the enemy
+who crossed off most of its endurance boxes (`Character.Hurt[seat]`: the
+boxes each seat's hits cost, wound and fatigue cards of STUN and LIGHT to
+the shooter, the fatigue of SERIOUS and LEG wounds to the seat that gave
+the wound, `SeriousBy`, `LegBy`; a tie goes to the first seat; a character
+down and out can no longer be hit, so a knock out is never followed by a
+kill). When the showdown ends with the turn,
 `EndVictoryPoints` follows: still up, Survive +2, and Hold the field +2 when
-the only one; Out (surrendered or out of time) Surrender −2 and the enemy's
-Knock out +1 as above; passed out or surrendered, Captured −4 when the enemy
+the only one; Out (surrendered or out of time) Surrender −2 and the
+Knock out +1 as above; passed out or surrendered, Captured −4 when an enemy
 holds the field (15.63). Those awards close the turn's log as `vp` events
 (`EvVP`, Seg 6, N = points, Reason = the award). `Surrender` and a
-`timeout` claim score `EndVictoryPoints` at once (no turn). No Ally killed,
+`timeout` claim that leave one character score `EndVictoryPoints` at once
+(no turn). No Ally killed,
 Run away, money bags or special rules. `Game.award` records each award
 (`Awards`, `VP` totals, a `VictoryPoints` event, the profile's total in
 the profiles realm);
-`finish` gives the win to the most points, equal points a draw. The game
+`finish` gives the win to the most points, a tie for the most a draw. The game
 JSON carries `vp` and `awards` (`{p, reason, points}`), the summaries `vp`.
 The client shows the `vp` events in the log of the turn (`describeEvent`),
-the result in the header ("Marshal wins 4 to −6 VP", `game/vp.ts`), a recap
+the result in the header ("Marshal wins 4 to −6 VP", with more seats
+"El Jefe wins: Marshal −6, The Kid −6, El Jefe 4 VP", `game/vp.ts`), a recap
 per player at the end of the final replay (`vpRecap`), and my VP on the
-lobby's finished line. With two characters a kill or a pass out ends the
-showdown, so for now the points all land on the last turn.
+lobby's finished line. With more than two characters the showdown goes on
+after a kill, a pass out or a surrender, so kills and knock outs land on
+their turn and the rest on the last one.
 
 ### Gno idioms in use (gno 0.9)
 `func F(cur realm, ...)`, caller = `cur.Previous().Address()`, other realm
@@ -472,19 +500,26 @@ short address, `playerLabel`); a click anywhere on it opens the whole
 ranking in a dialog, 20 a page (`PLAYERS_PAGE`), whose rows open a
 player's profile; my address in the top bar opens mine (rank, games
 played, victory points, since). `game/lobby.ts` sorts the games into
-  those sections from the `submitted` flag each player carries in
-  `json/games/{addr}`. **Call a showdown** and **Join** do not sign
-  anything yet: they open the game screen in its set-up mode (below), where
-  the player takes position first. Characters are fixed for now: the creator plays
-  the showdown's first character, `marshal` (`CREATOR_CHAR`), the joiner the
-  one the creator did not take (`opponentOf`); the realm takes only the
-  showdown's characters.
+  those sections from the `submitted` flag and `status` each player
+  carries in `json/games/{addr}` (a character out of the fight has no move
+  to make). The form has a **Players** select (2 to 4, `SEAT_OPTIONS`)
+  with the line-up of the seats in their colours. **Call a showdown** and
+  **Join** do not sign anything yet: they open the game screen in its
+  set-up mode (below), where the player takes position first. Characters
+  are fixed by seat: the creator plays the showdown's first character,
+  `marshal` (`CREATOR_CHAR`), and a joiner the next free seat's
+  (`nextSeat`, `seatChar`: "Join as El Jefe · 2 of 4 seats taken"); the
+  realm seats the joiner wherever is free when the join lands.
 - `GameScene`: renders `committed` state from the chain. Opened with a
   `SetupRequest` instead of (or with) a game id, it is in **set-up mode**
   (`mode === "setup"`, `GameScene.setup`): calling a showdown shows board A
   with nothing on the chain yet, joining one shows the creator's token and
   the empty seat; my character's hexes (`setupZone`) are highlighted in
-  action green under the tokens (`showSetupZone`); the one under the
+  action green under the tokens (`showSetupZone`); joining, the seat
+  (and so the character and its hexes) follows the chain on every poll
+  (`syncJoinSeat`: if someone takes it first, a toast says so and the
+  position is picked again in the next seat's hexes), and the set up ends
+  once the chain shows me seated; the one under the
   pointer shows my token see-through, as it would stand (`showSetupGhost`);
   a click stands my token
   there (`placeSetup`), facing its default way (`defaultFacing`) until
@@ -501,13 +536,19 @@ played, victory points, since). `game/lobby.ts` sorts the games into
   header (Lobby, turn, status, players); while planning, waiting or once
   over, my character (endurance boxes, delay, AIM, wounds, guns) and
   **Your plan** (the segment tracker, `game/segments.ts`, then the entries,
-  points, Send / Clear / Replay / Surrender, or the plan sent, Claim, Cancel) on
-  the left, the other characters ("plan sent") on the right, and the hand along
+  points, Send / Clear / Replay / Surrender, or the plan sent, Claim, Cancel
+  for the creator while seats are free) on
+  the left, the other characters ("plan sent"; compact rows when they are
+  several) on the right, and the hand along
   the bottom: one double-sided card per column, top or bottom half picked,
   the whole card shown on hover; in a replay, every character on the left,
   the resolution log on the right, and a timeline (one row per character,
-  `turnSegmentCells`, the blue pointer over the segment shown, a click on a
-  segment jumps there) with the controls along the bottom. Clicking a
+  `turnSegmentCells`, thinner rows past two, the blue pointer over the segment shown, a click on a
+  segment jumps there) with the controls along the bottom. Every seat has
+  a colour (`ui/seats.ts`, `SEAT_COLORS`: indigo, brick, green, ochre,
+  apart in hue and lightness): the panels' rule, the token ring of the
+  others (mine stays white), the timeline's dot, the character sheet's
+  accent and the frame of its AIM markers. Clicking a
   character panel opens its sheet. The hand builds an
   ordered plan with a live preview (`replayPlan`) and relative-direction hex
   picks (move choices and the aim zone highlight whole hexes,
@@ -535,7 +576,9 @@ played, victory points, since). `game/lobby.ts` sorts the games into
   token corner above the arrow, "above" in the figure's upright frame
   (`CharacterToken.setGun`, `gunAngle`), with its shells as red dots along
   the bottom, greyed out while uncocked; the DEL badge takes the corner
-  below it and the opponent's AIM marker the other top corner, all turning
+  below it and the AIM markers of whoever aims at the character the other
+  top corner (one per aimer, fanned along the rim, framed in the aimer's
+  colour, `setTargetAims`, `aimersOn`), all turning
   with the token; a gun dropped in a hex (`ground` in the JSON, `drop_gun`
   events in playback) is drawn there with the same icon below the tokens,
   stacked like a character sharing the hex (`occupantsAt`); `CharView.guns` carries
@@ -578,10 +621,11 @@ Clicking a token opens the **character
   the 108 cards, bullseye % in red; Target Status not counted), with range
   and aim time on hover: card aim time (Cock/Aim/Shoot 2, Shoot 1) plus the
   AIM points kept (markers within one hex of the target) minus arm wounds. The preview (`replayPlan`) follows the
-  aim, cocking and shells; AIM markers are drawn on the aimed hex, or on the opponent's token when
-  they follow it (`refreshAimMarkers`); tokens grey out for a killed or
+  aim, cocking and shells; AIM markers are drawn on the aimed hex, or on the target's token when
+  they follow it (`refreshAimMarkers`, `aimOnToken` from `aimAt`); tokens grey out for a killed or
   passed-out character; the sheet
-  shows AIM, endurance (boxes above the ones left are crossed off) and the
+  shows AIM (and on whom), who aims at the character (AIMED BY), endurance
+  (boxes above the ones left are crossed off) and the
   permanent wounds. During playback a bullet flies from the shooter's gun
   icon for each shot (`flashShots`), shaking the view; a miss flies on off
   the board; the hit location's burst, `assets/hit_<location>.png` (arm,
@@ -602,15 +646,24 @@ Clicking a token opens the **character
 1. Two accounts in Adena; `ADENA_ADDRS="g1... g1..." make gnodev` (premines
    them); `make web`; open http://localhost:5173, approve connect / add
    network `dev` / switch.
-2. Account A: **Call a showdown**: the board opens with G5 to G9 in
-   green; click a hex (say A-G7), turn the token if you like, **CALL THE
-   SHOWDOWN**. Switch account in Adena (the app reconnects): **Join** from
-   "Open showdowns", E5 to E9 are green, click A-E7, **JOIN THE SHOWDOWN**.
-   Both see the marshal at A-G7 (facing NW) and The Kid at A-E7 (facing SE).
-3. Each account picks cards and sends its plan; the second submission
-   resolves the turn, both tabs replay it, positions match
+2. Account A: pick the number of players (2 to 4), **Call a showdown**:
+   the board opens with G5 to G9 in green; click a hex (say A-G7), turn
+   the token if you like, **CALL THE SHOWDOWN**. Switch account in Adena
+   (the app reconnects): **Join** from "Open showdowns", E5 to E9 are
+   green, click A-E7, **JOIN THE SHOWDOWN** (a third player gets I5 to I9
+   as El Jefe, a fourth C5 to C9 as Axe). Everyone sees the marshal at
+   A-G7 (facing NW) and The Kid at A-E7 (facing SE); the game starts once
+   the last seat is taken.
+3. Each account picks cards and sends its plan; the last submission
+   resolves the turn, every tab replays it, positions match
    `go tool gnokey query vm/qrender -remote 127.0.0.1:26657 -data 'gno.land/r/tbruyelle/gnoslinger/v0:json/game/0000001'`.
-4. CLI alternative: `go tool gnokey maketx call -pkgpath gno.land/r/tbruyelle/gnoslinger/v0 -func SubmitPlan -args 0000001 -args "1f:ahead" -gas-fee 1000000ugnot -gas-wanted 20000000 -broadcast -chainid dev -remote 127.0.0.1:26657 <key>`.
+4. CLI alternative: `go tool gnokey maketx call -pkgpath gno.land/r/tbruyelle/gnoslinger/v0 -func SubmitPlan -args 0000001 -args "1f:ahead" -gas-fee 1000000ugnot -gas-wanted 20000000 -broadcast -chainid dev -remote 127.0.0.1:26657 <key>`
+   (`CreateGame -args 3 -args 20 -args 0 -args A-G7 -args 5`, `JoinGame
+   -args 0000001 -args A-E7 -args 2`). A second gnodev for such a run,
+   leaving the usual one alone: `go tool gnodev local -no-watch -no-web
+   -node-rpc-listener 127.0.0.1:36657 -add-account <addr>=1000000000ugnot…`
+   with keys made in a scratch keybase (`gnokey add -home <dir>
+   -insecure-password-stdin`).
 
 ## Game Rules (quick reference)
 

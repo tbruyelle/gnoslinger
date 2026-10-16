@@ -1,6 +1,7 @@
 import type { GroundGunView, GunView } from "../chain/types";
 import { uprightTokenAngle } from "../rules";
 import template from "./characterSheet.html?raw";
+import { seatColor } from "./seats";
 
 /** What the sheet shows for one character. */
 export interface SheetData {
@@ -18,9 +19,12 @@ export interface SheetData {
   guns: GunView[];
   /** The weapons lying in the character's hex. */
   ground: GroundGunView[];
-  /** AIM points and the hex the markers sit on ("" when they follow the opponent). */
+  /** AIM points, the hex the markers sit on ("" when they follow a character) and that character's name ("" when they sit on a hex). */
   aim: number;
   aimHex: string;
+  aimTarget: string;
+  /** Who holds AIM points on this character: "The Kid 4", "Axe 2". */
+  aimedBy: string[];
   /** Endurance boxes left (20 at the start). */
   endurance: number;
   /** Permanent wounds. */
@@ -31,8 +35,6 @@ export interface SheetData {
 }
 
 const DIRS = ["N", "NE", "SE", "S", "SW", "NW"];
-/** Accent colour per seat, from the design's palette. */
-const ACCENTS = ["#33307F", "#8E2F1A"];
 const SHEET_W = 1100;
 const SHEET_H = 850;
 /** Length of the open/close animation. */
@@ -77,7 +79,7 @@ let onClose: (() => void) | null = null;
 export function openCharacterSheet(d: SheetData, onClosed?: () => void, pick?: GunPick): void {
   closeCharacterSheet();
   onClose = onClosed ?? null;
-  const accent = ACCENTS[d.seat] ?? ACCENTS[0];
+  const accent = seatColor(d.seat);
   const html = template
     .replace(/{{accent}}/g, accent)
     .replace("{{characterName}}", escapeHtml(d.name))
@@ -192,10 +194,11 @@ function statusRow(d: SheetData, accent: string): string {
     chip("DELAY", String(d.delay), d.delay > 0),
     d.down ? chip("BODY", "DOWN", true) : chip("BODY", "UPRIGHT"),
     chip("STATUS", escapeHtml(d.status.replace(/_/g, " ").toUpperCase()), d.status !== "alive"),
-    chip("AIM", d.aim > 0 ? `${d.aim}${d.aimHex ? ` on ${escapeHtml(d.aimHex)}` : " on target"}` : "0", d.aim > 0),
+    chip("AIM", d.aim > 0 ? `${d.aim} on ${escapeHtml(d.aimHex || d.aimTarget || "target")}` : "0", d.aim > 0),
     chip("END", String(d.endurance), d.endurance < 10),
     chip("PLAN", plan),
   ];
+  if (d.aimedBy.length > 0) chips.push(chip("AIMED BY", escapeHtml(d.aimedBy.join(", ")), true));
   if (d.isMe) chips.push(`<div style="margin-left: auto; font-family: Rye, Georgia, serif; font-size: 22px; color: ${accent}; letter-spacing: 1px">YOUR CHARACTER</div>`);
   return `<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px">${chips.join("")}</div>`;
 }

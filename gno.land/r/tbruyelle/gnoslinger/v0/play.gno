@@ -14,8 +14,8 @@ import (
 // SubmitPlan commits the caller's ordered action stack for the current turn
 // and returns the game revision. The plan string is a comma-separated list of
 // "<card><f|b>[:<direction>]" entries, e.g. "1f:ahead_left,2f:ahead,3f"; an
-// empty string passes. Once both players have submitted, the turn resolves in
-// this same transaction and the next turn starts.
+// empty string passes. Once every character still in the fight has a plan
+// in, the turn resolves in this same transaction and the next turn starts.
 func SubmitPlan(cur realm, id string, plan string) int {
 	caller := cur.Previous().Address()
 	g := getGame(id)
@@ -24,6 +24,9 @@ func SubmitPlan(cur realm, id string, plan string) int {
 	}
 	g.assertInTime()
 	p := g.mustSeat(caller)
+	if g.State.Chars[p].Status != engine.Alive {
+		panic("gnoslinger: your character is out of the fight")
+	}
 	if g.Submitted[p] {
 		panic("gnoslinger: plan already submitted for this turn")
 	}
@@ -38,6 +41,12 @@ func SubmitPlan(cur realm, id string, plan string) int {
 		if a.Ground > 0 && !groundExists(g.State, a.Ground) {
 			panic("gnoslinger: there is no such weapon on the ground")
 		}
+		if a.Target >= g.seats() {
+			panic("gnoslinger: there is no character @" + strconv.Itoa(a.Target) + " in this game")
+		}
+		if a.Target == p {
+			panic("gnoslinger: you cannot " + a.Opt + " at your own character")
+		}
 	}
 	// Target-status flags for this turn, set whether or not the actions
 	// end up executing ([H12]).
@@ -47,7 +56,7 @@ func SubmitPlan(cur realm, id string, plan string) int {
 	g.Submitted[p] = true
 
 	turn := g.Turn
-	resolved := g.Submitted[0] && g.Submitted[1]
+	resolved := g.allIn()
 	var seed string
 	if resolved {
 		seed = resolveTurn(cur, g)
@@ -78,7 +87,7 @@ func autoPass(cur realm, g *Game) {
 			g.Submitted[p] = true
 			emit("PlanPassed", "id", g.ID, "turn", strconv.Itoa(g.Turn), "seat", strconv.Itoa(p))
 		}
-		if !(g.Submitted[0] && g.Submitted[1]) {
+		if !g.allIn() {
 			return
 		}
 		turn := g.Turn
@@ -87,13 +96,15 @@ func autoPass(cur realm, g *Game) {
 	}
 }
 
-// resolveTurn plays both plans with the result deck shuffled from this
-// turn's seed, stores the result and advances the game. It returns the seed
-// in hex.
+// resolveTurn plays the seats' plans with the result deck shuffled from
+// this turn's seed, stores the result and advances the game. It returns the
+// seed in hex.
 func resolveTurn(cur realm, g *Game) string {
-	seed := engine.Seed(realmPath, g.ID, strconv.Itoa(g.Turn), g.Plans[0], g.Plans[1],
-		strconv.FormatInt(runtime.ChainHeight(), 10), strconv.FormatInt(time.Now().UnixNano(), 10))
-	var plans [engine.NumPlayers]engine.Plan
+	n := g.seats()
+	parts := append([]string{realmPath, g.ID, strconv.Itoa(g.Turn)}, g.Plans...)
+	parts = append(parts, strconv.FormatInt(runtime.ChainHeight(), 10), strconv.FormatInt(time.Now().UnixNano(), 10))
+	seed := engine.Seed(parts...)
+	plans := make([]engine.Plan, n)
 	for i, s := range g.Plans {
 		pl, err := engine.ParsePlan(s)
 		if err != nil {
@@ -101,7 +112,9 @@ func resolveTurn(cur realm, g *Game) string {
 		}
 		plans[i] = pl
 	}
-	start := snapshot(g.State.Chars)
+	// From a copy: the live state may share the characters with what the
+	// engine returns (see engine.CloneChars).
+	start := engine.CloneChars(g.State.Chars)
 	deck := engine.NewDeck(seed)
 	st, evs := engine.Resolve(hex.A, g.State, plans, deck)
 	st, endEvs := engine.EndTurn(st)
@@ -113,7 +126,6 @@ func resolveTurn(cur realm, g *Game) string {
 	// Victory points close the turn: what it did, then, when the showdown
 	// ends with it, the end of the showdown (rule 15).
 	over := engine.AliveCount(st) <= 1 || g.Turn >= g.MaxTurns
-	// From the snapshot: the live state may share the characters with st (see snapshot).
 	awards := engine.TurnVictoryPoints(engine.State{Chars: start}, st)
 	if over {
 		awards = append(awards, engine.EndVictoryPoints(st)...)
@@ -123,8 +135,8 @@ func resolveTurn(cur realm, g *Game) string {
 	g.Turns = append(g.Turns, newTurnResult(g.Turn, start, g.Plans, seedHex, deck.Drawn(), evs))
 	g.State = st
 	g.award(cur, awards)
-	g.Plans = [engine.NumPlayers]string{}
-	g.Submitted = [engine.NumPlayers]bool{}
+	g.Plans = make([]string, n)
+	g.Submitted = make([]bool, n)
 	switch {
 	case engine.AliveCount(g.State) == 0:
 		g.finish("all_down")
@@ -136,38 +148,6 @@ func resolveTurn(cur realm, g *Game) string {
 		g.Turn++
 	}
 	return seedHex
-}
-
-// snapshot copies the characters field by field. A plain array copy is not
-// enough on a node: a character written earlier in the same transaction
-// stayed shared with the live state, so the stored start of a turn showed its
-// end position.
-func snapshot(cs [engine.NumPlayers]engine.Character) (out [engine.NumPlayers]engine.Character) {
-	for i, c := range cs {
-		out[i] = engine.Character{
-			Hex:        c.Hex,
-			Facing:     c.Facing,
-			Down:       c.Down,
-			Delay:      c.Delay,
-			Status:     c.Status,
-			PlayedFoot:  c.PlayedFoot,
-			PlayedRun:   c.PlayedRun,
-			RanLastTurn: c.RanLastTurn,
-			Dropped:     c.Dropped,
-			Aim:         c.Aim,
-			AimHex:      c.AimHex,
-			Endurance:   c.Endurance,
-			Exhausted:   c.Exhausted,
-			Serious:     c.Serious,
-			GunArm:      c.GunArm,
-			OtherArm:    c.OtherArm,
-			Leg:         c.Leg,
-		}
-		for j, g := range c.Guns {
-			out[i].Guns[j] = engine.Gun{ID: g.ID, Type: g.Type, Location: g.Location, Cocked: g.Cocked, Shells: g.Shells, Jammed: g.Jammed, Exploded: g.Exploded}
-		}
-	}
-	return out
 }
 
 // groundExists reports whether a gun with that ground id lies somewhere on
@@ -183,9 +163,11 @@ func groundExists(st engine.State, id int) bool {
 }
 
 // Surrender gives up the showdown (rule 15.4: at the start of a turn, that
-// is while the plans are collected). With two characters nobody is left to
-// fight: the game ends and is scored, the surrendered character losing the
-// "Surrender" points and, the enemy holding the field, being captured.
+// is while the plans are collected). The character is Out: nobody can
+// shoot it and it plays no more. With one character left in the fight the
+// game ends and is scored, the surrendered losing the "Surrender" points
+// and, an enemy holding the field, being captured; with more, the showdown
+// goes on without it, and the turn resolves if the others' plans are in.
 func Surrender(cur realm, id string) {
 	caller := cur.Previous().Address()
 	g := getGame(id)
@@ -193,15 +175,28 @@ func Surrender(cur realm, id string) {
 		panic("gnoslinger: game is not in progress")
 	}
 	p := g.mustSeat(caller)
+	if g.State.Chars[p].Status != engine.Alive {
+		panic("gnoslinger: your character is out of the fight")
+	}
 	g.State.Chars[p].Status = engine.Out
-	g.award(cur, engine.EndVictoryPoints(g.State))
-	g.finish("surrender")
+	emit("PlayerSurrendered", "id", id, "turn", strconv.Itoa(g.Turn), "player", caller.String(), "seat", strconv.Itoa(p))
+	if engine.AliveCount(g.State) <= 1 {
+		g.award(cur, engine.EndVictoryPoints(g.State))
+		g.finish("surrender")
+	} else {
+		g.Plans[p] = ""
+		g.Submitted[p] = false
+		autoPass(cur, g)
+	}
 	save(g)
 }
 
-// ClaimTimeout ends a game that saw no progress for its Timeout. Anyone may
-// call it. A waiting game expires; when exactly one player submitted a
-// plan, the other forfeits; when neither did, the game is abandoned.
+// ClaimTimeout ends the wait of a game that saw no progress for its
+// Timeout. Anyone may call it. A waiting game expires; when nobody sent a
+// plan, the game is abandoned; otherwise the players who did not are out
+// of the fight (out of time counts as surrendering): with one character
+// left the game ends and is scored, with more the turn resolves with the
+// plans in and the showdown goes on.
 func ClaimTimeout(cur realm, id string) {
 	g := getGame(id)
 	if g.Phase == PhaseFinished {
@@ -214,17 +209,31 @@ func ClaimTimeout(cur realm, id string) {
 	case g.Phase == PhaseWaiting:
 		openGames.Remove(id)
 		g.finish("expired")
-	case g.Submitted[0] != g.Submitted[1]:
-		loser := 0
-		if g.Submitted[0] {
-			loser = 1
-		}
-		// Out of time counts as surrendering.
-		g.State.Chars[loser].Status = engine.Out
-		g.award(cur, engine.EndVictoryPoints(g.State))
-		g.finish("timeout")
-	default:
+	case !anySubmitted(g):
 		g.finish("abandoned")
+	default:
+		for p := range g.Players {
+			c := &g.State.Chars[p]
+			if c.Status == engine.Alive && !g.Submitted[p] {
+				c.Status = engine.Out
+			}
+		}
+		if engine.AliveCount(g.State) <= 1 {
+			g.award(cur, engine.EndVictoryPoints(g.State))
+			g.finish("timeout")
+		} else {
+			autoPass(cur, g)
+		}
 	}
 	save(g)
+}
+
+// anySubmitted reports whether a plan came in this turn.
+func anySubmitted(g *Game) bool {
+	for _, s := range g.Submitted {
+		if s {
+			return true
+		}
+	}
+	return false
 }

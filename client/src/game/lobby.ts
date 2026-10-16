@@ -21,12 +21,15 @@ export interface LobbySections {
   open: GameSummary[];
 }
 
-/** Sorts the games of a player (address me) into the lobby's sections. */
+/** Sorts the games of a player (address me) into the lobby's sections: a plan is mine to send while my character is in the fight and its plan is not in. */
 export function lobbySections(games: GamesView, me: string): LobbySections {
-  const mySeat = (g: GameSummary) => g.players.find((p) => p.addr === me);
+  const myMove = (g: GameSummary) => {
+    const s = g.players.find((p) => p.addr === me);
+    return !!s && !s.submitted && (s.status ?? "alive") === "alive";
+  };
   return {
-    yourMove: games.mine.filter((g) => g.phase === "planning" && !mySeat(g)?.submitted),
-    waiting: games.mine.filter((g) => g.phase === "waiting" || (g.phase === "planning" && !!mySeat(g)?.submitted)),
+    yourMove: games.mine.filter((g) => g.phase === "planning" && myMove(g)),
+    waiting: games.mine.filter((g) => g.phase === "waiting" || (g.phase === "planning" && !myMove(g))),
     finished: games.mine.filter((g) => g.phase === "finished"),
     open: games.open.filter((g) => !g.players.some((p) => p.addr === me)),
   };
@@ -52,6 +55,12 @@ export function runningOut(left: number, timeout: number): boolean {
   return left < Math.min(2 * 3600, timeout / 4);
 }
 
+/** "3 of 4 seats taken", for a game waiting for players. */
+export function seatsTaken(g: GameSummary): string {
+  const taken = g.players.filter((p) => p.addr).length;
+  return `${taken} of ${g.players.length} seats taken`;
+}
+
 /** 172800 seconds -> "2 days", 1800 -> "30 min". */
 export function formatDuration(seconds: number): string {
   if (!seconds) return "?";
@@ -69,15 +78,18 @@ export function outcomeLine(g: GameSummary, me: string): string {
     const p = g.players[seat];
     return p?.addr ? (p.addr === me ? "you" : charName(p.char)) : "?";
   };
+  // Who gave up or ran out of time: the seats out of the fight by status; without it (older summaries), the loser of a duel.
+  const out = g.players.flatMap((p, i) => (p.addr && p.status === "out" ? [who(i)] : []));
+  const losers = out.length > 0 ? out.join(", ") : who(1 - g.winner);
   switch (g.endReason) {
     case "cancelled":
       return "cancelled";
     case "expired":
-      return "expired, nobody joined";
+      return "expired, the seats never filled up";
     case "surrender":
-      return `${who(1 - g.winner)} surrendered` + myVP(g, me);
+      return `${losers} surrendered` + myVP(g, me);
     case "timeout":
-      return `${who(1 - g.winner)} ran out of time` + myVP(g, me);
+      return `${losers} ran out of time` + myVP(g, me);
     case "abandoned":
       return "abandoned";
     case "all_down":

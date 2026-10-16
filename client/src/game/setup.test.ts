@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { BOARD_A } from "../board/boardA";
-import { SETUPS, canSetUp, defaultFacing, opponentOf, setupZone, startingChar } from "./setup";
+import { MAX_PLAYERS, MIN_PLAYERS, SETUPS, canSetUp, defaultFacing, nextSeat, seatChar, setupZone, startingChar } from "./setup";
 
 describe("SETUPS", () => {
   it("assigns each character hexes of board A, no obstacle, each hex to one character, as the realm's engine.Setups", () => {
@@ -18,13 +18,24 @@ describe("SETUPS", () => {
     }
   });
 
-  it("puts the marshal in G5-G9 looking north-west and the kid in E5-E9 looking south-east", () => {
+  it("puts the marshal in G5-G9 looking north-west, the kid in E5-E9 looking south-east, el jefe in I5-I9 and axe in C5-C9", () => {
     expect(setupZone("marshal")).toEqual(["A-G5", "A-G6", "A-G7", "A-G8", "A-G9"]);
     expect(setupZone("the_kid")).toEqual(["A-E5", "A-E6", "A-E7", "A-E8", "A-E9"]);
+    expect(setupZone("el_jefe")).toEqual(["A-I5", "A-I6", "A-I7", "A-I8", "A-I9"]);
+    expect(setupZone("axe")).toEqual(["A-C5", "A-C6", "A-C7", "A-C8", "A-C9"]);
     expect(setupZone("dude")).toEqual([]);
     expect(defaultFacing("marshal")).toBe(5);
     expect(defaultFacing("the_kid")).toBe(2);
+    expect(defaultFacing("el_jefe")).toBe(5);
+    expect(defaultFacing("axe")).toBe(2);
     expect(defaultFacing("dude")).toBe(0);
+  });
+
+  it("seats the characters in order, 2 to 4 of them", () => {
+    expect([MIN_PLAYERS, MAX_PLAYERS]).toEqual([2, 4]);
+    expect([0, 1, 2, 3, 4].map(seatChar)).toEqual(["marshal", "the_kid", "el_jefe", "axe", ""]);
+    expect(nextSeat([{ addr: "g1a" }, { addr: "" }, { addr: "" }])).toBe(1);
+    expect(nextSeat([{ addr: "g1a" }, { addr: "g1b" }])).toBe(-1);
   });
 
   it("checks a hex for a character", () => {
@@ -36,10 +47,6 @@ describe("SETUPS", () => {
     expect(canSetUp("dude", "A-G7")).toBe(false);
   });
 
-  it("knows who fights whom", () => {
-    expect(opponentOf("marshal")).toBe("the_kid");
-    expect(opponentOf("the_kid")).toBe("marshal");
-  });
 });
 
 describe("startingChar", () => {
@@ -49,6 +56,7 @@ describe("startingChar", () => {
     expect(c.facing).toBe(5);
     expect(c.down).toBe(false);
     expect(c.endurance).toBe(20);
+    expect(c.aimAt).toBe(-1);
     expect(c.guns).toEqual([expect.objectContaining({ type: "colt45", location: "holstered", cocked: false, shells: 6 })]);
   });
 });

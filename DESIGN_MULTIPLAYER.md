@@ -1,78 +1,96 @@
-# Design for more than two players: plan
+# Design for more than two players: plan and status
 
 The designs on the Claude Design canvas (AGENTS.md, Design) were drawn for a
-duel. Showdowns with more players are coming (SHOWDOWNS.md): battle royale
-(2 to 8), teams (OK Corral). This reviews every artifact for that, and lists
-the changes, most important first.
+duel. Showdowns with more players are coming (DESIGN_SHOWDOWNS.md): battle
+royale (2 to 8), teams (OK Corral). This reviews every artifact for that,
+and lists the changes, most important first, with what is done.
+
+## Done on 2026-10-16: two to four seats
+
+The realm and the client play showdowns of **2 to 4 players**, every
+character a side of its own: the creator picks the number of seats, and
+the seats take the showdown's characters **in the order the players join**
+(seat 0 the marshal, 1 the kid, 2 el jefe, 3 axe), each in its own hexes
+(G, E, I and C columns, rows 5 to 9; AGENTS.md, Set up). No character
+pick yet, no teams, not more than four (the showdown's set up stops
+there). The engine takes any number of seats; targets, AIM markers, kills
+and knock outs name seats (`AimAt`, `KilledBy`, `Hurt`).
 
 ## Already fine
 
 - **Action cards**: they say "Name option, target", never "opponent".
-- **Character sheet**: one sheet per character, the layout holds; only its
-  colour needs work (point 1).
+- **Character sheet**: one sheet per character, the layout holds; its
+  accent is now the seat's colour (point 1), and it says who aims at the
+  character (AIMED BY).
 - **Segment tracker**: per character, it shows my own plan.
 - **Bursts** (HIT!, MISSED!, JAMMED!, EXPLODED!): per shot; several can show
   at once.
 
 ## Across the screens: telling characters apart
 
-1. **Seat and team colours.** Today characters are told apart by their token
-   alone, and the character sheet's `accent` offers 3 colours (the code uses
-   2, one per seat). Needed: an 8-colour seat palette whose colours also
-   differ in lightness, so it holds for colour-blind players; in team modes,
-   team colours replace seat colours. This one decision drives most of the
-   points below.
-2. **Tokens on the board.** Eight similar figures cannot be told apart: each
-   token gets a seat-coloured ring and its name on hover. AIM markers take
-   the aimer's colour, since several characters may aim at the same token.
+1. **Seat and team colours.** *Done for four seats:* `client/src/ui/seats.ts`
+   holds the palette, indigo, brick, action green and ochre, apart in hue
+   and in lightness so it holds for colour-blind players; it drives the
+   panels' rule, the token rings, the timeline, the sheet and the AIM
+   markers' rings. *Left:* four more colours for 8 seats; in team modes,
+   team colours replace seat colours. The canvas still shows two.
+2. **Tokens on the board.** *Done:* each token but mine gets a ring in its
+   seat's colour (mine stays white); AIM markers on a token are one per
+   aimer, fanned along the rim, each ringed in the aimer's colour, since
+   several characters may aim at the same token. *Left:* the name on hover.
 
 ## Lobby
 
-3. **"Join as The Kid"** assumes seat 2 is The Kid: becomes "Join (3 of 6
-   seats)", with a character pick, and a team pick in team modes.
-4. **"vs The Kid · g1q8…"** names one opponent: becomes a row of small
-   tokens, "+3" past four.
-5. **"New showdown" has no mode or seats**: add the mode (Duel / Battle royale
-   / Teams), the number of seats where the mode allows a range, team sizes in
-   team modes.
-6. **"Waiting for a second player"** becomes "3 of 6 seats taken". A rule to
-   settle: does the game start once full, or can the creator start it at the
-   minimum?
+3. **"Join as The Kid"** *Done:* "Join as El Jefe" names the next free
+   seat's character, with "2 of 4 seats taken". *Left:* a character pick,
+   and a team pick in team modes.
+4. **"vs The Kid · g1q8…"** *Done for four:* every other player is listed.
+   *Left:* a row of small tokens, "+3" past four.
+5. **"New showdown" has no mode or seats**: *Done:* a Players select (2 to
+   4) with the seats' line-up in their colours. *Left:* the mode (Duel /
+   Battle royale / Teams), team sizes in team modes.
+6. **"Waiting for a second player"** *Done:* "Waiting for players · 3 of 4
+   seats taken"; the game starts once full (the creator cannot start it
+   at the minimum; it can cancel while a seat is free, which drops the
+   players who joined).
 
 ## Game, planning
 
-7. **The single opponent panel becomes a roster**: one compact row per
-   character (seat colour, token, endurance, delay, plan sent), characters out
-   of the fight greyed, grouped by team in team modes, scrollable.
-8. **The header "The Marshal (you) vs The Kid"** becomes the mode's name and
-   "plans sent: 3 / 5".
-9. **Picking a target**: clicking a token still works; the plan list already
-   names the target ("aim at The Kid") and adds the target's seat colour.
+7. **The single opponent panel becomes a roster**: *Done in part:* the
+   others' panels turn compact (token, delay, endurance, AIM) when they are
+   several, in their seat colours, the column scrolling; characters out of
+   the fight are greyed. *Left:* grouping by team, an 8-seat test.
+8. **The header "The Marshal (you) vs The Kid"** lists every seat; the
+   status names the characters whose plan is still awaited ("Plan sent,
+   waiting for The Kid, Axe…"). *Left:* the mode's name and "plans sent:
+   3 / 5" past four.
+9. **Picking a target**: *Done:* clicking a token still works for any
+   seat; the plan list names the target ("aim at El Jefe"). *Left:* the
+   target's seat colour in the plan list.
 
 ## Game, replay
 
-10. **The left column of full character panels** does not fit 8 characters:
-    it reuses the roster of point 7.
-11. **The timeline** (one row per character) scales, but 8 rows of 40 px
-    take about 350 px: thinner rows (about 26 px), seat colours on the names;
-    a "Me / everyone" filter is optional.
-12. **Log step tags** ("MARSHAL") take the seat's colour, and names as in the
-    log lines.
+10. **The left column of full character panels** holds four (scrolling).
+    *Left:* the roster of point 7 for 8.
+11. **The timeline** *Done:* thinner rows (34 px) and a seat-colour dot on
+    the names past two rows, so four fit the bottom strip. *Left:* a
+    "Me / everyone" filter for 8.
+12. **Log step tags** ("MARSHAL") *Left:* the seat's colour on the names in
+    the log lines.
 
 ## Splash
 
-13. **"Two gunfighters, five segments a turn…"** turns false with more
-    players. The line is in the game's code (`SPLASH_LINE` in
-    `client/src/scenes/LobbyScene.ts`) as well as on the canvas. Something
-    like "Gunfighters, five segments a turn, one hand of cards. Every turn is
-    settled on chain."
+13. **"Two gunfighters, five segments a turn…"** *Done in the code*
+    (`SPLASH_LINE` in `client/src/scenes/LobbyScene.ts`: "Gunfighters, five
+    segments a turn, one hand of cards. Every turn is settled on chain.").
+    *Left:* the same line on the canvas.
 
-## Order
+## Order of what is left
 
-1. Seat and team palette, token rings (points 1, 2): they unlock the rest.
-2. The roster, used by the planning and replay screens (points 7, 10).
-3. Lobby (points 3 to 6), the rest of planning and replay (8, 9, 11, 12).
-4. Splash line, canvas and code (point 13).
-
-The canvas may hold edits made by hand since these screens were drawn: re-read
-each screen before changing it.
+1. The canvas: the four-seat palette and the lobby form, re-reading each
+   screen first (it may hold edits made by hand since these screens were
+   drawn).
+2. Names on hover (2), the plan list's target colours (9), the log tags (12).
+3. Beyond four seats and teams, with the showdown packages
+   (DESIGN_SHOWDOWNS.md): the roster (7, 10), the mode select (5), team
+   picks (3), the timeline filter (11), four more colours (1).

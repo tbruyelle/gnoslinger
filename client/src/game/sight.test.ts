@@ -6,7 +6,7 @@ import { canSee, sightHeight, standingOn } from "./sight";
 
 const char = (over: Partial<CharView> = {}): CharView => ({
   hex: "A-I10", facing: 3, down: false, delay: 0, status: "alive", guns: [],
-  aim: 0, aimHex: "", endurance: 20, serious: 0, gunArm: 0, otherArm: 0, leg: 0, ...over,
+  aim: 0, aimAt: -1, aimHex: "", endurance: 20, serious: 0, gunArm: 0, otherArm: 0, leg: 0, ...over,
 });
 
 describe("sightHeight", () => {

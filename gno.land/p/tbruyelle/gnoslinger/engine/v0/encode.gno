@@ -75,19 +75,31 @@ func EncodeCharacter(c Character) string {
 			strconv.Itoa(g.Shells), boolStr(g.Jammed), boolStr(g.Exploded),
 		}, ":"))
 	}
+	hurt := make([]string, len(c.Hurt))
+	for i, n := range c.Hurt {
+		hurt[i] = strconv.Itoa(n)
+	}
 	return strings.Join([]string{
 		c.Hex, strconv.Itoa(int(c.Facing)), boolStr(c.Down), strconv.Itoa(c.Delay), strconv.Itoa(int(c.Status)),
 		boolStr(c.PlayedFoot), boolStr(c.PlayedRun), boolStr(c.RanLastTurn), boolStr(c.Dropped),
 		strconv.Itoa(c.Aim), c.AimHex, strconv.Itoa(c.Endurance), strconv.Itoa(c.Exhausted),
 		strconv.Itoa(c.Serious), strconv.Itoa(c.GunArm), strconv.Itoa(c.OtherArm), strconv.Itoa(c.Leg),
 		strings.Join(guns, ","),
+		strconv.Itoa(c.AimAt), strconv.Itoa(c.KilledBy), strconv.Itoa(c.SeriousBy), strconv.Itoa(c.LegBy),
+		strings.Join(hurt, "/"),
 	}, "|")
 }
 
-// DecodeCharacter unpacks what EncodeCharacter produced.
+// DecodeCharacter unpacks what EncodeCharacter produced. A record of the
+// first 18 fields (before the seats were kept: AimAt, KilledBy, SeriousBy,
+// LegBy, Hurt) reads with nobody in them; DecodeChars then puts markers on
+// the opponent back on it.
 func DecodeCharacter(s string) Character {
 	f := strings.Split(s, "|")
-	if len(f) != 18 {
+	if len(f) == 18 {
+		f = append(f, "-1", "-1", "-1", "-1", "")
+	}
+	if len(f) != 23 {
 		return Character{}
 	}
 	c := Character{
@@ -95,6 +107,7 @@ func DecodeCharacter(s string) Character {
 		PlayedFoot: f[5] == "1", PlayedRun: f[6] == "1", RanLastTurn: f[7] == "1", Dropped: f[8] == "1",
 		Aim: atoi(f[9]), AimHex: f[10], Endurance: atoi(f[11]), Exhausted: atoi(f[12]),
 		Serious: atoi(f[13]), GunArm: atoi(f[14]), OtherArm: atoi(f[15]), Leg: atoi(f[16]),
+		AimAt: atoi(f[18]), KilledBy: atoi(f[19]), SeriousBy: atoi(f[20]), LegBy: atoi(f[21]),
 	}
 	if f[17] != "" {
 		for i, rec := range strings.Split(f[17], ",") {
@@ -108,24 +121,38 @@ func DecodeCharacter(s string) Character {
 			}
 		}
 	}
+	if f[22] != "" {
+		for i, n := range strings.Split(f[22], "/") {
+			if i < MaxPlayers {
+				c.Hurt[i] = atoi(n)
+			}
+		}
+	}
 	return c
 }
 
 // EncodeChars packs the characters of a state (a turn's starting
-// snapshot); DecodeChars unpacks them.
-func EncodeChars(cs [NumPlayers]Character) string {
-	parts := make([]string, NumPlayers)
+// snapshot), seats in order; DecodeChars unpacks them.
+func EncodeChars(cs []Character) string {
+	parts := make([]string, len(cs))
 	for i, c := range cs {
 		parts[i] = EncodeCharacter(c)
 	}
 	return strings.Join(parts, ";")
 }
 
-// DecodeChars unpacks what EncodeChars produced.
-func DecodeChars(s string) (cs [NumPlayers]Character) {
-	for i, part := range strings.Split(s, ";") {
-		if i < NumPlayers {
-			cs[i] = DecodeCharacter(part)
+// DecodeChars unpacks what EncodeChars produced. In a record of the two
+// seat days, AIM markers off any hex followed the opponent.
+func DecodeChars(s string) []Character {
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, ";")
+	cs := make([]Character, len(parts))
+	for i, part := range parts {
+		cs[i] = DecodeCharacter(part)
+		if len(strings.Split(part, "|")) == 18 && cs[i].Aim > 0 && cs[i].AimHex == "" && len(parts) == 2 {
+			cs[i].AimAt = 1 - i
 		}
 	}
 	return cs

@@ -1,3 +1,4 @@
+import { MAX_SEATS } from "../chain/types";
 import type { GroundGunView, GunView } from "../chain/types";
 import { getActionDef, type CardNumber, type CardSide, type RelativeDirection } from "../rules";
 
@@ -145,7 +146,8 @@ export function decodePlan(s: string): PlanEntry[] {
       const arg = i >= 0 ? choice.slice(i + 1) : "";
       if (!(SHOOT_OPTIONS[name] as string[]).includes(opt)) throw new Error(`invalid option "${opt}" for ${name}`);
       if (opt === "aim" || opt === "shoot") {
-        if (/^@[01]$/.test(arg)) entry.target = Number(arg.slice(1));
+        // A character by seat, any seat a game may have (the realm checks it against the game's).
+        if (/^@\d$/.test(arg) && Number(arg.slice(1)) < MAX_SEATS) entry.target = Number(arg.slice(1));
         else if (/^[A-Z0-9-]{3,8}$/.test(arg)) entry.hex = arg;
         else throw new Error(`${opt} needs a hex or a character to ${opt} at, e.g. "${token.split(":")[0]}:${opt}:A-F6" or "…:${opt}:@1"`);
       } else if (arg) throw new Error(`option "${opt}" takes no argument`);

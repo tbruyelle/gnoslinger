@@ -58,5 +58,16 @@ describe("outcomeLine", () => {
     expect(outcomeLine(game("1", { phase: "finished", winner: 0, endReason: "surrender", players }), ME)).toBe("The Kid surrendered");
     // With the victory points of the seat I played.
     expect(outcomeLine(game("1", { phase: "finished", winner: 0, endReason: "surrender", vp: [4, -6], players }), OTHER)).toBe("you surrendered · you −6 VP");
+    // With more seats, the summaries say who is out of the fight.
+    const three = [{ addr: ME, char: "marshal", status: "out" as const }, { addr: OTHER, char: "the_kid", status: "out" as const }, { addr: "g1c", char: "el_jefe", status: "alive" as const }];
+    expect(outcomeLine(game("1", { phase: "finished", winner: 2, endReason: "surrender", vp: [-6, -6, 4], players: three }), ME)).toBe("you, The Kid surrendered · you −6 VP");
+    expect(outcomeLine(game("1", { phase: "finished", winner: 2, endReason: "timeout", players: three }), "g1c")).toBe("Marshal, The Kid ran out of time");
+  });
+
+  it("does not wait for the plan of a character out of the fight", () => {
+    const out = game("6", { players: [{ addr: ME, char: "marshal", status: "killed", submitted: false }, { addr: OTHER, char: "the_kid", status: "alive", submitted: false }, { addr: "g1c", char: "el_jefe", status: "alive", submitted: true }] });
+    const s = lobbySections({ mine: [out], open: [] }, ME);
+    expect(s.yourMove).toEqual([]);
+    expect(s.waiting.map((g) => g.id)).toEqual(["6"]);
   });
 });

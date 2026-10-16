@@ -1,7 +1,8 @@
 import { playerLabel, type GameSummary, type GamesView, type PlayersView, type Profile } from "../chain/types";
 import { uprightTokenAngle } from "../rules";
-import { charName, formatDuration, formatLeft, lobbySections, outcomeLine, runningOut, secondsLeft } from "../game/lobby";
-import { opponentOf } from "../game/setup";
+import { charName, formatDuration, formatLeft, lobbySections, outcomeLine, runningOut, seatsTaken, secondsLeft } from "../game/lobby";
+import { nextSeat, seatChar } from "../game/setup";
+import { seatColor } from "./seats";
 
 /**
  * The lobby, an HTML overlay over the canvas (like the character sheet), from
@@ -35,8 +36,11 @@ export interface LobbyModel {
   balance: string;
   locked: boolean;
   games: GamesView | null;
-  /** The character I play in a game I create (joining, I play the one the creator did not take). */
+  /** The character I play in a game I create: the first seat's (joining, I play the next free seat's). */
   creatorChar: string;
+  /** Seats of a new showdown, among seatOptions. */
+  seats: number;
+  seatOptions: number[];
   turns: number;
   turnOptions: number[];
   timeoutIndex: number;
@@ -53,6 +57,7 @@ export interface LobbyActions {
   open(id: string): void;
   join(id: string): void;
   create(): void;
+  setSeats(seats: number): void;
   setTurns(turns: number): void;
   setTimeout(index: number): void;
   openProfile(addr: string, fromPage: number | null): void;
@@ -216,6 +221,7 @@ export class LobbyView {
     });
     this.root.addEventListener("change", (e) => {
       const el = e.target as HTMLSelectElement;
+      if (el.id === "gl-seats") this.actions.setSeats(Number(el.value));
       if (el.id === "gl-turns") this.actions.setTurns(Number(el.value));
       if (el.id === "gl-timeout") this.actions.setTimeout(Number(el.value));
     });
@@ -265,7 +271,9 @@ export class LobbyView {
     const gameLabel = (g: GameSummary) => `Game ${g.id} · created by ${g.players[0]?.addr === m.address ? "you" : charName(g.players[0]?.char)}`;
     const versus = (g: GameSummary) => {
       const o = others(g);
-      return o.length === 0 ? "Waiting for a second player" : "vs " + o.map((p) => `${charName(p.char)} · ${playerLabel(p)}`).join(", ");
+      const names = o.map((p) => `${charName(p.char)} · ${playerLabel(p)}`).join(", ");
+      if (g.phase === "waiting") return o.length === 0 ? `Waiting for players · ${seatsTaken(g)}` : `With ${names} · ${seatsTaken(g)}`;
+      return "vs " + names;
     };
     const token = (g: GameSummary) => others(g)[0]?.char ?? g.players.find((p) => p.addr === m.address)?.char ?? m.creatorChar;
     const row = (cls: string, g: GameSummary, title: string, detail: string, extra: string) =>
@@ -298,16 +306,18 @@ export class LobbyView {
     const panel = (id: string, title: string, body: string) =>
       `<section class="gl-panel" aria-labelledby="${id}"><div class="gl-head"><h2 id="${id}" class="gl-h2">${title}</h2></div>${body}</section>`;
 
-    // A showdown nobody joined in time can only be claimed: not offered.
+    // A showdown whose seats did not fill up in time can only be claimed: not offered.
     const open = s.open
-      .filter((g) => secondsLeft(g, now) > 0)
+      .filter((g) => secondsLeft(g, now) > 0 && nextSeat(g.players) >= 0)
       .map((g) => {
         const c = g.players[0];
+        const seated = g.players.filter((p) => p.addr);
+        const title = seated.map((p) => `${charName(p.char)} · ${playerLabel(p)}`).join(", ");
         return (
           `<div class="gl-line">${tokenImg(c?.char ?? "")}<div class="gl-what">` +
-          `<span class="gl-title">${esc(`${charName(c?.char)} · ${c ? playerLabel(c) : ""}`)}</span>` +
-          `<span class="gl-detail">${esc(`Game ${g.id} · ${g.maxTurns} turns · ${formatDuration(g.timeout)} per turn`)}</span></div>` +
-          `<button type="button" class="gl-join" data-act="join" data-id="${esc(g.id)}">Join as ${esc(charName(opponentOf(c?.char ?? "")))}</button></div>`
+          `<span class="gl-title">${esc(title)}</span>` +
+          `<span class="gl-detail">${esc(`Game ${g.id} · ${seatsTaken(g)} · ${g.maxTurns} turns · ${formatDuration(g.timeout)} per turn`)}</span></div>` +
+          `<button type="button" class="gl-join" data-act="join" data-id="${esc(g.id)}">Join as ${esc(charName(seatChar(nextSeat(g.players))))}</button></div>`
         );
       })
       .join("");
@@ -327,6 +337,9 @@ export class LobbyView {
   }
 
   private form(m: LobbyModel): string {
+    const seats = m.seatOptions.map((n) => `<option value="${n}"${n === m.seats ? " selected" : ""}>${n}</option>`).join("");
+    // Who sits where: the creator first, then the seats in the order the players join.
+    const lineUp = Array.from({ length: m.seats }, (_, i) => `<span style="color:${seatColor(i)}">${esc(charName(seatChar(i)))}</span>`).join(", ");
     const turns = m.turnOptions.map((t) => `<option value="${t}"${t === m.turns ? " selected" : ""}>${t}</option>`).join("");
     const timeouts = m.timeoutOptions.map((o, i) => `<option value="${i}"${i === m.timeoutIndex ? " selected" : ""}>${esc(o.label)}</option>`).join("");
     const disabled = m.status !== "ready" ? " disabled" : "";
@@ -334,6 +347,8 @@ export class LobbyView {
       '<aside class="gl-aside" aria-labelledby="gl-new"><form class="gl-form">' +
       '<h2 id="gl-new" class="gl-h2">New showdown</h2>' +
       `<div class="gl-you">${tokenImg(m.creatorChar, "")}<div><small>YOU PLAY</small><span>${esc(charName(m.creatorChar))}</span></div></div>` +
+      `<div class="gl-field"><label for="gl-seats">Players</label><select id="gl-seats">${seats}</select>` +
+      `<span class="gl-note">Each on their own, in the order they join: ${lineUp}.</span></div>` +
       `<div class="gl-field"><label for="gl-turns">Turns</label><select id="gl-turns">${turns}</select></div>` +
       `<div class="gl-field"><label for="gl-timeout">Time to play each turn</label><select id="gl-timeout">${timeouts}</select>` +
       '<span class="gl-note">Past it, anyone may claim the game: the player who did not play forfeits.</span></div>' +

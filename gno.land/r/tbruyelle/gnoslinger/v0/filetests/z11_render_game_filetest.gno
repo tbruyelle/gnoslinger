@@ -17,9 +17,9 @@ const (
 // The gnoweb pages after a resolved turn.
 func main(cur realm) {
 	testing.SetRealm(testing.NewUserRealm(alice))
-	id := gnoslinger.CreateGame(cross(cur), "marshal", 10, 0, "A-G5", 3)
+	id := gnoslinger.CreateGame(cross(cur), 2, 10, 0, "A-G5", 3)
 	testing.SetRealm(testing.NewUserRealm(bob))
-	gnoslinger.JoinGame(cross(cur), id, "the_kid", "A-E9", 0)
+	gnoslinger.JoinGame(cross(cur), id, "A-E9", 0)
 	testing.SetRealm(testing.NewUserRealm(alice))
 	gnoslinger.SubmitPlan(cross(cur), id, "1f:ahead_left,2f:ahead")
 	testing.SetRealm(testing.NewUserRealm(bob))
@@ -35,12 +35,12 @@ func main(cur realm) {
 
 // Output:
 // # Gnoslinger
-// Two-player showdowns on board A, the Corral. Create a game, wait for an opponent, then submit a plan every turn. [How to play](/r/tbruyelle/gnoslinger/v0:help).
+// Showdowns of two to four gunfighters on board A, the Corral, each on their own. Create a game, wait for the seats to fill up, then submit a plan every turn. [How to play](/r/tbruyelle/gnoslinger/v0:help).
 //
-// [Create a game as the marshal]($help&func=CreateGame&charKey=marshal&facing=5&maxTurns=20&startHex=A-G7&timeoutMinutes=0)
+// [Create a game of two as the marshal]($help&func=CreateGame&facing=5&maxTurns=20&seats=2&startHex=A-G7&timeoutMinutes=0) · [of three]($help&func=CreateGame&facing=5&maxTurns=20&seats=3&startHex=A-G7&timeoutMinutes=0) · [of four]($help&func=CreateGame&facing=5&maxTurns=20&seats=4&startHex=A-G7&timeoutMinutes=0)
 //
 // ## Open games
-// No game is waiting for an opponent.
+// No game is waiting for players.
 //
 // ## Recent games
 // | Game | Players | Turn | Phase |

@@ -13,11 +13,19 @@ func showdown(s State) []Award {
 	return append(TurnVictoryPoints(startState(), s), EndVictoryPoints(s)...)
 }
 
-// endState is the starting state with the given statuses and endurances.
+// endState is the starting state with the given statuses and endurances,
+// every box crossed off by the other seat, who also did the killing.
 func endState(s0, s1 Status, e0, e1 int) State {
 	s := startState()
 	s.Chars[0].Status, s.Chars[0].Endurance = s0, e0
 	s.Chars[1].Status, s.Chars[1].Endurance = s1, e1
+	s.Chars[0].Hurt[1] = StartEndurance - e0
+	s.Chars[1].Hurt[0] = StartEndurance - e1
+	for p := range s.Chars {
+		if s.Chars[p].Status == Killed {
+			s.Chars[p].KilledBy = 1 - p
+		}
+	}
 	return s
 }
 
@@ -30,8 +38,14 @@ func awardsString(awards []Award) string {
 }
 
 func totals(awards []Award) string {
-	t := VPTotals(awards)
-	return strconv.Itoa(t[0]) + " " + strconv.Itoa(t[1])
+	out := ""
+	for i, v := range VPTotals(awards, 2) {
+		if i > 0 {
+			out += " "
+		}
+		out += strconv.Itoa(v)
+	}
+	return out
 }
 
 func TestVictoryPoints_BothSurvive(t *testing.T) {
@@ -80,6 +94,35 @@ func TestTurnVictoryPoints_OnlyWhatTheTurnDid(t *testing.T) {
 	after := endState(Alive, PassedOut, StartEndurance, 4)
 	uassert.Equal(t, 0, len(TurnVictoryPoints(before, after)))
 	uassert.Equal(t, 0, len(TurnVictoryPoints(startState(), startState())))
+}
+
+func TestVictoryPoints_FourSeats(t *testing.T) {
+	// Seat 2 killed seat 1; seat 3 surrendered after seat 0 wounded it the
+	// most; seats 0 and 2 both survive, so nobody holds the field and the
+	// surrendered one is not captured.
+	s := fourState()
+	s.Chars[1].Status, s.Chars[1].Endurance, s.Chars[1].KilledBy = Killed, 0, 2
+	s.Chars[1].Hurt = [MaxPlayers]int{3, 0, 17, 0}
+	s.Chars[3].Status, s.Chars[3].Endurance = Out, 12
+	s.Chars[3].Hurt = [MaxPlayers]int{5, 0, 3, 0}
+	a := append(TurnVictoryPoints(fourState(), s), EndVictoryPoints(s)...)
+	uassert.Equal(t, " 1:killed 2:kill_enemy 0:survive 2:survive 3:surrender 0:knock_out_enemy", awardsString(a))
+	totals := VPTotals(a, 4)
+	uassert.Equal(t, "3 -8 4 -2", strconv.Itoa(totals[0])+" "+strconv.Itoa(totals[1])+" "+strconv.Itoa(totals[2])+" "+strconv.Itoa(totals[3]))
+
+	// The last one standing holds the field: the others are captured.
+	s.Chars[2].Status, s.Chars[2].Hurt = PassedOut, [MaxPlayers]int{4, 0, 0, 4} // a tie goes to the first seat
+	a = append(TurnVictoryPoints(fourState(), s), EndVictoryPoints(s)...)
+	uassert.Equal(t, " 1:killed 2:kill_enemy 0:knock_out_enemy 0:survive 0:hold_field 2:captured 3:surrender 0:knock_out_enemy 3:captured", awardsString(a))
+
+	// A death nobody caused (KilledBy NoSeat) gives no kill.
+	s = fourState()
+	s.Chars[0].Status, s.Chars[0].KilledBy = Killed, NoSeat
+	uassert.Equal(t, " 0:killed", awardsString(TurnVictoryPoints(fourState(), s)))
+	// Passing out with no box crossed off by anyone: no knock out.
+	s = fourState()
+	s.Chars[0].Status = PassedOut
+	uassert.Equal(t, "", awardsString(TurnVictoryPoints(fourState(), s)))
 }
 
 func TestVPEvents(t *testing.T) {

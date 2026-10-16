@@ -37,11 +37,19 @@ export function vpRecap(awards: VPAward[], vp: number[], names: string[]): strin
   ];
 }
 
-/** "Marshal wins 4 to −6 VP", "a draw, 2 to 2 VP"; "" for a game that earned no points. */
+/**
+ * "Marshal wins 4 to −6 VP", "a draw, 2 to 2 VP"; with more than two
+ * seats, "El Jefe wins: Marshal −6, The Kid −6, El Jefe 4 VP"; "" for a
+ * game that earned no points.
+ */
 export function vpResult(winner: number, vp: number[] | undefined, awards: VPAward[] | undefined, names: string[]): string {
   if (!vp || !awards?.length) return "";
   const score = vp.map((v) => (v < 0 ? `−${-v}` : String(v)));
-  if (winner < 0) return `a draw, ${score.join(" to ")} VP`;
-  const other = vp.length === 2 ? 1 - winner : -1;
-  return `${names[winner] ?? `seat ${winner}`} wins ${score[winner]} to ${other >= 0 ? score[other] : "?"} VP`;
+  const name = (seat: number) => names[seat] ?? `seat ${seat}`;
+  if (vp.length === 2) {
+    if (winner < 0) return `a draw, ${score.join(" to ")} VP`;
+    return `${name(winner)} wins ${score[winner]} to ${score[1 - winner]} VP`;
+  }
+  const board = vp.map((_, i) => `${name(i)} ${score[i]}`).join(", ");
+  return winner < 0 ? `a draw: ${board} VP` : `${name(winner)} wins: ${board} VP`;
 }

@@ -18,17 +18,17 @@ const listLimit = 50
 // GameJSON is the full view of a game:
 //
 //	{"id","rev","phase","turn","maxTurns","timeout" (seconds),"board",
-//	 "players":[{"addr","name","char","hex" ("" until the seat set up),"facing","down","delay","status","submitted","playedFoot","playedRun","ranLastTurn",
-//	             "aim","aimHex" (the hex the AIM markers sit on, "" when on the opponent),"endurance","serious","gunArm","otherArm","leg",
-//	             "guns":[{"id","type","name","location","cocked","shells","capacity","jammed","exploded"}]}],
+//	 "players":[{"addr" ("" for a seat nobody took yet),"name","char","hex" ("" until the seat set up),"facing","down","delay","status","submitted","playedFoot","playedRun","ranLastTurn",
+//	             "aim","aimAt" (the seat the AIM markers follow, -1 when they sit on a hex or there is no aim),"aimHex" (the hex they sit on, "" when they follow a seat),"endurance","serious","gunArm","otherArm","leg",
+//	             "guns":[{"id","type","name","location","cocked","shells","capacity","jammed","exploded"}]}]   (one entry per seat, 2 to 4),
 //	 "ground":[{"id" (ground id, "g<id>" in a plan),"hex","guns":[{..}]}],
 //	 "winner","endReason","vp":[victory points per seat],"awards":[{"p","reason","points"}] (rule 15, once a played game ends),
 //	 "createdAt","updatedAt","timeoutAt",
 //	 "lastTurn":null|{"turn","seed","cards":[result card numbers drawn, in order],"plans":[..],
 //	             "events":[{"seg","p","kind","action","from","to","facing","down","n","delay","reason","card","result","endurance","target","hit","range","gun","gunId","step","chart","status"}],
-//	             "start":[{"hex","facing","down","delay","status","aim","aimHex","endurance","serious","gunArm","otherArm","leg","guns":[..]},..]}}
+//	             "start":[{"hex","facing","down","delay","status","aim","aimAt","aimHex","endurance","serious","gunArm","otherArm","leg","guns":[..]},..]}}
 //
-// Times are unix seconds; winner and events[].p are seat indexes, -1 for none.
+// Times are unix seconds; winner, events[].p and events[].target are seat indexes, -1 for none.
 // The plans of the turn in progress are not exposed, only the submitted flags.
 func GameJSON(id string) string {
 	g := getGame(id)
@@ -143,6 +143,11 @@ func writePlayer(b *strings.Builder, g *Game, i int) {
 // writeWounds writes the aim and wound members of a character.
 func writeWounds(b *strings.Builder, c engine.Character) {
 	b.WriteString(`,"aim":` + strconv.Itoa(c.Aim))
+	aimAt := engine.NoSeat
+	if c.Aim > 0 {
+		aimAt = c.AimAt
+	}
+	b.WriteString(`,"aimAt":` + strconv.Itoa(aimAt))
 	b.WriteString(`,"aimHex":` + quote(c.AimHex))
 	b.WriteString(`,"endurance":` + strconv.Itoa(c.Endurance))
 	b.WriteString(`,"serious":` + strconv.Itoa(c.Serious))
@@ -264,12 +269,14 @@ func writeEvent(b *strings.Builder, e engine.Event) {
 	b.WriteByte('}')
 }
 
-// GamesJSON lists, for an address, the games waiting for an opponent and
-// the games it plays or played, newest first (at most 50 each), with the
+// GamesJSON lists, for an address, the games with a free seat and the
+// games it plays or played, newest first (at most 50 each), with the
 // address's registered name ("" if none):
 //
 //	{"name","open":[summary...],"mine":[summary...]}
-//	summary = {"id","rev","phase","turn","maxTurns","timeout","winner","endReason","vp","createdAt","updatedAt","players":[{"addr","name","char","submitted"}]}
+//	summary = {"id","rev","phase","turn","maxTurns","timeout","winner","endReason","vp","createdAt","updatedAt","players":[{"addr","name","char","status","submitted"}]}
+//
+// players has one entry per seat, "addr" "" for a seat nobody took yet.
 func GamesJSON(addr string) string {
 	var b strings.Builder
 	b.WriteString(`{"name":` + quote(profiles.Name(address(addr))))
@@ -316,7 +323,8 @@ func writeSummary(b *strings.Builder, g *Game) {
 		if i > 0 {
 			b.WriteByte(',')
 		}
-		b.WriteString(`{"addr":` + quote(p.Addr.String()) + `,"name":` + quote(profiles.Name(p.Addr)) + `,"char":` + quote(p.Char) + `,"submitted":` + strconv.FormatBool(g.Submitted[i]) + `}`)
+		b.WriteString(`{"addr":` + quote(p.Addr.String()) + `,"name":` + quote(profiles.Name(p.Addr)) + `,"char":` + quote(p.Char) +
+			`,"status":` + quote(g.State.Chars[i].Status.String()) + `,"submitted":` + strconv.FormatBool(g.Submitted[i]) + `}`)
 	}
 	b.WriteString("]}")
 }

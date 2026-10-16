@@ -21,7 +21,16 @@ describe("parseGameView", () => {
   it("rejects wrong shapes", () => {
     expect(() => parseGameView("[]")).toThrow(/bad game JSON/);
     expect(() => parseGameView('{"id":"1","rev":1,"turn":1,"phase":"lobby","players":[]}')).toThrow(/phase/);
-    expect(() => parseGameView(GAME.replace('"players":[', '"players":[{},'))).toThrow(/players/);
+    expect(() => parseGameView(GAME.replace('"players":[', '"players":[{},'))).toThrow(/player/);
+  });
+
+  it("takes two to four seats", () => {
+    const seat = (addr: string, char: string) => `{"addr":"${addr}","char":"${char}","hex":"","facing":0,"down":false,"delay":0,"status":"alive","submitted":false,"playedFoot":false,"playedRun":false}`;
+    const game = (n: number) => `{"id":"1","rev":1,"turn":1,"phase":"waiting","players":[${Array.from({ length: n }, (_, i) => seat(i === 0 ? "g1a" : "", i === 0 ? "marshal" : "")).join(",")}],"lastTurn":null}`;
+    expect(parseGameView(game(3)).players).toHaveLength(3);
+    expect(parseGameView(game(4)).players).toHaveLength(4);
+    expect(() => parseGameView(game(1))).toThrow(/players/);
+    expect(() => parseGameView(game(5))).toThrow(/players/);
   });
 
   it("does not match an empty seat", () => {

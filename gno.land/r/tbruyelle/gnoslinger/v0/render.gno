@@ -52,27 +52,29 @@ func link(text, path string) string {
 
 func renderHome(res *mux.ResponseWriter, _ *mux.Request) {
 	res.Write(md.H1("Gnoslinger"))
-	res.Write(md.Paragraph("Two-player showdowns on board A, the Corral. " +
-		"Create a game, wait for an opponent, then submit a plan every turn. " +
+	res.Write(md.Paragraph("Showdowns of two to four gunfighters on board A, the Corral, each on their own. " +
+		"Create a game, wait for the seats to fill up, then submit a plan every turn. " +
 		link("How to play", "help") + "."))
-	res.Write(md.Paragraph(md.Link("Create a game as the marshal", txlink.Call("CreateGame", "charKey", "marshal", "maxTurns", "20", "timeoutMinutes", "0", "startHex", "A-G7", "facing", "5"))))
+	res.Write(md.Paragraph(md.Link("Create a game of two as the marshal", txlink.Call("CreateGame", "seats", "2", "maxTurns", "20", "timeoutMinutes", "0", "startHex", "A-G7", "facing", "5")) +
+		" · " + md.Link("of three", txlink.Call("CreateGame", "seats", "3", "maxTurns", "20", "timeoutMinutes", "0", "startHex", "A-G7", "facing", "5")) +
+		" · " + md.Link("of four", txlink.Call("CreateGame", "seats", "4", "maxTurns", "20", "timeoutMinutes", "0", "startHex", "A-G7", "facing", "5"))))
 
 	res.Write(md.H2("Open games"))
 	n := 0
 	var b strings.Builder
-	b.WriteString("| Game | Creator | Character | Created | |\n|---|---|---|---|---|\n")
+	b.WriteString("| Game | Creator | Seats | Created | |\n|---|---|---|---|---|\n")
 	openGames.ReverseIterate("", "", func(_ string, v any) bool {
 		g := v.(*Game)
 		b.WriteString("| " + link(g.ID, "game/"+g.ID) +
 			" | " + addr(g.Players[0].Addr) +
-			" | " + sanitize.InlineText(g.Players[0].Char) +
+			" | " + strconv.Itoa(g.seated()) + "/" + strconv.Itoa(g.seats()) +
 			" | " + when(g.CreatedAt) +
-			" | " + md.Link("Join as the kid", txlink.Call("JoinGame", "id", g.ID, "charKey", "the_kid", "startHex", "A-E7", "facing", "2")) + " |\n")
+			" | " + joinLink(g) + " |\n")
 		n++
 		return n >= recentLimit
 	})
 	if n == 0 {
-		res.Write(md.Paragraph("No game is waiting for an opponent."))
+		res.Write(md.Paragraph("No game is waiting for players."))
 	} else {
 		res.Write(b.String() + "\n")
 	}
@@ -84,7 +86,7 @@ func renderHome(res *mux.ResponseWriter, _ *mux.Request) {
 	games.ReverseIterate("", "", func(_ string, v any) bool {
 		g := v.(*Game)
 		b.WriteString("| " + link(g.ID, "game/"+g.ID) +
-			" | " + seatLabel(g, 0) + " vs " + seatLabel(g, 1) +
+			" | " + seatLabels(g) +
 			" | " + strconv.Itoa(g.Turn) + "/" + strconv.Itoa(g.MaxTurns) +
 			" | " + phaseLabel(g) + " |\n")
 		n++
@@ -128,7 +130,11 @@ func renderGame(res *mux.ResponseWriter, req *mux.Request) {
 
 	for _, r := range g.Turns {
 		res.Write(md.H3("Turn " + strconv.Itoa(r.Turn)))
-		res.Write(md.Paragraph("Plans: " + md.InlineCode(orPass(r.Plans[0])) + " vs " + md.InlineCode(orPass(r.Plans[1]))))
+		plans := make([]string, len(r.Plans))
+		for i, p := range r.Plans {
+			plans[i] = md.InlineCode(orPass(p))
+		}
+		res.Write(md.Paragraph("Plans: " + strings.Join(plans, " vs ")))
 		if drawn := r.Cards(); len(drawn) > 0 {
 			cards := make([]string, len(drawn))
 			for i, n := range drawn {
@@ -149,8 +155,7 @@ func renderGame(res *mux.ResponseWriter, req *mux.Request) {
 
 	switch g.Phase {
 	case PhaseWaiting:
-		res.Write(md.Paragraph(md.Link("Join as the kid", txlink.Call("JoinGame", "id", g.ID, "charKey", "the_kid", "startHex", "A-E7", "facing", "2")) +
-			" · " + md.Link("Cancel", txlink.Call("CancelGame", "id", g.ID))))
+		res.Write(md.Paragraph(joinLink(g) + " · " + md.Link("Cancel", txlink.Call("CancelGame", "id", g.ID))))
 	case PhasePlanning:
 		res.Write(md.Paragraph(md.Link("Submit a plan", txlink.Call("SubmitPlan", "id", g.ID, "plan", "")) +
 			" · " + md.Link("Surrender", txlink.Call("Surrender", "id", g.ID)) +
@@ -162,18 +167,19 @@ func renderGame(res *mux.ResponseWriter, req *mux.Request) {
 
 func renderHelp(res *mux.ResponseWriter, _ *mux.Request) {
 	res.Write(md.H1("How to play"))
-	res.Write(md.Paragraph("Each turn has five segments. Both players secretly pick up to five time points " +
+	res.Write(md.Paragraph("Two to four gunfighters, each on their own. Each turn has five segments. Every player secretly picks up to five time points " +
 		"of action cards, in the order they will do them, then the turn resolves: an action executes on the " +
 		"segment equal to the time points used so far plus its own cost plus the delay points on your sheet. " +
 		"Delay you gain during a segment counts from the next one; actions left after segment 5 are cancelled. " +
 		"At the end of the turn half of your delay (rounded up) goes away."))
 	res.Write(md.H2("Setting up"))
-	res.Write(md.Paragraph("Each player picks where to stand when calling or joining a showdown, among the hexes assigned " +
-		"to its character: the marshal inside the corral in " + md.InlineCode("A-G5") + " to " + md.InlineCode("A-G9") +
-		", the kid in " + md.InlineCode("A-E5") + " to " + md.InlineCode("A-E9") + "; each faces any direction (" +
+	res.Write(md.Paragraph("The creator picks how many play, two to four, and is the marshal; the others take the next characters " +
+		"in the order they join: the kid, then el jefe, then axe. Each player picks where to stand when calling or joining a showdown, " +
+		"among the hexes assigned to its character, inside the corral: " + setupList() + "; each faces any direction (" +
 		md.InlineCode("0") + " N, " + md.InlineCode("1") + " NE, " + md.InlineCode("2") + " SE, " + md.InlineCode("3") + " S, " +
-		md.InlineCode("4") + " SW, " + md.InlineCode("5") + " NW; the marshal looks north-west and the kid south-east unless told otherwise). " +
-		"Both start upright with a loaded Colt 45 in the holster."))
+		md.InlineCode("4") + " SW, " + md.InlineCode("5") + " NW; the marshal and el jefe look north-west, the kid and axe south-east unless told otherwise). " +
+		"All start upright with a loaded Colt 45 in the holster. Aims and shots name a character by seat (" + md.InlineCode("@1") +
+		") or a hex. A character killed or passed out is out of the fight; one may surrender while the plans are collected, and the others fight on."))
 	res.Write(md.H2("Plan string"))
 	res.Write(md.Paragraph("A plan is a comma-separated list of card sides in play order, each " +
 		md.InlineCode("<card><f|b>[:<direction>]") + ". Directions are relative to your facing: " +
@@ -358,10 +364,39 @@ func describeEvent(g *Game, e engine.Event) string {
 }
 
 func seatLabel(g *Game, i int) string {
-	if g.Players[i].Addr == "" {
+	if i < 0 || i >= g.seats() || g.Players[i].Addr == "" {
 		return "?"
 	}
 	return sanitize.InlineText(g.Players[i].Char)
+}
+
+// seatLabels names every seat, "marshal vs the_kid vs ?".
+func seatLabels(g *Game) string {
+	labels := make([]string, g.seats())
+	for i := range g.Players {
+		labels[i] = seatLabel(g, i)
+	}
+	return strings.Join(labels, " vs ")
+}
+
+// joinLink is a transaction link to take the next free seat of a waiting
+// game, standing in the middle of its character's hexes.
+func joinLink(g *Game) string {
+	seat := g.freeSeat()
+	if seat < 0 {
+		return ""
+	}
+	setup := engine.SetupOf(engine.SeatChar(seat))
+	return md.Link("Join as "+strings.ReplaceAll(setup.Char, "_", " "), txlink.Call("JoinGame", "id", g.ID, "startHex", setup.Hexes[len(setup.Hexes)/2], "facing", strconv.Itoa(int(setup.Facing))))
+}
+
+// setupList words where each character sets up: "the marshal in A-G5 to A-G9, ...".
+func setupList() string {
+	parts := make([]string, len(engine.Setups))
+	for i, s := range engine.Setups {
+		parts[i] = strings.ReplaceAll(s.Char, "_", " ") + " in " + md.InlineCode(s.Hexes[0]) + " to " + md.InlineCode(s.Hexes[len(s.Hexes)-1])
+	}
+	return strings.Join(parts, ", ")
 }
 
 func phaseLabel(g *Game) string {
@@ -370,7 +405,11 @@ func phaseLabel(g *Game) string {
 	}
 	l := "finished (" + g.EndReason + ")"
 	if len(g.Awards) > 0 {
-		l += ", " + strconv.Itoa(g.VP[0]) + " to " + strconv.Itoa(g.VP[1]) + " VP"
+		vp := make([]string, len(g.VP))
+		for i, v := range g.VP {
+			vp[i] = strconv.Itoa(v)
+		}
+		l += ", " + strings.Join(vp, " to ") + " VP"
 	}
 	if g.Winner >= 0 {
 		l += ", winner: " + seatLabel(g, g.Winner)

@@ -76,7 +76,7 @@ describe("soundsForEvents", () => {
 const colt = (partial: Partial<GunView> = {}): GunView =>
   ({ id: 1, type: "colt45", name: "Colt 45", location: "holstered", cocked: false, shells: 6, capacity: 6, jammed: false, exploded: false, ...partial }) as GunView;
 const char = (partial: Partial<CharView> = {}): CharView =>
-  ({ hex: "A-F3", facing: 3, down: false, delay: 0, status: "alive", aim: 0, guns: [colt()], ...partial }) as CharView;
+  ({ hex: "A-F3", facing: 3, down: false, delay: 0, status: "alive", aim: 0, aimAt: -1, aimHex: "", guns: [colt()], ...partial }) as CharView;
 
 describe("soundsForPreview", () => {
   const groups = (before: CharView, after: CharView) => soundsForPreview(before, after).map((c) => c.group);

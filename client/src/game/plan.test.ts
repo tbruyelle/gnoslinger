@@ -7,7 +7,7 @@ const COLT: GunView = { id: 1, type: "colt45", name: "Colt 45", location: "holst
 
 describe("plan encoding", () => {
   it("round-trips the realm's format", () => {
-    for (const s of ["", "1f:ahead_left", "1f:ahead_left,2f:ahead,3f", "4b", "1b:back_right,3b:ahead", "12b", "9f:1:0", "1f:ahead,9f:12:2", "9f:g3:0", "5f:cock", "6f:aim:A-F6,7f:shoot:@1", "7f", "9f:1:0,7f:shoot:@1", "5f:aim:@1"]) {
+    for (const s of ["", "1f:ahead_left", "1f:ahead_left,2f:ahead,3f", "4b", "1b:back_right,3b:ahead", "12b", "9f:1:0", "1f:ahead,9f:12:2", "9f:g3:0", "5f:cock", "6f:aim:A-F6,7f:shoot:@1", "7f", "9f:1:0,7f:shoot:@1", "5f:aim:@1", "5f:aim:@3", "7f:shoot:@2"]) {
       expect(encodePlan(decodePlan(s))).toBe(s);
     }
   });
@@ -18,7 +18,7 @@ describe("plan encoding", () => {
   });
 
   it("rejects malformed strings", () => {
-    for (const s of ["13f", "1x", "1f:north", "1f,", "1f, 2f", "0f", "1f:", "9f:1", "9f:0:0", "9f:1:3", "9f:ahead", "1f:0", "9f:g0:0", "9f:gx:0", "5f", "5f:nothing", "5f:ahead", "7f:aim", "7f:cock", "1f:shoot", "5f:aim", "5f:aim:", "5f:aim:a-f6", "5f:cock:A-F6", "5f:aim:@2", "5f:aim:@x", "7f:shoot", "7f:shoot:", "7f:shoot:@2"]) {
+    for (const s of ["13f", "1x", "1f:north", "1f,", "1f, 2f", "0f", "1f:", "9f:1", "9f:0:0", "9f:1:3", "9f:ahead", "1f:0", "9f:g0:0", "9f:gx:0", "5f", "5f:nothing", "5f:ahead", "7f:aim", "7f:cock", "1f:shoot", "5f:aim", "5f:aim:", "5f:aim:a-f6", "5f:cock:A-F6", "5f:aim:@4", "5f:aim:@x", "5f:aim:@-1", "7f:shoot", "7f:shoot:", "7f:shoot:@4"]) {
       expect(() => decodePlan(s), s).toThrow();
     }
   });

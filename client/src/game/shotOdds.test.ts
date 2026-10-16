@@ -8,7 +8,7 @@ import { shotOdds } from "./shotOdds";
 const colt: GunView = { id: 1, type: "colt45", name: "Colt 45", location: "gun_hand", cocked: true, shells: 6, capacity: 6, jammed: false, exploded: false } as GunView;
 const me = (over: Partial<CharView> = {}): CharView => ({
   hex: "A-F3", facing: 3, down: false, delay: 0, status: "alive", guns: [colt],
-  aim: 0, aimHex: "", endurance: 20, serious: 0, gunArm: 0, otherArm: 0, leg: 0, ...over,
+  aim: 0, aimAt: -1, aimHex: "", endurance: 20, serious: 0, gunArm: 0, otherArm: 0, leg: 0, ...over,
 });
 
 describe("hitChance", () => {

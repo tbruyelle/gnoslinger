@@ -5,7 +5,7 @@ import { gunInHand, replayPlan } from "./replay";
 import type { GunView } from "../chain/types";
 
 describe("replayPlan", () => {
-  const start = { hex: "A-F1", facing: 3, down: false, delay: 0, guns: [], status: "alive" as const, aim: 0, aimHex: "", endurance: 20, serious: 0, gunArm: 0, otherArm: 0, leg: 0 };
+  const start = { hex: "A-F1", facing: 3, down: false, delay: 0, guns: [], status: "alive" as const, aim: 0, aimAt: -1, aimHex: "", endurance: 20, serious: 0, gunArm: 0, otherArm: 0, leg: 0 };
   const colt: GunView = { id: 1, type: "colt45", name: "Colt 45", location: "holstered", cocked: false, shells: 6, capacity: 6, jammed: false, exploded: false };
 
   it("moves, turns and flips in plan order", () => {
@@ -42,9 +42,11 @@ describe("replayPlan", () => {
     const atKid = replayPlan({ ...start, guns: [armed] }, decodePlan("5f:aim:@1"), BOARD_A);
     expect(atKid.aim).toBe(2);
     expect(atKid.aimHex).toBe("");
+    expect(atKid.aimAt).toBe(1);
     const shot = replayPlan({ ...start, guns: [armed] }, decodePlan("5f:aim:A-F6,7f:shoot:@1"), BOARD_A);
     expect(shot.aim).toBe(0);
     expect(shot.aimHex).toBe("");
+    expect(shot.aimAt).toBe(-1);
     expect(shot.guns[0]).toEqual({ ...armed, cocked: false, shells: 5 });
     // Revealing a foot action loses the aim; a Turn keeps it; cocking loses it.
     expect(replayPlan({ ...start, aim: 4 }, decodePlan("1f:ahead"), BOARD_A).aim).toBe(0);

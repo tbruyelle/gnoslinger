@@ -35,42 +35,56 @@ type Award struct {
 
 // TurnVictoryPoints scores what a turn did, from the characters before and
 // after it: a character killed loses the "Killed" points and the enemy
-// gets "Kill enemy" (15.2); one who passed out gets nothing and the enemy
-// "Knock out enemy" when it crossed off endurance boxes (15.3). With two
-// characters the enemy is the other one, and every endurance box crossed
-// off was crossed off by it (wounds and their fatigue). A character who is
-// not up cannot be hit, so a knocked-out one is never killed afterwards.
+// whose hit killed it gets "Kill enemy" (15.2, Character.KilledBy); one
+// who passed out gets nothing and the enemy who crossed off most of its
+// endurance boxes "Knock out enemy" (15.3, Character.Hurt). A character
+// who is not up cannot be hit, so a knocked-out one is never killed
+// afterwards.
 func TurnVictoryPoints(before, after State) []Award {
 	var out []Award
 	for p, c := range after.Chars {
-		if before.Chars[p].Status != Alive {
+		if p >= len(before.Chars) || before.Chars[p].Status != Alive {
 			continue
 		}
-		enemy := 1 - p
 		switch c.Status {
 		case Killed:
-			out = append(out, award(p, VPKilled), award(enemy, VPKill))
+			out = append(out, award(p, VPKilled))
+			if k := c.KilledBy; k >= 0 && k < len(after.Chars) && k != p {
+				out = append(out, award(k, VPKill))
+			}
 		case PassedOut:
-			if c.Endurance < StartEndurance {
-				out = append(out, award(enemy, VPKnockOut))
+			if k := knockedOutBy(c); k >= 0 {
+				out = append(out, award(k, VPKnockOut))
 			}
 		}
 	}
 	return out
 }
 
+// knockedOutBy is the enemy who crossed off most of the character's
+// endurance boxes (15.3): the first in seat order when two did as much,
+// NoSeat when nobody did.
+func knockedOutBy(c Character) int {
+	best, most := NoSeat, 0
+	for q, n := range c.Hurt {
+		if n > most {
+			best, most = q, n
+		}
+	}
+	return best
+}
+
 // EndVictoryPoints scores the end of the showdown (15.6): a character still
 // up survives, and holds the field when it is the only one (15.62, 15.63);
 // Out stands for a surrendered character, who loses the "Surrender" points
-// and, like passing out, gives the enemy "Knock out enemy" when it crossed
-// off endurance boxes (15.41); passed out or surrendered, a character is
-// captured when the enemy holds the field (15.63, 15.7).
+// and, like passing out, gives "Knock out enemy" to the enemy who crossed
+// off most of its endurance boxes (15.41); passed out or surrendered, a
+// character is captured when an enemy holds the field (15.63, 15.7).
 func EndVictoryPoints(s State) []Award {
 	var out []Award
 	survivors := AliveCount(s)
 	for p, c := range s.Chars {
-		enemy := 1 - p
-		holds := survivors == 1 && s.Chars[enemy].Status == Alive
+		holds := survivors == 1 && c.Status != Alive // someone else holds the field
 		switch c.Status {
 		case Alive:
 			out = append(out, award(p, VPSurvive))
@@ -79,8 +93,8 @@ func EndVictoryPoints(s State) []Award {
 			}
 		case Out:
 			out = append(out, award(p, VPSurrender))
-			if c.Endurance < StartEndurance {
-				out = append(out, award(enemy, VPKnockOut))
+			if k := knockedOutBy(c); k >= 0 {
+				out = append(out, award(k, VPKnockOut))
 			}
 			if holds {
 				out = append(out, award(p, VPCaptured))
@@ -107,11 +121,13 @@ func VPEvents(awards []Award) []Event {
 	return evs
 }
 
-// VPTotals adds the awards up per character.
-func VPTotals(awards []Award) [NumPlayers]int {
-	var t [NumPlayers]int
+// VPTotals adds the awards up per seat, for n seats.
+func VPTotals(awards []Award, n int) []int {
+	t := make([]int, n)
 	for _, a := range awards {
-		t[a.Player] += a.Points
+		if a.Player >= 0 && a.Player < n {
+			t[a.Player] += a.Points
+		}
 	}
 	return t
 }

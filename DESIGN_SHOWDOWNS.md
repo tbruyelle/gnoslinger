@@ -5,12 +5,17 @@ each. More are planned: more than two players, battle royale (2 to 8),
 teams (OK Corral). This plan makes a showdown a pluggable **package**,
 registered with the one game realm.
 
-## Where the code assumes two players
+## Where the code assumed two players (done on 2026-10-16)
 
 - Realm and engine: `NumPlayers` (fixed `[2]` arrays) in 36 places, "the
   opponent is `1 - p`" in 6 (`target := 1 - p` in `Resolve`, AIM markers that
-  follow "the opponent").
-- Client: about 8 `1 - seat` spots.
+  follow "the opponent"). Now slices, one entry per seat (2 to 4,
+  `engine.MinPlayers`..`MaxPlayers`), targets by seat everywhere
+  (`Character.AimAt`, `KilledBy`, `Hurt`); the realm seats the players in
+  join order with fixed characters (AGENTS.md, Set up). Phase 2 below is
+  done but for teams and more than four seats.
+- Client: about 8 `1 - seat` spots, gone the same way (`aimAt`,
+  `aimersOn`, seat colours).
 - Plans already name targets by seat (`@1`), which works for N players.
 
 ## Decision: a showdown is a package, not a realm

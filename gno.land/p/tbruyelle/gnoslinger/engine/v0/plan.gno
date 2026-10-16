@@ -167,7 +167,7 @@ func parseEntry(e string) (Action, error) {
 			switch {
 			case strings.HasPrefix(arg, "@"):
 				seat, err := strconv.Atoi(arg[1:])
-				if err != nil || seat < 0 || seat >= NumPlayers {
+				if err != nil || seat < 0 || seat >= MaxPlayers {
 					return Action{}, errors.New("invalid character " + strconv.Quote(arg) + " to " + opt + " at")
 				}
 				a.Target = seat

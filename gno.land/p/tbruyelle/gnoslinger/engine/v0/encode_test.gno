@@ -54,8 +54,14 @@ func TestEncodeCharactersRoundTrip(t *testing.T) {
 	st.Chars[0].Aim, st.Chars[0].AimHex, st.Chars[0].Endurance, st.Chars[0].Exhausted = 4, "A-F6", 11, 1
 	st.Chars[0].Serious, st.Chars[0].GunArm, st.Chars[0].OtherArm, st.Chars[0].Leg = 2, 4, 1, 3
 	st.Chars[0].Guns = Guns{{ID: 1, Type: Colt45, Location: GunHand, Cocked: true, Shells: 4, Jammed: true}, {ID: 3, Type: Colt45, Location: Holstered, Shells: 6, Exploded: true}}
+	st.Chars[0].KilledBy, st.Chars[0].SeriousBy, st.Chars[0].LegBy = 1, 1, 0
+	st.Chars[0].Hurt = [MaxPlayers]int{0, 7, 0, 2}
 	st.Chars[1].Guns = Guns{} // no gun at all
+	st.Chars[1].Aim, st.Chars[1].AimAt = 2, 0
 	got := DecodeChars(EncodeChars(st.Chars))
+	if len(got) != len(st.Chars) {
+		t.Fatalf("decoded %d characters, want %d", len(got), len(st.Chars))
+	}
 	for i := range st.Chars {
 		if got[i] != st.Chars[i] {
 			t.Errorf("char %d: got %+v, want %+v", i, got[i], st.Chars[i])
@@ -63,6 +69,21 @@ func TestEncodeCharactersRoundTrip(t *testing.T) {
 	}
 	if DecodeCharacter("bad") != (Character{}) {
 		t.Error("malformed character should decode to zero")
+	}
+	if DecodeChars("") != nil {
+		t.Error("nothing should decode to nothing")
+	}
+	// A record of the two seat days (18 fields): nobody named, but markers
+	// off any hex followed the opponent.
+	old := DecodeChars("A-F3|3|0|0|0|0|0|0|0|4||20|0|0|0|0|0|1:colt45:1:1:6:0:0;A-F9|0|0|0|0|0|0|0|0|0||20|0|0|0|0|0|")
+	if len(old) != 2 || old[0].Aim != 4 || old[0].AimAt != 1 || old[1].AimAt != NoSeat || old[0].KilledBy != NoSeat || old[0].SeriousBy != NoSeat || old[0].Guns[0].ID != 1 {
+		t.Errorf("18-field records: got %+v", old)
+	}
+	// Four seats round trip too.
+	four := fourState()
+	four.Chars[3].Hurt[2] = 5
+	if got := DecodeChars(EncodeChars(four.Chars)); len(got) != 4 || got[3] != four.Chars[3] || got[2].Hex != "A-H6" {
+		t.Errorf("four seats: got %+v", got)
 	}
 }
 

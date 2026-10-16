@@ -14,7 +14,7 @@ const events: TurnEvent[] = [
   ev({ seg: END_OF_TURN_SEG, p: 1, kind: "cancel", action: "advance", reason: "time" }),
 ];
 
-const fresh = { status: "alive" as const, aim: 0, aimHex: "", endurance: 20, serious: 0, gunArm: 0, otherArm: 0, leg: 0 };
+const fresh = { status: "alive" as const, aim: 0, aimAt: -1, aimHex: "", endurance: 20, serious: 0, gunArm: 0, otherArm: 0, leg: 0 };
 const start = [
   { hex: "A-F1", facing: 3, down: false, delay: 0, guns: [], ...fresh },
   { hex: "A-F12", facing: 0, down: false, delay: 0, guns: [], ...fresh },

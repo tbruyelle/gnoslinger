@@ -21,7 +21,7 @@ const (
 	EvAim          = "aim"           // N = AIM points after aiming, To = the hex they sit on, Target = the seat they follow (-1 for a hex)
 	EvLoseAim      = "lose_aim"      // Reason (To = the obstacle in the way for no_los)
 	EvNothing      = "nothing"       // a Shoot used to do nothing, or a shot held at a hex nobody stands in (Reason empty_hex, To = the hex) or at a target out of sight (Reason no_los, To = its hex, Target = its seat): keeps the aim
-	EvShot         = "shot"          // Card, Target, To = the hex shot at, Hit (final location or Miss), Range, N = aim time, Reason "" | out_of_zone | misfire (older records: Target -1 and empty_hex for a shot wasted on an empty hex)
+	EvShot         = "shot"          // Card, Target = the seat shot at (whoever stood in the hex named, for a shot at a hex), To = the hex shot at, Hit (final location or Miss), Range, N = aim time, Reason "" | out_of_zone | misfire (older records: Target -1 and empty_hex for a shot wasted on an empty hex)
 	EvMalfunction  = "malfunction"   // Card, Result (no_effect, misfire, jams, explodes, no_penalty), Gun, GunID
 	EvWildShot     = "wild_shot"     // Gun went off without hitting anything: uncocked, one shell less
 	EvWound        = "wound"         // Player hit: Result = penalty kind (Kill, Stun...), N
@@ -55,8 +55,8 @@ const (
 	ReasonJammed    = "jammed"      // shooting or cocking a jammed gun not completely reloaded yet (13.31)
 	ReasonFull      = "full"        // loading a gun already holding its Ammo limit (10.42)
 	ReasonBroken    = "broken"      // using or loading an exploded gun (13.31)
-	ReasonNoTarget  = "no_target"   // the opponent is out of the fight (12.6)
-	ReasonOutOfZone = "out_of_zone" // the opponent is in the blind zone (8.32, 12.41)
+	ReasonNoTarget  = "no_target"   // the character named is out of the fight (12.6), or is the shooter, or no such seat
+	ReasonOutOfZone = "out_of_zone" // the target is in the blind zone (8.32, 12.41)
 	ReasonNoLOS     = "no_los"      // no line of sight to the target, an obstacle in the way by the heights (31): an aim is cancelled, a shot is held, AIM points are lost
 	ReasonReveal    = "reveal"      // revealing an action other than Turn or a gun action (12.44)
 	ReasonTransfer  = "transfer"    // a new target more than one hex from the markers (12.5)
@@ -140,25 +140,30 @@ type pending struct {
 	pens []Penalty
 }
 
-// Resolve plays both plans over the five segments of a turn (rules 5.5, 6,
-// 7, 9, 12, 13, 14), deterministic for a given Drawer. Choices were
-// committed up front and are resolved against each character's live state
-// as the stacks play out.
+// Resolve plays the plans, one per seat, over the five segments of a turn
+// (rules 5.5, 6, 7, 9, 12, 13, 14), deterministic for a given Drawer; the
+// state given is left as it is. Choices were committed up front and are
+// resolved against each character's live state as the stacks play out.
 //
 // Each segment, every alive character whose next action is due
 // (usedTime + cost + delay <= segment) executes it once, shots first
-// (7.52). Delay gained during a segment and the results of hits take
-// effect from the end of the segment ([H6], 14.1). Actions still pending
-// after segment 5 are cancelled.
-func Resolve(board *hex.Board, st State, plans [NumPlayers]Plan, d Drawer) (State, []Event) {
+// (7.52), in seat order. Delay gained during a segment and the results of
+// hits take effect from the end of the segment ([H6], 14.1). Actions still
+// pending after segment 5 are cancelled.
+func Resolve(board *hex.Board, st State, plans []Plan, d Drawer) (State, []Event) {
+	st.Chars = CloneChars(st.Chars)
+	n := len(st.Chars)
+	for len(plans) < n { // a seat without a plan passes
+		plans = append(plans, nil)
+	}
 	var (
-		used [NumPlayers]int
-		idx  [NumPlayers]int
+		used = make([]int, n)
+		idx  = make([]int, n)
 		evs  []Event
 	)
 	// Turn start: SERIOUS wounds draw fatigue cards (5.3), on the sheet
 	// before segment 1.
-	var startDelay [NumPlayers]int
+	startDelay := make([]int, n)
 	for p := range st.Chars {
 		c := &st.Chars[p]
 		startDelay[p] = c.Delay
@@ -166,14 +171,14 @@ func Resolve(board *hex.Board, st State, plans [NumPlayers]Plan, d Drawer) (Stat
 			continue
 		}
 		for i := 0; i < c.Serious; i++ {
-			c.Delay += drawCard(p, c, 0, ReasonSerious, fatigueLine, d, &evs)
+			c.Delay += drawCard(p, c, 0, ReasonSerious, fatigueLine, c.SeriousBy, d, &evs)
 		}
 	}
 	runningDelay(evs, startDelay)
 	// Reveal the first actions (5.4): aim may be lost or moved (12.44, 12.5).
 	for p := range st.Chars {
 		if st.Chars[p].Status == Alive && len(plans[p]) > 0 {
-			reveal(board, p, &st.Chars[p], &st.Chars[1-p], plans[p][0], 0, &evs)
+			reveal(board, p, &st, plans[p][0], 0, &evs)
 		}
 	}
 	due := func(p int, seg int) bool {
@@ -184,38 +189,37 @@ func Resolve(board *hex.Board, st State, plans [NumPlayers]Plan, d Drawer) (Stat
 		used[p] += plans[p][idx[p]].Cost
 		idx[p]++
 		if st.Chars[p].Status == Alive && idx[p] < len(plans[p]) {
-			reveal(board, p, &st.Chars[p], &st.Chars[1-p], plans[p][idx[p]], seg, &evs)
+			reveal(board, p, &st, plans[p][idx[p]], seg, &evs)
 		}
 	}
 	for seg := 1; seg <= Segments; seg++ {
 		var (
-			gained  [NumPlayers]int
-			moved   [NumPlayers]bool
-			shot    [NumPlayers]bool
-			results [NumPlayers][]pending
+			gained  = make([]int, n)
+			moved   = make([]bool, n)
+			shot    = make([]bool, n)
+			results = make([][]pending, n)
 			first   = len(evs) // events of this segment start here
 		)
 		// Shots are resolved before the other actions (7.52).
-		for p := 0; p < NumPlayers; p++ {
+		for p := 0; p < n; p++ {
 			if !due(p, seg) || !plans[p][idx[p]].IsShot() {
 				continue
 			}
-			target := 1 - p
-			pens := shoot(board, p, &st.Chars[p], target, &st.Chars[target], plans[p][idx[p]], seg, d, &evs)
-			if len(pens) > 0 {
+			target, pens := shoot(board, p, &st, plans[p][idx[p]], seg, d, &evs)
+			if target >= 0 && len(pens) > 0 {
 				results[target] = append(results[target], pending{from: p, pens: pens})
 			}
 			shot[p] = true
 			advance(p, seg)
 		}
 		stamp(evs[first:], StepShots)
-		for p := 0; p < NumPlayers; p++ {
+		for p := 0; p < n; p++ {
 			if shot[p] || !due(p, seg) {
 				continue
 			}
 			from := len(evs)
 			a := plans[p][idx[p]]
-			g, executed := execute(board, p, a, &st, &st.Chars[p], &st.Chars[1-p], seg, d, &evs)
+			g, executed := execute(board, p, a, &st, seg, d, &evs)
 			gained[p] += g
 			advance(p, seg)
 			if executed && cards.IsMove(a.Code) {
@@ -227,11 +231,11 @@ func Resolve(board *hex.Board, st State, plans [NumPlayers]Plan, d Drawer) (Stat
 
 		// Occupied-hex penalty (9.24): when a mover ends the segment in
 		// another character's hex, both draw one delay card (once each).
-		for p := 0; p < NumPlayers; p++ {
+		for p := 0; p < n; p++ {
 			if st.Chars[p].Status != Alive {
 				continue
 			}
-			for o := 0; o < NumPlayers; o++ {
+			for o := 0; o < n; o++ {
 				if o == p || st.Chars[o].Status != Alive || st.Chars[p].Hex != st.Chars[o].Hex || !(moved[p] || moved[o]) {
 					continue
 				}
@@ -241,30 +245,34 @@ func Resolve(board *hex.Board, st State, plans [NumPlayers]Plan, d Drawer) (Stat
 		}
 
 		// Combat results go into effect at the end of the segment (14.1).
-		for p := 0; p < NumPlayers; p++ {
+		for p := 0; p < n; p++ {
 			for _, r := range results[p] {
 				gained[p] += applyPenalties(board, p, &st, r, seg, d, &evs)
 			}
 		}
 		// A target out of the aim zone (12.41) or out of sight (31.1) at the
 		// end of the segment loses the aim.
-		for p := 0; p < NumPlayers; p++ {
-			c, t := &st.Chars[p], &st.Chars[1-p]
+		for p := 0; p < n; p++ {
+			c := &st.Chars[p]
 			if c.Status != Alive || c.Aim == 0 {
 				continue
 			}
-			if c.AimHex == "" && t.Status != Alive { // the aim stays on a fallen target (12.6)
-				continue
+			var t *Character // the markers follow a character...
+			if c.AimAt >= 0 {
+				t = st.char(c.AimAt)
+				if t == nil {
+					loseAim(p, c, seg, ReasonNoTarget, &evs)
+					continue
+				}
+				if t.Status != Alive { // the aim stays on a fallen target (12.6)
+					continue
+				}
 			}
-			if !board.InAimZone(c.Hex, c.Facing, aimTarget(c, t)) {
+			if !board.InAimZone(c.Hex, c.Facing, aimTarget(c, &st)) {
 				loseAim(p, c, seg, ReasonOutOfZone, &evs)
 				continue
 			}
-			var at *Character // the markers follow the opponent...
-			if c.AimHex == "" {
-				at = t
-			}
-			if clear, blocker := canSee(board, c, c.AimHex, at); !clear { // ...or sit on a hex
+			if clear, blocker := canSee(board, c, c.AimHex, t); !clear { // ...or sit on a hex
 				loseAimAt(p, c, seg, ReasonNoLOS, blocker, &evs)
 			}
 		}
@@ -273,7 +281,7 @@ func Resolve(board *hex.Board, st State, plans [NumPlayers]Plan, d Drawer) (Stat
 
 		// Delay gained this segment takes effect next segment (6.1, [H6]);
 		// the events carry the running total as the cards come.
-		for p := 0; p < NumPlayers; p++ {
+		for p := 0; p < n; p++ {
 			startDelay[p] = st.Chars[p].Delay
 			if st.Chars[p].Status == Killed {
 				continue // the delay gained before the kill is moot
@@ -284,7 +292,7 @@ func Resolve(board *hex.Board, st State, plans [NumPlayers]Plan, d Drawer) (Stat
 	}
 
 	// Cancel any action not executed by the end of segment 5 (7.53).
-	for p := 0; p < NumPlayers; p++ {
+	for p := 0; p < n; p++ {
 		if st.Chars[p].Status != Alive {
 			continue
 		}
@@ -295,22 +303,35 @@ func Resolve(board *hex.Board, st State, plans [NumPlayers]Plan, d Drawer) (Stat
 	return st, evs
 }
 
-// aimTarget is the hex the AIM markers of c sit on: a hex, or the
-// opponent's.
-func aimTarget(c, opp *Character) string {
-	if c.AimHex == "" {
-		return opp.Hex
+// aimTarget is the hex the AIM markers of c sit on: the hex of the
+// character they follow, or a hex.
+func aimTarget(c *Character, st *State) string {
+	if t := st.char(c.AimAt); c.AimAt >= 0 && t != nil {
+		return t.Hex
 	}
 	return c.AimHex
 }
 
+// standingIn is the seat of the first alive character but seat p standing
+// in hex id, NoSeat when nobody does (two characters may share a hex:
+// a shot at the hex finds the first in seat order).
+func standingIn(st *State, id string, p int) int {
+	for q := range st.Chars {
+		if q != p && st.Chars[q].Status == Alive && st.Chars[q].Hex == id {
+			return q
+		}
+	}
+	return NoSeat
+}
+
 // runningDelay stamps each delay event with the delay points its player
 // holds once that card is counted, starting from the given totals.
-func runningDelay(evs []Event, start [NumPlayers]int) {
+func runningDelay(evs []Event, start []int) {
+	total := append([]int(nil), start...)
 	for i := range evs {
 		if evs[i].Kind == EvDelay {
-			start[evs[i].Player] += evs[i].N
-			evs[i].Delay = start[evs[i].Player]
+			total[evs[i].Player] += evs[i].N
+			evs[i].Delay = total[evs[i].Player]
 		}
 	}
 }
@@ -321,7 +342,8 @@ func runningDelay(evs []Event, start [NumPlayers]int) {
 // gun lose it like any other action. An aim or a shot naming a new target
 // keeps the markers only within one hex of their place, and a shot moves
 // them onto its target.
-func reveal(board *hex.Board, p int, c *Character, opp *Character, a Action, seg int, evs *[]Event) {
+func reveal(board *hex.Board, p int, st *State, a Action, seg int, evs *[]Event) {
+	c := &st.Chars[p]
 	if c.Aim == 0 {
 		return
 	}
@@ -332,13 +354,14 @@ func reveal(board *hex.Board, p int, c *Character, opp *Character, a Action, seg
 	case a.Opt == OptAim || a.Opt == OptShoot:
 		// The target named: the markers move onto it within one hex (12.5).
 		named := a.Hex
-		if a.Target >= 0 {
-			named = opp.Hex
+		if t := st.char(a.Target); a.Target >= 0 && t != nil {
+			named = t.Hex
 		}
-		if board.Distance(aimTarget(c, opp), named) > 1 {
+		if board.Distance(aimTarget(c, st), named) > 1 {
 			loseAim(p, c, seg, ReasonTransfer, evs)
 		} else if a.Opt == OptShoot {
-			c.AimHex = a.Hex // "" when the shot names the opponent
+			c.AimHex = a.Hex // "" when the shot names a character
+			c.AimAt = a.Target
 		}
 	}
 }
@@ -353,8 +376,7 @@ func loseAimAt(p int, c *Character, seg int, reason, to string, evs *[]Event) {
 	if c.Aim == 0 {
 		return
 	}
-	c.Aim = 0
-	c.AimHex = ""
+	clearAim(c)
 	*evs = append(*evs, Event{Seg: seg, Player: p, Kind: EvLoseAim, Reason: reason, To: to})
 }
 
@@ -368,11 +390,12 @@ const (
 )
 
 // drawCard draws one result card for c and reads the chosen line: a number
-// is delay points (and endurance boxes for fatigue and wound cards); a
+// is delay points (and endurance boxes for fatigue and wound cards, put
+// down to seat by, the enemy whose hit they come from, NoSeat for none); a
 // penalty applies as in rule 14.11 (LOSE AIM, WILD SHOT fires every cocked
 // gun, DROP turns the character DOWN and draws three more delay cards). One
 // delay event is recorded per card drawn. It returns the delay points gained.
-func drawCard(p int, c *Character, seg int, reason string, line cardLine, d Drawer, evs *[]Event) (gained int) {
+func drawCard(p int, c *Character, seg int, reason string, line cardLine, by int, d Drawer, evs *[]Event) (gained int) {
 	card := d.Draw()
 	res := card.Delay
 	if line == woundLine {
@@ -384,9 +407,13 @@ func drawCard(p int, c *Character, seg int, reason string, line cardLine, d Draw
 		ev.N = gained
 		if line != delayLine {
 			ev.Endurance = gained
-			c.Endurance -= gained
-			if c.Endurance < 0 {
-				c.Endurance = 0
+			lost := gained
+			if lost > c.Endurance {
+				lost = c.Endurance
+			}
+			c.Endurance -= lost
+			if by >= 0 && by < MaxPlayers {
+				c.Hurt[by] += lost
 			}
 		}
 	}
@@ -405,7 +432,7 @@ func drawCard(p int, c *Character, seg int, reason string, line cardLine, d Draw
 
 // drawDelay draws one delay card (14.21).
 func drawDelay(p int, c *Character, seg int, reason string, d Drawer, evs *[]Event) int {
-	return drawCard(p, c, seg, reason, delayLine, d, evs)
+	return drawCard(p, c, seg, reason, delayLine, NoSeat, d, evs)
 }
 
 // drop is the DROP penalty (14.11): an upright character turns DOWN, draws
@@ -451,51 +478,58 @@ func fireHarmlessly(p int, g *Gun, seg int, evs *[]Event) {
 // The shooter then uncocks, spends a shell and loses the aim (13.9). A shot
 // at a hex nobody stands in when it comes up, or at a target out of sight
 // (31), is held, as a Shoot doing nothing: no card, no shell, the gun stays
-// cocked and the aim is kept. It returns the IMPACT TABLE results of a hit,
-// inflicted at the end of the segment.
-func shoot(board *hex.Board, p int, c *Character, target int, t *Character, a Action, seg int, d Drawer, evs *[]Event) []Penalty {
+// cocked and the aim is kept. It returns the seat shot at (NoSeat when
+// nobody was) and the IMPACT TABLE results of a hit, inflicted at the end
+// of the segment.
+func shoot(board *hex.Board, p int, st *State, a Action, seg int, d Drawer, evs *[]Event) (int, []Penalty) {
+	c := &st.Chars[p]
 	cancelAt := func(reason, to string) []Penalty {
 		*evs = append(*evs, Event{Seg: seg, Player: p, Kind: EvCancel, Action: a.Code, Reason: reason, To: to})
 		return nil
 	}
 	cancel := func(reason string) []Penalty { return cancelAt(reason, "") }
-	// The target: the opponent, or the hex named, where the opponent may or
-	// may not stand when the shot comes up; nobody there, the shot is held.
-	at := t.Hex
-	if a.Target < 0 {
-		if !board.Has(a.Hex) {
-			return cancel(ReasonNoHex)
+	// The target: the character named, or whoever stands in the hex named
+	// when the shot comes up; nobody there, the shot is held.
+	target := a.Target
+	at := a.Hex
+	if target < 0 {
+		if !board.Has(at) {
+			return NoSeat, cancel(ReasonNoHex)
 		}
-		at = a.Hex
-		if t.Status != Alive || t.Hex != at {
+		target = standingIn(st, at, p)
+		if target < 0 {
 			*evs = append(*evs, Event{Seg: seg, Player: p, Kind: EvNothing, Action: a.Code, To: at, Reason: ReasonEmptyHex})
-			return nil
+			return NoSeat, nil
 		}
 	}
-	// The target, the opponent either way by now, out of sight (31) holds
+	t := st.char(target)
+	if t != nil {
+		at = t.Hex
+	}
+	// The target, a character either way by now, out of sight (31) holds
 	// the shot like an empty hex: nothing fires, the aim stays where it is.
-	if t.Status == Alive && a.Target != p {
+	if t != nil && t.Status == Alive && target != p {
 		if clear, _ := canSee(board, c, at, t); !clear {
 			*evs = append(*evs, Event{Seg: seg, Player: p, Kind: EvNothing, Action: a.Code, To: at, Target: target, Reason: ReasonNoLOS})
-			return nil
+			return target, nil
 		}
 	}
 	slot := c.Guns.Firing()
 	if slot < 0 {
-		return cancel(ReasonNoGun)
+		return target, cancel(ReasonNoGun)
 	}
 	g := &c.Guns[slot]
 	switch {
 	case g.Exploded:
-		return cancel(ReasonBroken)
+		return target, cancel(ReasonBroken)
 	case g.Jammed:
-		return cancel(ReasonJammed)
+		return target, cancel(ReasonJammed)
 	case g.Shells == 0:
-		return cancel(ReasonEmpty)
+		return target, cancel(ReasonEmpty)
 	case !g.Cocked:
-		return cancel(ReasonNotCocked)
-	case a.Target >= 0 && (a.Target == p || t.Status != Alive):
-		return cancel(ReasonNoTarget)
+		return target, cancel(ReasonNotCocked)
+	case t == nil || target == p || t.Status != Alive:
+		return target, cancel(ReasonNoTarget)
 	}
 	spec := g.Type.Spec()
 	aim := a.AimTime(spec.OneHanded) + c.Aim
@@ -567,9 +601,9 @@ func shoot(board *hex.Board, p int, c *Character, target int, t *Character, a Ac
 	}
 	loseAim(p, c, seg, ReasonShot, evs)
 	if hit == Miss {
-		return nil
+		return target, nil
 	}
-	return Impact(spec.Impact, hit)
+	return target, Impact(spec.Impact, hit)
 }
 
 // targetStatus applies the card's Target Status entries to a preliminary
@@ -604,8 +638,8 @@ func targetStatus(card ResultCard, hit HitLoc, t *Character) (HitLoc, string) {
 }
 
 // applyPenalties inflicts the results of a hit on seat p (14.11, 14.12),
-// stopping once the character is out of the fight. It returns the delay
-// points gained.
+// stopping once the character is out of the fight; the shooter is put down
+// as the one who did it (15.2, 15.3). It returns the delay points gained.
 func applyPenalties(board *hex.Board, p int, st *State, r pending, seg int, d Drawer, evs *[]Event) (gained int) {
 	c := &st.Chars[p]
 	for _, pen := range r.pens {
@@ -615,21 +649,18 @@ func applyPenalties(board *hex.Board, p int, st *State, r pending, seg int, d Dr
 		*evs = append(*evs, Event{Seg: seg, Player: p, Kind: EvWound, Result: string(pen.Kind), N: pen.N})
 		switch pen.Kind {
 		case Kill:
-			c.Status = Killed
-			c.Down = true
-			c.Aim = 0
-			c.Delay = 0     // a dead character carries no delay marker
-			c.Endurance = 0 // and no endurance left
+			kill(c, r.from)
 			dropAllGuns(p, c, seg, st, evs)
 		case Stun:
 			for i := 0; i < pen.N; i++ {
-				gained += drawCard(p, c, seg, ReasonStun, woundLine, d, evs)
+				gained += drawCard(p, c, seg, ReasonStun, woundLine, r.from, d, evs)
 			}
 			loseAim(p, c, seg, string(Stun), evs)
 		case Stagger:
 			gained += stagger(board, p, c, &st.Chars[r.from], seg, d, evs)
 		case Serious:
 			c.Serious += pen.N
+			c.SeriousBy = r.from
 		case DropGunHand:
 			dropHand(p, c, GunHand, OtherHand, seg, st, evs)
 			loseAim(p, c, seg, string(DropGunHand), evs)
@@ -642,9 +673,10 @@ func applyPenalties(board *hex.Board, p int, st *State, r pending, seg int, d Dr
 			c.OtherArm += pen.N
 		case LegWound:
 			c.Leg += pen.N
+			c.LegBy = r.from
 		case Light:
 			for i := 0; i < pen.N; i++ {
-				gained += drawCard(p, c, seg, ReasonLight, fatigueLine, d, evs)
+				gained += drawCard(p, c, seg, ReasonLight, fatigueLine, r.from, d, evs)
 			}
 		}
 	}
@@ -746,10 +778,11 @@ func dropAllGuns(p int, c *Character, seg int, st *State, evs *[]Event) {
 	}
 }
 
-// execute runs one action other than a shot, mutating c (and st for the
-// guns on the ground). It returns the delay points gained and whether the
-// action took effect.
-func execute(board *hex.Board, p int, a Action, st *State, c *Character, opp *Character, seg int, d Drawer, evs *[]Event) (gained int, executed bool) {
+// execute runs one action other than a shot, mutating seat p's character
+// (and st for the guns on the ground). It returns the delay points gained
+// and whether the action took effect.
+func execute(board *hex.Board, p int, a Action, st *State, seg int, d Drawer, evs *[]Event) (gained int, executed bool) {
+	c := &st.Chars[p]
 	cancelAt := func(reason, to string) (int, bool) {
 		*evs = append(*evs, Event{Seg: seg, Player: p, Kind: EvCancel, Action: a.Code, Reason: reason, To: to})
 		return gained, false
@@ -769,7 +802,7 @@ func execute(board *hex.Board, p int, a Action, st *State, c *Character, opp *Ch
 			*evs = append(*evs, Event{Seg: seg, Player: p, Kind: EvDelay, N: 2, Reason: ReasonCrawl})
 		} else {
 			for i := 0; i < c.Leg; i++ { // LEG wound (14.12)
-				gained += drawCard(p, c, seg, ReasonLeg, fatigueLine, d, evs)
+				gained += drawCard(p, c, seg, ReasonLeg, fatigueLine, c.LegBy, d, evs)
 			}
 		}
 		gained += terrain(board, p, c, from, dir, seg, d, evs)
@@ -897,14 +930,16 @@ func execute(board *hex.Board, p int, a Action, st *State, c *Character, opp *Ch
 			g.Cocked = false
 			*evs = append(*evs, Event{Seg: seg, Player: p, Kind: EvUncock, Action: a.Code, Gun: g.Type, GunID: g.ID})
 		case OptAim:
-			// Two AIM points (12.1, 12.2) on the target named: the opponent,
+			// Two AIM points (12.1, 12.2) on the target named: a character,
 			// wherever it is, or a hex; either must be in the aim zone.
 			hexAt := a.Hex
+			var at *Character
 			if a.Target >= 0 {
-				if a.Target == p || opp.Status != Alive {
+				at = st.char(a.Target)
+				if at == nil || a.Target == p || at.Status != Alive {
 					return cancel(ReasonNoTarget)
 				}
-				hexAt = opp.Hex
+				hexAt = at.Hex
 			} else if !board.Has(a.Hex) {
 				return cancel(ReasonNoHex)
 			}
@@ -912,10 +947,6 @@ func execute(board *hex.Board, p int, a Action, st *State, c *Character, opp *Ch
 				return cancel(ReasonOutOfZone)
 			}
 			// ...and in sight (31.1): a target behind the trough cannot be aimed at.
-			var at *Character
-			if a.Target >= 0 {
-				at = opp
-			}
 			if clear, blocker := canSee(board, c, hexAt, at); !clear {
 				return cancelAt(ReasonNoLOS, blocker)
 			}
@@ -923,7 +954,8 @@ func execute(board *hex.Board, p int, a Action, st *State, c *Character, opp *Ch
 			if c.Aim > MaxAim {
 				c.Aim = MaxAim
 			}
-			c.AimHex = a.Hex // "" for the opponent: the markers follow it
+			c.AimHex = a.Hex // "" for a character: the markers follow it
+			c.AimAt = a.Target
 			*evs = append(*evs, Event{Seg: seg, Player: p, Kind: EvAim, Action: a.Code, To: hexAt, Target: a.Target, N: c.Aim})
 		}
 		return 0, true

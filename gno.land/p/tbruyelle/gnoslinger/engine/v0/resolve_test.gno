@@ -16,7 +16,7 @@ func resolve(t *testing.T, st State, p0, p1 string) (State, []Event) {
 
 func resolveWith(t *testing.T, st State, p0, p1 string, d Drawer) (State, []Event) {
 	t.Helper()
-	return Resolve(hex.A, st, [NumPlayers]Plan{mustPlan(t, p0), mustPlan(t, p1)}, d)
+	return Resolve(hex.A, st, []Plan{mustPlan(t, p0), mustPlan(t, p1)}, d)
 }
 
 func ofKind(evs []Event, player int, kind string) []Event {
@@ -324,9 +324,29 @@ func TestOutPlayerIsSkipped(t *testing.T) {
 func TestResolveDoesNotMutateInput(t *testing.T) {
 	st := startState()
 	resolve(t, st, "1f:ahead", "1f:ahead")
-	if st.Chars != startState().Chars || len(st.Ground) != 0 {
+	if !sameChars(st.Chars, startState().Chars) || len(st.Ground) != 0 {
 		t.Errorf("input state mutated: %+v", st)
 	}
+	// Nor do the end-of-turn steps.
+	st.Chars[0].Delay, st.Chars[1].Serious = 3, 3
+	EndTurn(st)
+	seq := Sequence{37, 37}
+	EndShowdown(st, &seq)
+	if st.Chars[0].Delay != 3 || st.Chars[1].Status != Alive {
+		t.Errorf("input state mutated: %+v", st)
+	}
+}
+
+func sameChars(a, b []Character) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func TestEndTurnAndBudget(t *testing.T) {
@@ -523,7 +543,7 @@ func TestCockAimShootOptions(t *testing.T) {
 	if la := ofKind(evs, 0, EvLoseAim); len(la) != 0 {
 		t.Errorf("aim lost: %v", la)
 	}
-	st.Chars[0].Aim = 7
+	st.Chars[0].Aim, st.Chars[0].AimAt = 7, 1
 	st, _ = resolve(t, st, "5f:aim:@1", "")
 	if st.Chars[0].Aim != MaxAim {
 		t.Errorf("aim = %d, want capped at %d", st.Chars[0].Aim, MaxAim)
@@ -607,14 +627,14 @@ func TestAimTransfer(t *testing.T) {
 func TestAimIsLost(t *testing.T) {
 	// Revealing a foot action loses the aim (12.44), at turn start...
 	st := armed(0)
-	st.Chars[0].Aim = 4
+	st.Chars[0].Aim, st.Chars[0].AimAt = 4, 1
 	st, evs := resolve(t, st, "1f:ahead", "")
 	if la := ofKind(evs, 0, EvLoseAim); len(la) != 1 || la[0].Seg != 0 || la[0].Reason != ReasonReveal || st.Chars[0].Aim != 0 {
 		t.Errorf("lose aim = %v, aim %d", la, st.Chars[0].Aim)
 	}
 	// ...or when the next action is revealed; a Turn keeps it.
 	st = armed(0)
-	st.Chars[0].Aim = 4
+	st.Chars[0].Aim, st.Chars[0].AimAt = 4, 1
 	st, evs = resolve(t, st, "3b:ahead,4b", "")
 	la := ofKind(evs, 0, EvLoseAim)
 	if len(la) != 1 || la[0].Seg != 1 || la[0].Reason != ReasonReveal {
@@ -623,21 +643,21 @@ func TestAimIsLost(t *testing.T) {
 	// Cocking, uncocking or doing nothing with the gun lose it too; an aim keeps it.
 	for _, plan := range []string{"5f:cock", "5f:uncock", "7f"} {
 		st = armed(0)
-		st.Chars[0].Aim = 4
+		st.Chars[0].Aim, st.Chars[0].AimAt = 4, 1
 		st, evs = resolve(t, st, plan, "")
 		if la := ofKind(evs, 0, EvLoseAim); len(la) != 1 || la[0].Seg != 0 || la[0].Reason != ReasonReveal || st.Chars[0].Aim != 0 {
 			t.Errorf("%s: lose aim = %v", plan, la)
 		}
 	}
 	st = armed(0)
-	st.Chars[0].Aim = 4
+	st.Chars[0].Aim, st.Chars[0].AimAt = 4, 1
 	st, evs = resolve(t, st, "5f:aim:@1", "")
 	if la := ofKind(evs, 0, EvLoseAim); len(la) != 0 || st.Chars[0].Aim != 6 {
 		t.Errorf("aim: lose aim = %v, aim %d", la, st.Chars[0].Aim)
 	}
 	// The target moving out of the aim zone at the end of a segment (12.41).
 	st = armed(0)
-	st.Chars[0].Aim = 4
+	st.Chars[0].Aim, st.Chars[0].AimAt = 4, 1
 	st.Chars[0].Hex, st.Chars[0].Facing = "A-F5", hex.S
 	st.Chars[1].Hex, st.Chars[1].Facing = "A-G6", hex.N // SE of F5, on the edge of the zone
 	st, evs = resolve(t, st, "", "1f:ahead")             // the Kid steps to G5, NE of F5
@@ -651,7 +671,7 @@ func TestShot(t *testing.T) {
 	// through a Shoot: aim time 1 + 2 = 3. Card 1: range 6-12+ needs aim 9+
 	// so it misses.
 	st := armed(0)
-	st.Chars[0].Aim = 2
+	st.Chars[0].Aim, st.Chars[0].AimAt = 2, 1
 	seq := Sequence{1, 37}
 	st, evs := resolveWith(t, st, "7f:shoot:@1", "", &seq)
 	sh := ofKind(evs, 0, EvShot)
@@ -672,7 +692,7 @@ func TestShot(t *testing.T) {
 	// Point blank with 6 AIM points: aim time 8 through Cock/Aim/Shoot (2 + 6).
 	// Card 1 at range 1: SIDE. The Colt's SIDE hit (line B): STUN 2, STAGGER.
 	st = armed(0)
-	st.Chars[0].Aim = 6
+	st.Chars[0].Aim, st.Chars[0].AimAt = 6, 1
 	st.Chars[0].Hex, st.Chars[1].Hex = "A-F5", "A-F6"
 	seq = Sequence{1, 19, 19, 61, 65, 37} // FIRE, 2 wound cards (WOUND 1 each), 2 direction cards (Same, Same), 3 drop cards (DELAY 1)
 	st, evs = resolveWith(t, st, "5f:shoot:@1", "", &seq)
@@ -707,7 +727,7 @@ func TestShot(t *testing.T) {
 func TestShotKillsAndStaggerMoves(t *testing.T) {
 	// A bullseye is a VITAL hit: KILL. Card 6 at range 1 with aim 8+: BE.
 	st := armed(0)
-	st.Chars[0].Aim = 8
+	st.Chars[0].Aim, st.Chars[0].AimAt = 8, 1
 	st.Chars[0].Hex, st.Chars[1].Hex = "A-F5", "A-F6"
 	seq := Sequence{6}
 	st, evs := resolveWith(t, st, "5f:shoot:@1", "1f:ahead,2f:ahead", &seq)
@@ -742,7 +762,7 @@ func TestShotKillsAndStaggerMoves(t *testing.T) {
 	// STUN 4 then STAGGER: first card 55 (Ahead Left), second 61 (Same),
 	// then DROP. The Kid faces N at F6; ahead left of N is NW: E6.
 	st = armed(0)
-	st.Chars[0].Aim = 5 // 2 + 5 = 7
+	st.Chars[0].Aim, st.Chars[0].AimAt = 5, 1 // 2 + 5 = 7
 	st.Chars[0].Hex, st.Chars[1].Hex = "A-F5", "A-F6"
 	seq = Sequence{20, 19, 19, 19, 19, 55, 61, 1} // FIRE, 4 wound cards (WOUND 1), Ahead Left, Same, DELAY 0 drop cards
 	st, evs = resolveWith(t, st, "5f:shoot:@1", "", &seq)
@@ -767,7 +787,7 @@ func TestShotStatusAndOutOfZone(t *testing.T) {
 	// "Move" status: the Kid plays a foot action. Card 2 lists Move: a SIDE
 	// hit becomes a miss, a BE becomes SIDE. Range 1, aim 8: BE -> SIDE.
 	st := armed(0)
-	st.Chars[0].Aim = 6
+	st.Chars[0].Aim, st.Chars[0].AimAt = 6, 1
 	st.Chars[0].Hex, st.Chars[1].Hex = "A-F5", "A-F6"
 	st.Chars[1].PlayedFoot = true
 	seq := Sequence{2, 1, 1, 61, 61, 1}
@@ -777,7 +797,7 @@ func TestShotStatusAndOutOfZone(t *testing.T) {
 	}
 	// Down status on top: card 5 lists Down; a SIDE hit on a DOWN target misses.
 	st = armed(0)
-	st.Chars[0].Aim = 2 // 2 + 2 = 4: SIDE at range 0-5
+	st.Chars[0].Aim, st.Chars[0].AimAt = 2, 1 // 2 + 2 = 4: SIDE at range 0-5
 	st.Chars[0].Hex, st.Chars[1].Hex = "A-F5", "A-F6"
 	st.Chars[1].Down = true
 	seq = Sequence{5}
@@ -856,11 +876,11 @@ func TestGunHitDropsTheGun(t *testing.T) {
 	// GUN hit (card 81 at range 1, aim 4-7): STUN 4, GUN HAND, SERIOUS 1, GUN ARM 4.
 	// The Kid holds a cocked Colt: it goes off and falls in the hex.
 	st := armed(0)
-	st.Chars[0].Aim = 3 // 2 + 3 = 5
+	st.Chars[0].Aim, st.Chars[0].AimAt = 3, 1 // 2 + 3 = 5
 	st.Chars[0].Hex, st.Chars[1].Hex = "A-F5", "A-F6"
 	st.Chars[1].Guns[0].Location = GunHand
 	st.Chars[1].Guns[0].Cocked = true
-	st.Chars[1].Aim = 2
+	st.Chars[1].Aim, st.Chars[1].AimAt = 2, 0
 	seq := Sequence{81, 19, 19, 19, 19} // FIRE, 4 wound cards (WOUND 1)
 	st, evs := resolveWith(t, st, "5f:shoot:@1", "", &seq)
 	if sh := ofKind(evs, 0, EvShot); len(sh) != 1 || sh[0].Hit != string(GunHit) {
@@ -998,7 +1018,7 @@ func TestShotAtHex(t *testing.T) {
 	// A shot at the hex the Kid stands in is a shot at the Kid.
 	st := armed(0)
 	st.Chars[0].Hex, st.Chars[1].Hex = "A-F5", "A-F6"
-	st.Chars[0].Aim = 6
+	st.Chars[0].Aim, st.Chars[0].AimAt = 6, 1
 	seq := Sequence{1, 19, 19, 61, 65, 37}
 	st, evs := resolveWith(t, st, "5f:shoot:A-F6", "", &seq)
 	if sh := ofKind(evs, 0, EvShot); len(sh) != 1 || sh[0].Target != 1 || sh[0].To != "A-F6" || sh[0].Hit != string(SideHit) {
@@ -1022,7 +1042,7 @@ func TestShotAtHex(t *testing.T) {
 	// The shot comes up before the Kid walks into the hex: held as well.
 	st = armed(0)
 	st.Chars[0].Hex, st.Chars[1].Hex = "A-F5", "A-F7"
-	st.Chars[0].Aim = 6
+	st.Chars[0].Aim, st.Chars[0].AimAt = 6, 1
 	seq = Sequence{1, 19, 19, 61, 65, 37}
 	st, evs = resolveWith(t, st, "5f:shoot:A-F6", "1f:ahead", &seq) // shots first at seg 2: the Kid still stands in F7
 	if n := ofKind(evs, 0, EvNothing); len(ofKind(evs, 0, EvShot)) != 0 || len(n) != 1 || n[0].Reason != ReasonEmptyHex {
@@ -1030,7 +1050,7 @@ func TestShotAtHex(t *testing.T) {
 	}
 	st = armed(0)
 	st.Chars[0].Hex, st.Chars[1].Hex = "A-F5", "A-F7"
-	st.Chars[0].Aim = 6
+	st.Chars[0].Aim, st.Chars[0].AimAt = 6, 1
 	seq = Sequence{1, 19, 19, 61, 65, 37}
 	st, evs = resolveWith(t, st, "3b:ahead,5f:shoot:A-F6", "2f:ahead,1f:ahead", &seq) // the Kid runs into F6 at seg 1; the shot goes off at seg 3
 	if sh := ofKind(evs, 0, EvShot); len(sh) != 1 || sh[0].Target != 1 || sh[0].Hit != string(SideHit) {
@@ -1226,7 +1246,7 @@ func TestLineOfSightAimAndShot(t *testing.T) {
 	// the end of the segment (31.1).
 	st = acrossTrough()
 	st.Chars[0].Down, st.Chars[1].Down = true, true
-	st.Chars[0].Aim = 2
+	st.Chars[0].Aim, st.Chars[0].AimAt = 2, 1
 	seq := Sequence{}
 	st, evs = resolveWith(t, st, "7f:shoot:@1", "", &seq)
 	if n := ofKind(evs, 0, EvNothing); len(n) != 1 || n[0].Reason != ReasonNoLOS || n[0].To != "A-I12" || n[0].Target != 1 || n[0].Seg != 1 || n[0].Action != cards.Shoot {
@@ -1240,7 +1260,7 @@ func TestLineOfSightAimAndShot(t *testing.T) {
 	}
 	// Upright, the trough is lower than both: the shot goes off.
 	st = acrossTrough()
-	st.Chars[0].Aim = 2
+	st.Chars[0].Aim, st.Chars[0].AimAt = 2, 1
 	seq = Sequence{1}
 	_, evs = resolveWith(t, st, "7f:shoot:@1", "", &seq)
 	if sh := ofKind(evs, 0, EvShot); len(sh) != 1 || sh[0].Reason != "" || len(ofKind(evs, 0, EvCancel)) != 0 {
@@ -1269,7 +1289,7 @@ func TestLineOfSightLostAtSegmentEnd(t *testing.T) {
 	// I11, next to the trough, then drops (31.32): the aim is lost at the
 	// end of segment 3, not before.
 	st := acrossTrough()
-	st.Chars[0].Aim = 2
+	st.Chars[0].Aim, st.Chars[0].AimAt = 2, 1
 	st, evs := resolve(t, st, "", "1f:ahead,4b")
 	if st.Chars[1].Hex != "A-I11" || !st.Chars[1].Down {
 		t.Fatalf("kid = %+v", st.Chars[1])
@@ -1279,7 +1299,7 @@ func TestLineOfSightLostAtSegmentEnd(t *testing.T) {
 	}
 	// Dropping at I12, away from the trough, keeps the sight (31.32, 31.33).
 	st = acrossTrough()
-	st.Chars[0].Aim = 2
+	st.Chars[0].Aim, st.Chars[0].AimAt = 2, 1
 	st, evs = resolve(t, st, "", "4b")
 	if la := ofKind(evs, 0, EvLoseAim); len(la) != 0 || st.Chars[0].Aim != 2 || !st.Chars[1].Down {
 		t.Errorf("lose aim = %v, aim %d, kid %+v", la, st.Chars[0].Aim, st.Chars[1])
@@ -1287,7 +1307,7 @@ func TestLineOfSightLostAtSegmentEnd(t *testing.T) {
 	// A marshal lying next to the trough sees nothing across it: the aim
 	// goes at the end of segment 1.
 	st = acrossTrough()
-	st.Chars[0].Down, st.Chars[0].Aim = true, 2
+	st.Chars[0].Down, st.Chars[0].Aim, st.Chars[0].AimAt = true, 2, 1
 	st, evs = resolve(t, st, "", "")
 	if la := ofKind(evs, 0, EvLoseAim); len(la) != 1 || la[0].Reason != ReasonNoLOS || la[0].Seg != 1 || st.Chars[0].Aim != 0 {
 		t.Errorf("lose aim = %v, aim %d", la, st.Chars[0].Aim)
@@ -1321,5 +1341,121 @@ func TestLineOfSightShotAtHex(t *testing.T) {
 	_, evs = resolveWith(t, st, "7f:shoot:A-J11", "", &seq)
 	if n := ofKind(evs, 0, EvNothing); len(n) != 1 || n[0].Reason != ReasonEmptyHex || len(ofKind(evs, 0, EvCancel)) != 0 {
 		t.Errorf("events = %v", evs)
+	}
+}
+
+func TestSeatsAsTargets(t *testing.T) {
+	// Four seats in a column: 0 at F5 looking south, 2 at F6, 3 at F8 looking
+	// south, 1 at F9. Seat 0 shoots seat 2 with 8 AIM points on it (card 6 at
+	// range 1: a bullseye, KILL); seat 3 shoots at the hex F9, where seat 1
+	// stands; seat 2 walks into seat 0's hex before dying; seat 1 passes.
+	st := fourState()
+	st.Chars[0].Hex, st.Chars[0].Facing = "A-F5", hex.S
+	st.Chars[2].Hex, st.Chars[2].Facing = "A-F6", hex.N
+	st.Chars[3].Hex, st.Chars[3].Facing = "A-F8", hex.S
+	st.Chars[1].Hex, st.Chars[1].Facing = "A-F9", hex.N
+	for _, p := range []int{0, 3} {
+		st.Chars[p].Guns[0].Location, st.Chars[p].Guns[0].Cocked = GunHand, true
+	}
+	st.Chars[0].Aim, st.Chars[0].AimAt = 8, 2
+	seq := Sequence{6, 6, 37}
+	plans := []Plan{mustPlan(t, "5f:shoot:@2"), nil, mustPlan(t, "1f:ahead"), mustPlan(t, "7f:shoot:A-F9")}
+	st, evs := Resolve(hex.A, st, plans, &seq)
+	if sh := ofKind(evs, 0, EvShot); len(sh) != 1 || sh[0].Target != 2 || sh[0].To != "A-F6" || sh[0].Range != 1 || sh[0].Hit != string(VitalHit) {
+		t.Errorf("seat 0's shot = %v", sh)
+	}
+	if c := st.Chars[2]; c.Status != Killed || c.KilledBy != 0 || c.Hex != "A-F5" || c.Guns.Count() != 0 {
+		t.Errorf("seat 2 = %+v", c)
+	}
+	if len(st.Ground) != 1 || st.Ground[0].Hex != "A-F5" {
+		t.Errorf("ground = %+v", st.Ground)
+	}
+	if sh := ofKind(evs, 3, EvShot); len(sh) != 1 || sh[0].Target != 1 || sh[0].To != "A-F9" || sh[0].Range != 1 {
+		t.Errorf("seat 3's shot = %v", sh)
+	}
+	if st.Chars[1].Hex != "A-F9" || st.Chars[3].Hex != "A-F8" || st.Chars[0].Status != Alive {
+		t.Errorf("state = %+v", st.Chars)
+	}
+	// Seat 0 was shot at by nobody: no box crossed off. Seat 2 walked into
+	// its hex before the hit took effect (9.24 comes before 14.1 at the end
+	// of the segment): one delay card for the occupied hex.
+	if d := ofKind(evs, 0, EvDelay); st.Chars[0].Hurt != [MaxPlayers]int{} || len(d) != 1 || d[0].Reason != ReasonOccupied {
+		t.Errorf("seat 0 = %+v, delays %v", st.Chars[0], d)
+	}
+}
+
+func TestAimFollowsASeat(t *testing.T) {
+	// Seat 0 at F3 looking south aims at seat 2, two hexes south at F5, who
+	// then walks on to F6: the markers follow it.
+	st := fourState()
+	st.Chars[2].Hex, st.Chars[2].Facing = "A-F5", hex.S
+	st.Chars[0].Guns[0].Location, st.Chars[0].Guns[0].Cocked = GunHand, true
+	plans := []Plan{mustPlan(t, "5f:aim:@2"), nil, mustPlan(t, "1f:ahead"), nil}
+	st, evs := Resolve(hex.A, st, plans, Fixed(37))
+	if a := ofKind(evs, 0, EvAim); len(a) != 1 || a[0].Target != 2 || a[0].To != "A-F5" || a[0].N != 2 {
+		t.Errorf("aims = %v", a)
+	}
+	if c := st.Chars[0]; c.Aim != 2 || c.AimAt != 2 || c.AimHex != "" || aimTarget(&c, &st) != "A-F6" {
+		t.Errorf("seat 0 = %+v", c)
+	}
+	// Next turn the shot at seat 2 keeps the points (the markers are on it,
+	// not more than one hex from the target named) and seat 2, now at F6,
+	// is shot with aim time 1 + 2.
+	seq := Sequence{37}
+	plans = []Plan{mustPlan(t, "7f:shoot:@2"), nil, nil, nil}
+	_, evs = Resolve(hex.A, st, plans, &seq)
+	if sh := ofKind(evs, 0, EvShot); len(sh) != 1 || sh[0].Target != 2 || sh[0].To != "A-F6" || sh[0].N != 3 || sh[0].Range != 3 {
+		t.Errorf("shot = %v", sh)
+	}
+	if l := ofKind(evs, 0, EvLoseAim); len(l) != 1 || l[0].Reason != ReasonShot {
+		t.Errorf("lose aim = %v", l)
+	}
+	// An aim or a shot at a seat the game does not have, or at a dead one,
+	// is cancelled for want of a target.
+	two := startState()
+	two.Chars[0].Guns[0].Location, two.Chars[0].Guns[0].Cocked = GunHand, true
+	_, evs = resolve(t, two, "5f:aim:@3", "")
+	if c := ofKind(evs, 0, EvCancel); len(c) != 1 || c[0].Reason != ReasonNoTarget {
+		t.Errorf("cancel = %v", c)
+	}
+	two.Chars[1].Status = Killed
+	_, evs = resolve(t, two, "7f:shoot:@1", "")
+	if c := ofKind(evs, 0, EvCancel); len(c) != 1 || c[0].Reason != ReasonNoTarget {
+		t.Errorf("cancel = %v", c)
+	}
+}
+
+func TestHurtIsPutDownToTheShooter(t *testing.T) {
+	// Seat 2 at F8 looking south shoots seat 1 at F9 point blank with 6 AIM
+	// points: card 1 at range 1 reads SIDE, STUN 2 and STAGGER for the
+	// Colt. The two wound cards' boxes are put down to seat 2.
+	st := fourState()
+	st.Chars[2].Hex, st.Chars[2].Facing = "A-F8", hex.S
+	st.Chars[2].Guns[0].Location, st.Chars[2].Guns[0].Cocked = GunHand, true
+	st.Chars[2].Aim, st.Chars[2].AimAt = 6, 1
+	seq := Sequence{1, 19, 19, 61, 65, 37} // FIRE, 2 wound cards (WOUND 1 each), 2 direction cards, drop cards
+	st, evs := Resolve(hex.A, st, []Plan{nil, nil, mustPlan(t, "5f:shoot:@1"), nil}, &seq)
+	if w := ofKind(evs, 1, EvWound); len(w) != 2 || w[0].Result != string(Stun) {
+		t.Fatalf("wounds = %v", w)
+	}
+	c := st.Chars[1]
+	if c.Endurance != 18 || c.Hurt != [MaxPlayers]int{0, 0, 2, 0} || c.KilledBy != NoSeat {
+		t.Errorf("seat 1 = %+v", c)
+	}
+	// A LEG wound's fatigue goes to whoever gave it; a SERIOUS wound's too,
+	// drawn at the turn start.
+	st = fourState()
+	st.Chars[1].Leg, st.Chars[1].LegBy = 1, 3
+	st.Chars[1].Serious, st.Chars[1].SeriousBy = 1, 2
+	st, _ = Resolve(hex.A, st, []Plan{nil, mustPlan(t, "1f:ahead"), nil, nil}, Fixed(37))
+	if c := st.Chars[1]; c.Endurance != 18 || c.Hurt != [MaxPlayers]int{0, 0, 1, 1} {
+		t.Errorf("seat 1 = %+v", c)
+	}
+	// Boxes crossed off are counted, not points beyond the last box.
+	st = fourState()
+	st.Chars[1].Endurance, st.Chars[1].Serious, st.Chars[1].SeriousBy = 1, 3, 0
+	st, _ = Resolve(hex.A, st, nil, Fixed(37))
+	if c := st.Chars[1]; c.Endurance != 0 || c.Hurt[0] != 1 {
+		t.Errorf("seat 1 = %+v", c)
 	}
 }
