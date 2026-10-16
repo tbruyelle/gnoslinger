@@ -74,6 +74,34 @@ const SIMULTANEOUS_GAP_MS = 220;
 /** Delay reasons of crossing an obstacle: a fence (rule 35.2), onto or off an obstacle hex (36.4). */
 const OBSTACLE_REASONS = new Set(["fence", "obstacle"]);
 
+/** A shot whose misfire jams or blows up the gun: no bullet leaves it, no sound. */
+function silentMisfire(e: TurnEvent, events: TurnEvent[]): boolean {
+  return e.reason === "misfire" && events.some((x) => x.kind === "malfunction" && x.p === e.p && (x.result === "jams" || x.result === "explodes"));
+}
+
+/**
+ * When each gun of a step goes off, in ms after the step is shown, by
+ * event index: the shots fired, the empty guns clicking and the wild shots,
+ * in event order, SIMULTANEOUS_GAP_MS apart so they can be told apart;
+ * undefined for the other events and for a shot whose misfire jams or blows
+ * up the gun. The sounds and the bullets on the board share this timing.
+ */
+export function shotDelays(events: TurnEvent[]): (number | undefined)[] {
+  let shots = 0;
+  return events.map((e) => {
+    switch (e.kind) {
+      case "shot":
+        return silentMisfire(e, events) ? undefined : shots++ * SIMULTANEOUS_GAP_MS;
+      case "cancel":
+        return e.reason === "empty" ? shots++ * SIMULTANEOUS_GAP_MS : undefined;
+      case "wild_shot":
+        return shots++ * SIMULTANEOUS_GAP_MS;
+      default:
+        return undefined;
+    }
+  });
+}
+
 /** The sounds of one step's events, in the order they happen. */
 export function soundsForEvents(events: TurnEvent[]): SoundCue[] {
   const cues: SoundCue[] = [];
@@ -82,8 +110,9 @@ export function soundsForEvents(events: TurnEvent[]): SoundCue[] {
   // One wound sound per segment, whoever is hit and however many effects
   // the hits have (a GUN hit is STUN, GUN HAND, SERIOUS and GUN ARM).
   const wounded = new Map<number, SoundCue>();
-  let shots = 0;
-  for (const e of events) {
+  const delays = shotDelays(events);
+  events.forEach((e, i) => {
+    const at = delays[i] ?? 0;
     switch (e.kind) {
       case "move":
         cues.push({ group: "step", delayMs: 0 });
@@ -110,19 +139,16 @@ export function soundsForEvents(events: TurnEvent[]): SoundCue[] {
       case "shot":
         // A misfire sounds like a missed shot, as it shows, unless the second
         // MALFUNCTION jams or blows up the gun: no bullet then.
-        if (e.reason === "misfire" && events.some((x) => x.kind === "malfunction" && x.p === e.p && (x.result === "jams" || x.result === "explodes"))) break;
-        {
-          const at = shots++ * SIMULTANEOUS_GAP_MS;
-          cues.push({ group: "gunshot", delayMs: at });
-          if (e.hit === "-") cues.push({ group: "ricochet", delayMs: at + RICOCHET_AFTER_SHOT_MS });
-        }
+        if (delays[i] === undefined) break;
+        cues.push({ group: "gunshot", delayMs: at });
+        if (e.hit === "-") cues.push({ group: "ricochet", delayMs: at + RICOCHET_AFTER_SHOT_MS });
         break;
       case "cancel":
         // A shot with an empty gun only clicks, spaced out like the shots fired with it.
-        if (e.reason === "empty") cues.push({ group: "emptyGun", delayMs: shots++ * SIMULTANEOUS_GAP_MS });
+        if (e.reason === "empty") cues.push({ group: "emptyGun", delayMs: at });
         break;
       case "wild_shot":
-        cues.push({ group: "gunshot", delayMs: shots++ * SIMULTANEOUS_GAP_MS });
+        cues.push({ group: "gunshot", delayMs: at });
         break;
       case "wound": {
         // A kill among them makes it the death cry.
@@ -153,7 +179,7 @@ export function soundsForEvents(events: TurnEvent[]): SoundCue[] {
         cues.push({ group: "fall", delayMs: 0 });
         break;
     }
-  }
+  });
   return cues;
 }
 

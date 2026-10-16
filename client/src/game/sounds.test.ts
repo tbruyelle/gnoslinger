@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { GunView, TurnEvent } from "../chain/types";
 import type { CharView } from "./replay";
-import { soundsForDelay, soundsForEvents, soundsForPreview } from "./sounds";
+import { shotDelays, soundsForDelay, soundsForEvents, soundsForPreview } from "./sounds";
 
 const ev = (partial: Partial<TurnEvent>): TurnEvent => ({
   seg: 1, p: 0, kind: "move", action: "", from: "", to: "", facing: 0, down: false, n: 0, delay: 0, reason: "", card: 0, result: "", endurance: 0, target: 1, hit: "", range: 0, gun: "", gunId: 0, step: 0, ...partial,
@@ -46,6 +46,13 @@ describe("soundsForEvents", () => {
     expect(cues[1].delayMs).toBeGreaterThan(0);
     expect(groups([ev({ kind: "delay", reason: "occupied" })])).toEqual([]);
     expect(groups([ev({ kind: "delay", reason: "obstacle" }), ev({ kind: "delay", reason: "obstacle" })])).toEqual(["obstacle"]);
+  });
+
+  it("times each gun of a step for the sounds and the bullets alike", () => {
+    const empty = (p: number) => ev({ p, kind: "cancel", action: "shoot", reason: "empty" });
+    const events = [ev({ kind: "shot", hit: "VITAL" }), ev({ kind: "move" }), empty(1), ev({ kind: "wild_shot", p: 2 }), ev({ kind: "shot", p: 3, hit: "-", reason: "misfire" }), ev({ kind: "malfunction", p: 3, result: "jams" })];
+    expect(shotDelays(events)).toEqual([0, undefined, 220, 440, undefined, undefined]);
+    expect(soundsForEvents(events).map((c) => [c.group, c.delayMs])).toEqual([["gunshot", 0], ["step", 0], ["emptyGun", 220], ["gunshot", 440]]);
   });
 
   it("spaces out shots fired together, each ricochet after its own shot", () => {

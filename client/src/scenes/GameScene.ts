@@ -24,7 +24,7 @@ import { firingGun, gunInHand, replayPlan, type CharView } from "../game/replay"
 import { SEGMENTS, segmentFills, turnSegmentCells } from "../game/segments";
 import { COCK_AIM_SHOOT_AIM_TIME, SHOOT_AIM_TIME, shotOdds } from "../game/shotOdds";
 import { canSee, standingOn } from "../game/sight";
-import { SOUND_FILES, SOUND_VOLUME, soundKey, soundsForDelay, soundsForEvents, soundsForPreview, type SoundCue, type SoundGroup } from "../game/sounds";
+import { SOUND_FILES, SOUND_VOLUME, shotDelays, soundKey, soundsForDelay, soundsForEvents, soundsForPreview, type SoundCue, type SoundGroup } from "../game/sounds";
 import { SHOOT_OPTIONS, isShooting, type ShootOption } from "../game/plan";
 import { closeCharacterSheet, openCharacterSheet, type GunPick } from "../ui/characterSheet";
 import { ShowdownView, showdownLayout, type BoardRect, type CharPanel, type HandSide, type ShowdownLayout, type ShowdownModel, type TimelineRow } from "../ui/showdownView";
@@ -2888,27 +2888,37 @@ export class GameScene extends Phaser.Scene {
     };
     if (fade > 0) this.time.delayedCall(fade, land);
     else land();
-    this.flashShots(events);
+    this.flashShots(events, same);
     this.playSounds(events);
     // SERIOUS wounds bleed where the character stands as their fatigue cards cost endurance.
     const chars = this.displayChars();
     for (const e of events) {
       if (e.kind === "delay" && e.reason === "serious" && e.endurance > 0 && chars[e.p]) this.bloodStains(this.tokenScreenPos(chars, e.p), 2 * e.endurance);
     }
-    // The tokens move in 450 ms once settled; a shot's bullet and burst need a beat more.
-    const shots = events.some((e) => e.kind === "shot");
-    return fade + (aim ? 150 : 0) + STEP_MOVE_MS + (shots ? STEP_SHOT_MS : 0);
+    // The tokens move in 450 ms once settled; the guns going off one after
+    // the other (shotDelays), their bullets and bursts need a beat more.
+    const lastShot = Math.max(-1, ...shotDelays(events).filter((d): d is number => d !== undefined));
+    return fade + (aim ? 150 : 0) + STEP_MOVE_MS + (lastShot >= 0 ? lastShot + STEP_SHOT_MS : 0);
   }
 
   /**
    * A bullet flying from the shooter to the target for each shot of the
    * step, and off in a random direction for each wild shot: a tracer grows
    * from the gun with a bright head, then fades out. Drawn under the tokens
-   * like the aim line, a miss above them.
+   * like the aim line, a miss above them. The guns go off one after the
+   * other, when their sounds play (shotDelays); each bullet is aimed from
+   * where the tokens stand as the step begins. same tells whether the
+   * replay is still on this step when a delayed gun's turn comes.
    */
-  private flashShots(events: TurnEvent[]) {
+  private flashShots(events: TurnEvent[], same: () => boolean = () => true) {
     const chars = this.displayChars();
-    for (const e of events) {
+    const delays = shotDelays(events);
+    const later = (ms: number, fire: () => void) => {
+      if (ms > 0) this.time.delayedCall(ms, () => same() && fire());
+      else fire();
+    };
+    events.forEach((e, i) => {
+      const at = delays[i] ?? 0;
       if (e.kind === "malfunction" && (e.result === "jams" || e.result === "explodes") && chars[e.p]) {
         // A jam or an explosion: no bullet, the "JAMMED!" or "EXPLODED!"
         // burst pops beside the shooter, off the line towards what it shot at.
@@ -2917,7 +2927,7 @@ export class GameScene extends Phaser.Scene {
         const aimAt = shot ? (shot.target >= 0 && chars[shot.target] ? this.tokenScreenPos(chars, shot.target) : this.hexToScreen(shot.to)) : null;
         const along = aimAt && (aimAt.sx !== at.sx || aimAt.sy !== at.sy) ? { x: aimAt.sx - at.sx, y: aimAt.sy - at.sy } : { x: 1, y: 0 };
         this.popBurst(e.result === "jams" ? "jammed" : "exploded", at, along);
-        continue;
+        return;
       }
       if (e.kind === "wild_shot" && chars[e.p]) {
         // A gun going off by itself (a WILD SHOT penalty): the bullet flies
@@ -2925,16 +2935,19 @@ export class GameScene extends Phaser.Scene {
         const gun = this.gunCentre(e.p);
         const from = { sx: gun.x, sy: gun.y };
         const angle = Math.random() * Math.PI * 2;
-        this.flyTracer(from, this.beyondTheBoard(from, { sx: from.sx + Math.cos(angle), sy: from.sy + Math.sin(angle) }), 20);
-        this.puffSmoke(from, { x: Math.cos(angle), y: Math.sin(angle) });
-        this.tokens[e.p]?.kickGun(this.tweens);
-        this.cameras.main.shake(120, 0.0025);
-        continue;
+        const to = this.beyondTheBoard(from, { sx: from.sx + Math.cos(angle), sy: from.sy + Math.sin(angle) });
+        later(at, () => {
+          this.flyTracer(from, to, 20);
+          this.puffSmoke(from, { x: Math.cos(angle), y: Math.sin(angle) });
+          this.tokens[e.p]?.kickGun(this.tweens);
+          this.cameras.main.shake(120, 0.0025);
+        });
+        return;
       }
-      if (e.kind !== "shot" || !chars[e.p]) continue;
+      if (e.kind !== "shot" || !chars[e.p]) return;
       // A misfire shows as a missed shot, unless the second card jams or blows
       // up the gun: then no bullet, the jam has its own burst.
-      if (e.reason === "misfire" && events.some((x) => x.kind === "malfunction" && x.p === e.p && (x.result === "jams" || x.result === "explodes"))) continue;
+      if (delays[i] === undefined) return;
       // The bullet leaves the shooter's gun icon, like the aim line.
       const gun = this.gunCentre(e.p);
       const from = { sx: gun.x, sy: gun.y };
@@ -2951,27 +2964,30 @@ export class GameScene extends Phaser.Scene {
       const near = { sx: centre.sx + Math.cos(angle) * spread, sy: centre.sy + Math.sin(angle) * spread };
       let to = near;
       if (!hit) to = this.beyondTheBoard(from, near); // a miss flies on past the target and off the board
-      // A miss flies over the target, so its tracer is drawn above the tokens.
-      const flight = this.flyTracer(from, to, hit ? this.lineDepth({ x: from.sx, y: from.sy }, { x: to.sx, y: to.sy }) : 20);
       const length = Math.hypot(to.sx - from.sx, to.sy - from.sy);
-      // The gunshot kicks the gun and shakes the view as the bullet leaves, harder on a hit.
-      if (e.reason !== "misfire") this.puffSmoke(from, { x: to.sx - from.sx, y: to.sy - from.sy });
-      this.tokens[e.p]?.kickGun(this.tweens);
-      this.cameras.main.shake(hit ? 250 : 120, hit ? 0.006 : 0.0025);
-      // The hit location's burst ("VITAL HIT!"...) or "MISSED!" beside the target as the bullet reaches it; a hit bleeds.
       const passing = length > 0 ? Math.hypot(near.sx - from.sx, near.sy - from.sy) / length : 1;
       const along = { x: to.sx - from.sx, y: to.sy - from.sy };
-      this.time.delayedCall(flight * passing, () => {
-        this.popBurst(hit ? hitBurst(e.hit) : "missed", centre, along);
-        if (hit) {
-          this.spurtBlood(near, along);
-          if (atToken) {
-            this.tokens[e.target]?.flinch(this.tweens);
-            this.tokens[e.target]?.hurtFlash(this);
+      later(at, () => {
+        // A miss flies over the target, so its tracer is drawn above the tokens.
+        const flight = this.flyTracer(from, to, hit ? this.lineDepth({ x: from.sx, y: from.sy }, { x: to.sx, y: to.sy }) : 20);
+        // The gunshot kicks the gun and shakes the view as the bullet leaves, harder on a hit.
+        if (e.reason !== "misfire") this.puffSmoke(from, along);
+        this.tokens[e.p]?.kickGun(this.tweens);
+        this.cameras.main.shake(hit ? 250 : 120, hit ? 0.006 : 0.0025);
+        // The hit location's burst ("VITAL HIT!"...) or "MISSED!" beside the target as the bullet reaches it; a hit bleeds.
+        this.time.delayedCall(flight * passing, () => {
+          if (!same()) return;
+          this.popBurst(hit ? hitBurst(e.hit) : "missed", centre, along);
+          if (hit) {
+            this.spurtBlood(near, along);
+            if (atToken) {
+              this.tokens[e.target]?.flinch(this.tweens);
+              this.tokens[e.target]?.hurtFlash(this);
+            }
           }
-        }
+        });
       });
-    }
+    });
   }
 
   /**

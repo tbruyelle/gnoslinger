@@ -627,7 +627,10 @@ Clicking a token opens the **character
   shows AIM (and on whom), who aims at the character (AIMED BY), endurance
   (boxes above the ones left are crossed off) and the
   permanent wounds. During playback a bullet flies from the shooter's gun
-  icon for each shot (`flashShots`), shaking the view; a miss flies on off
+  icon for each shot (`flashShots`), shaking the view, the guns of a step
+  going off one after the other when their sounds play (`shotDelays` in
+  `game/sounds.ts`, 220 ms apart, shared by the sounds and the bullets;
+  the step lasts that much longer); a miss flies on off
   the board; the hit location's burst, `assets/hit_<location>.png` (arm,
   body, critical, gun, head, leg, side, vital, picked by `game/bursts.ts`
   from the shot's final `hit`; `hit.png`, a plain "HIT!", only for a
