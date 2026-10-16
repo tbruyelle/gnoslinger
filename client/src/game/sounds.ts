@@ -64,8 +64,8 @@ const RICOCHET_AFTER_SHOT_MS = 350;
 const OBSTACLE_AFTER_MOVE_MS = 200;
 /**
  * Between shots fired in the same step (both characters shooting on the same
- * segment, empty guns clicking included), and between the wounds they cause:
- * played at the same instant the sounds merge into one.
+ * segment, empty guns clicking included): played at the same instant the
+ * sounds merge into one.
  */
 const SIMULTANEOUS_GAP_MS = 220;
 
@@ -77,8 +77,10 @@ export function soundsForEvents(events: TurnEvent[]): SoundCue[] {
   const cues: SoundCue[] = [];
   const bled = new Set<number>();
   const climbed = new Set<number>();
+  // One wound sound per segment, whoever is hit and however many effects
+  // the hits have (a GUN hit is STUN, GUN HAND, SERIOUS and GUN ARM).
+  const wounded = new Map<number, SoundCue>();
   let shots = 0;
-  let wounds = 0;
   for (const e of events) {
     switch (e.kind) {
       case "move":
@@ -120,9 +122,18 @@ export function soundsForEvents(events: TurnEvent[]): SoundCue[] {
       case "wild_shot":
         cues.push({ group: "gunshot", delayMs: shots++ * SIMULTANEOUS_GAP_MS });
         break;
-      case "wound":
-        cues.push({ group: e.result === "kill" ? "dead" : "wounded", delayMs: WOUND_AFTER_SHOT_MS + wounds++ * SIMULTANEOUS_GAP_MS });
+      case "wound": {
+        // A kill among them makes it the death cry.
+        const cue = wounded.get(e.seg);
+        if (cue) {
+          if (e.result === "kill") cue.group = "dead";
+          break;
+        }
+        const first: SoundCue = { group: e.result === "kill" ? "dead" : "wounded", delayMs: WOUND_AFTER_SHOT_MS };
+        wounded.set(e.seg, first);
+        cues.push(first);
         break;
+      }
       case "delay":
         // Crossing an obstacle draws its delay cards: one sound per character.
         if (OBSTACLE_REASONS.has(e.reason) && !climbed.has(e.p)) {

@@ -20,7 +20,7 @@ describe("soundsForEvents", () => {
     expect(groups([ev({ kind: "shot", hit: "-" })])).toEqual(["gunshot", "ricochet"]);
     expect(groups([ev({ kind: "shot", hit: "-", reason: "misfire" }), ev({ kind: "malfunction", result: "no_penalty" })])).toEqual(["gunshot", "ricochet"]);
     expect(groups([ev({ kind: "shot", hit: "-", reason: "misfire" }), ev({ kind: "malfunction", result: "jams" })])).toEqual([]);
-    expect(groups([ev({ kind: "wound", result: "stun" }), ev({ kind: "wound", result: "kill" }), ev({ kind: "pass_out" })])).toEqual(["wounded", "dead", "fall"]);
+    expect(groups([ev({ kind: "wound", result: "stun" }), ev({ kind: "pass_out" })])).toEqual(["wounded", "fall"]);
     // A shot with an empty gun only clicks; other cancels are silent.
     expect(groups([ev({ kind: "cancel", action: "shoot", reason: "empty" }), ev({ kind: "cancel", reason: "not_cocked" })])).toEqual(["emptyGun"]);
   });
@@ -56,9 +56,14 @@ describe("soundsForEvents", () => {
     expect(ricochet.delayMs).toBeGreaterThan(shots[1].delayMs);
   });
 
-  it("spaces out wounds taken together", () => {
-    const [a, b] = soundsForEvents([ev({ kind: "wound", result: "kill" }), ev({ kind: "wound", p: 1, result: "kill" })]);
-    expect(b.delayMs).toBeGreaterThan(a.delayMs);
+  it("plays one wound sound per segment, the death cry if any wound kills", () => {
+    // A GUN hit: STUN, GUN HAND, SERIOUS and GUN ARM.
+    const gunHit = ["stun", "gun_hand", "serious", "gun_arm"].map((result) => ev({ seg: 5, p: 1, kind: "wound", result }));
+    expect(groups(gunHit)).toEqual(["wounded"]);
+    // Both hit on the same segment, one killed.
+    expect(groups([ev({ seg: 3, kind: "wound", result: "stun" }), ev({ seg: 3, p: 1, kind: "wound", result: "kill" })])).toEqual(["dead"]);
+    // Two segments shown together: one each.
+    expect(groups([ev({ seg: 2, kind: "wound", result: "leg" }), ev({ seg: 4, kind: "wound", result: "arm" })])).toEqual(["wounded", "wounded"]);
   });
 
   it("plays wounds after the gunshot", () => {
