@@ -80,16 +80,16 @@ func TestSetups(t *testing.T) {
 			seen[h] = s.Char
 		}
 	}
-	if s := SetupOf("marshal"); s == nil || s.Facing != hex.NW || len(s.Hexes) != 5 || s.Hexes[0] != "A-G5" || s.Hexes[4] != "A-G9" {
+	if s := SetupOf("marshal"); s == nil || s.Facing != hex.SE || len(s.Hexes) != 5 || s.Hexes[0] != "A-D5" || s.Hexes[2] != "A-D7" || s.Hexes[4] != "A-E7" {
 		t.Errorf("SetupOf(marshal) = %+v", s)
 	}
-	if s := SetupOf("the_kid"); s == nil || s.Facing != hex.SE || len(s.Hexes) != 5 || s.Hexes[0] != "A-E5" || s.Hexes[4] != "A-E9" {
+	if s := SetupOf("the_kid"); s == nil || s.Facing != hex.NW || len(s.Hexes) != 5 || s.Hexes[0] != "A-H5" || s.Hexes[2] != "A-H7" || s.Hexes[4] != "A-G7" {
 		t.Errorf("SetupOf(the_kid) = %+v", s)
 	}
-	if s := SetupOf("el_jefe"); s == nil || s.Facing != hex.NW || len(s.Hexes) != 5 || s.Hexes[0] != "A-I5" || s.Hexes[4] != "A-I9" {
+	if s := SetupOf("el_jefe"); s == nil || s.Facing != hex.N || len(s.Hexes) != 4 || s.Hexes[0] != "A-E8" || s.Hexes[1] != "A-F7" || s.Hexes[3] != "A-G8" {
 		t.Errorf("SetupOf(el_jefe) = %+v", s)
 	}
-	if s := SetupOf("axe"); s == nil || s.Facing != hex.SE || len(s.Hexes) != 5 || s.Hexes[0] != "A-C5" || s.Hexes[4] != "A-C9" {
+	if s := SetupOf("axe"); s == nil || s.Facing != hex.S || len(s.Hexes) != 4 || s.Hexes[0] != "A-E5" || s.Hexes[2] != "A-F4" || s.Hexes[3] != "A-G5" {
 		t.Errorf("SetupOf(axe) = %+v", s)
 	}
 	if SetupOf("dude") != nil || SetupOf("") != nil {
@@ -103,12 +103,13 @@ func TestCanSetUp(t *testing.T) {
 		id   string
 		ok   bool
 	}{
-		{"marshal", "A-G5", true}, {"marshal", "A-G7", true}, {"marshal", "A-G9", true},
-		{"marshal", "A-G4", false}, {"marshal", "A-G10", false}, {"marshal", "A-E7", false}, {"marshal", "A-F3", false},
-		{"the_kid", "A-E5", true}, {"the_kid", "A-E9", true},
-		{"the_kid", "A-G7", false}, {"the_kid", "A-E4", false}, {"the_kid", "A-F9", false},
-		{"el_jefe", "A-I7", true}, {"el_jefe", "A-I4", false}, {"axe", "A-C9", true}, {"axe", "A-C10", false},
-		{"dude", "A-G7", false}, {"marshal", "", false}, {"marshal", "A-Z9", false},
+		{"marshal", "A-D5", true}, {"marshal", "A-D6", true}, {"marshal", "A-D7", true}, {"marshal", "A-E6", true}, {"marshal", "A-E7", true},
+		{"marshal", "A-D4", false}, {"marshal", "A-D8", false}, {"marshal", "A-E5", false}, {"marshal", "A-H6", false}, {"marshal", "A-F3", false},
+		{"the_kid", "A-H5", true}, {"the_kid", "A-H7", true}, {"the_kid", "A-G6", true}, {"the_kid", "A-G7", true},
+		{"the_kid", "A-D6", false}, {"the_kid", "A-H4", false}, {"the_kid", "A-H8", false}, {"the_kid", "A-G5", false},
+		{"el_jefe", "A-F7", true}, {"el_jefe", "A-F8", true}, {"el_jefe", "A-G8", true}, {"el_jefe", "A-F6", false}, {"el_jefe", "A-G7", false},
+		{"axe", "A-E5", true}, {"axe", "A-F5", true}, {"axe", "A-F4", true}, {"axe", "A-F6", false}, {"axe", "A-E6", false},
+		{"dude", "A-D6", false}, {"marshal", "", false}, {"marshal", "A-Z9", false},
 	} {
 		if got := CanSetUp(tt.char, tt.id); got != tt.ok {
 			t.Errorf("CanSetUp(%q, %q) = %v, want %v", tt.char, tt.id, got, tt.ok)

@@ -55,9 +55,7 @@ func renderHome(res *mux.ResponseWriter, _ *mux.Request) {
 	res.Write(md.Paragraph("Showdowns of two to four gunfighters on board A, the Corral, each on their own. " +
 		"Create a game, wait for the seats to fill up, then submit a plan every turn. " +
 		link("How to play", "help") + "."))
-	res.Write(md.Paragraph(md.Link("Create a game of two as the marshal", txlink.Call("CreateGame", "seats", "2", "maxTurns", "20", "timeoutMinutes", "0", "startHex", "A-G7", "facing", "5")) +
-		" · " + md.Link("of three", txlink.Call("CreateGame", "seats", "3", "maxTurns", "20", "timeoutMinutes", "0", "startHex", "A-G7", "facing", "5")) +
-		" · " + md.Link("of four", txlink.Call("CreateGame", "seats", "4", "maxTurns", "20", "timeoutMinutes", "0", "startHex", "A-G7", "facing", "5"))))
+	res.Write(md.Paragraph(createLink("Create a game of two as the marshal", 2) + " · " + createLink("of three", 3) + " · " + createLink("of four", 4)))
 
 	res.Write(md.H2("Open games"))
 	n := 0
@@ -377,6 +375,14 @@ func seatLabels(g *Game) string {
 		labels[i] = seatLabel(g, i)
 	}
 	return strings.Join(labels, " vs ")
+}
+
+// createLink is a transaction link to call a showdown of seats players,
+// standing in the middle of the marshal's hexes, facing its way.
+func createLink(text string, seats int) string {
+	setup := engine.Setups[0]
+	return md.Link(text, txlink.Call("CreateGame", "seats", strconv.Itoa(seats), "maxTurns", "20", "timeoutMinutes", "0",
+		"startHex", setup.Hexes[len(setup.Hexes)/2], "facing", strconv.Itoa(int(setup.Facing))))
 }
 
 // joinLink is a transaction link to take the next free seat of a waiting

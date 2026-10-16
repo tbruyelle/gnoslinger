@@ -11,7 +11,8 @@ The realm and the client play showdowns of **2 to 4 players**, every
 character a side of its own: the creator picks the number of seats, and
 the seats take the showdown's characters **in the order the players join**
 (seat 0 the marshal, 1 the kid, 2 el jefe, 3 axe), each in its own hexes
-(G, E, I and C columns, rows 5 to 9; AGENTS.md, Set up). No character
+around the middle of the corral (D5-D7 with E6-E7, H5-H7 with G6-G7, E8/F7/F8/G8, E5/F5/F4/G5;
+AGENTS.md, Set up). No character
 pick yet, no teams, not more than four (the showdown's set up stops
 there). The engine takes any number of seats; targets, AIM markers, kills
 and knock outs name seats (`AimAt`, `KilledBy`, `Hurt`).

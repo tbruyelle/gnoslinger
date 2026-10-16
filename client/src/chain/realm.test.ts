@@ -35,7 +35,7 @@ describe("RealmClient.send", () => {
     const wallet = fakeWallet(() => new Promise(() => {})); // Adena's result screen never dismissed
     const realm = new RealmClient(rpc, wallet, PKG);
 
-    const p = realm.createGame(2, 10, 0, "A-G7", 5);
+    const p = realm.createGame(2, 10, 0, "A-D6", 2);
     await vi.advanceTimersByTimeAsync(1500); // first poll: nothing new yet
     mine = [summary("0000002"), summary("0000001")];
     await vi.advanceTimersByTimeAsync(1500); // second poll sees the new game
@@ -49,7 +49,7 @@ describe("RealmClient.send", () => {
     );
     const wallet = fakeWallet(async () => ({ hash: utf8ToB64("h") }));
     const realm = new RealmClient(rpc, wallet, PKG);
-    await expect(realm.createGame(2, 10, 0, "A-G7", 5)).resolves.toEqual({ hash: utf8ToB64("h"), gameID: "0000007" });
+    await expect(realm.createGame(2, 10, 0, "A-D6", 2)).resolves.toEqual({ hash: utf8ToB64("h"), gameID: "0000007" });
   });
 
   it("surfaces a realm panic from the tx result", async () => {
@@ -75,7 +75,7 @@ describe("RealmClient.send", () => {
     let reject!: (e: unknown) => void;
     const wallet = fakeWallet(() => new Promise((_, r) => (reject = r)));
     const realm = new RealmClient(rpc, wallet, PKG);
-    const p = realm.createGame(2, 10, 0, "A-G7", 5);
+    const p = realm.createGame(2, 10, 0, "A-D6", 2);
     await vi.advanceTimersByTimeAsync(10);
     await expect(realm.cancelGame("1")).rejects.toThrow(ChainError);
     reject(new ChainError("rejected", "Transaction cancelled"));

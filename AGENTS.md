@@ -151,13 +151,13 @@ their cards) add a few hundred bytes. A 20-turn game is roughly 40–55 KB
 Rule 3.4 and the SET UP of a showdown (`engine/v0/setup.gno`, [H3]): each
 character of the showdown has its own hexes to set up in and a default
 facing, `engine.Setups` (`CharSetup{Char, Hexes, Facing}`, one per seat in
-seat order; `SeatChar`, `SetupOf`, `CanSetUp`, `ShowdownChars`): seat 0 the
-**marshal** inside the corral in **G5-G9** looking NW, seat 1 **the_kid**
-in **E5-E9** looking SE (showdown 1's line-up, two columns apart; a
-flat-top grid has no W or E), seat 2 **el_jefe** in **I5-I9** looking NW,
-seat 3 **axe** in **C5-C9** looking SE (the same line-up carried on,
-each facing the middle; the rules' showdown 1 has no set up beyond two
-sides, so these two zones are this project's choice). The creator is seat
+seat order; `SeatChar`, `SetupOf`, `CanSetUp`, `ShowdownChars`), around
+the middle of the corral: seat 0 the **marshal** on the west side in
+**D5-D7, E6, E7** looking SE (a flat-top grid has no W or E), seat 1
+**the_kid** on the east side in **H5-H7, G6, G7** looking NW, seat 2
+**el_jefe** to the south in **E8, F7, F8, G8** looking N, seat 3 **axe**
+to the north in **E5, F5, F4, G5** looking S (this project's own set up, each facing the middle; the
+rules' showdown 1 lines two sides up in G5-G9 and E5-E9). The creator is seat
 0 and picks how many seats the game has (2 to 4); each player joining
 takes the first free seat and its character, so the characters are fixed
 by join order. Each may face any direction. Nobody is alerted (29.21):
@@ -650,19 +650,20 @@ Clicking a token opens the **character
    them); `make web`; open http://localhost:5173, approve connect / add
    network `dev` / switch.
 2. Account A: pick the number of players (2 to 4), **Call a showdown**:
-   the board opens with G5 to G9 in green; click a hex (say A-G7), turn
-   the token if you like, **CALL THE SHOWDOWN**. Switch account in Adena
-   (the app reconnects): **Join** from "Open showdowns", E5 to E9 are
-   green, click A-E7, **JOIN THE SHOWDOWN** (a third player gets I5 to I9
-   as El Jefe, a fourth C5 to C9 as Axe). Everyone sees the marshal at
-   A-G7 (facing NW) and The Kid at A-E7 (facing SE); the game starts once
-   the last seat is taken.
+   the board opens with D5 to D7, E6 and E7 in green; click a hex (say
+   A-D6), turn the token if you like, **CALL THE SHOWDOWN**. Switch
+   account in Adena (the app reconnects): **Join** from "Open showdowns",
+   H5 to H7, G6 and G7 are green, click A-H6, **JOIN THE SHOWDOWN** (a
+   third player gets E8, F7, F8 and G8 as El Jefe, a fourth E5, F5, F4 and
+   G5 as Axe). Everyone sees the
+   marshal at A-D6 (facing SE) and The Kid at A-H6 (facing NW); the game
+   starts once the last seat is taken.
 3. Each account picks cards and sends its plan; the last submission
    resolves the turn, every tab replays it, positions match
    `go tool gnokey query vm/qrender -remote 127.0.0.1:26657 -data 'gno.land/r/tbruyelle/gnoslinger/v0:json/game/0000001'`.
 4. CLI alternative: `go tool gnokey maketx call -pkgpath gno.land/r/tbruyelle/gnoslinger/v0 -func SubmitPlan -args 0000001 -args "1f:ahead" -gas-fee 1000000ugnot -gas-wanted 20000000 -broadcast -chainid dev -remote 127.0.0.1:26657 <key>`
-   (`CreateGame -args 3 -args 20 -args 0 -args A-G7 -args 5`, `JoinGame
-   -args 0000001 -args A-E7 -args 2`). A second gnodev for such a run,
+   (`CreateGame -args 3 -args 20 -args 0 -args A-D6 -args 2`, `JoinGame
+   -args 0000001 -args A-H6 -args 5`). A second gnodev for such a run,
    leaving the usual one alone: `go tool gnodev local -no-watch -no-web
    -node-rpc-listener 127.0.0.1:36657 -add-account <addr>=1000000000ugnot…`
    with keys made in a scratch keybase (`gnokey add -home <dir>

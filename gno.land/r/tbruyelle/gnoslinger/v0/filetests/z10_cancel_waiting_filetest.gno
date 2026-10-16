@@ -16,8 +16,8 @@ const (
 
 func main(cur realm) {
 	testing.SetRealm(testing.NewUserRealm(alice))
-	id := gnoslinger.CreateGame(cross(cur), 2, 10, 0, "A-G5", 3)
-	other := gnoslinger.CreateGame(cross(cur), 2, 10, 0, "A-G5", 3)
+	id := gnoslinger.CreateGame(cross(cur), 2, 10, 0, "A-D5", 3)
+	other := gnoslinger.CreateGame(cross(cur), 2, 10, 0, "A-D5", 3)
 	// A cancelled game is deleted: only the other one is left.
 	gnoslinger.CancelGame(cross(cur), id)
 	println(gnoslinger.GamesJSON(alice.String()))
