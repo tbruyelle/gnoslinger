@@ -15,7 +15,6 @@
   - how to add more boards/gun in the future w/o changing the realms
 
 ## Player profile
-- Move profiles to specific realms to it keeps its data
 - Add profile page with specific token and linked reputation (check RPG rules)
   - Add XP to player to increase stats? 
 - Add a challenge player button
