@@ -13,7 +13,7 @@
 - remove unused assets
 - Replace the tbruyelle realm to sthing else
 - upgrade architecture
-  - how to add more boards/gun in the future w/o changing the realms
+  - DESIGN_SHOWDOWN
 
 ## Player profile
 - Add profile page with specific token and linked reputation (check RPG rules)
@@ -21,6 +21,7 @@
 - Add a challenge player button
 - Can pick a specific character token
 - Buy more character tokens 
+- NFTs
 - Buy guns
 - Buy bonus cards
   - Say some cowbow thing during the game
@@ -47,6 +48,7 @@
   - scenario
     - battelroyale 2 to 8
     - OK coral with the whyatt earp (adapt with number of players)
+    - poker game with money
 
 ## Showdown
 - add winning/losing burst
@@ -75,17 +77,13 @@
     - check case https://youtu.be/WGQbh6coUQI?t=2704
     - range through the split hex I11 counts both halves (30.62 says one)
   - fanfire
-  - keep smoke until end of next turn
-  - hit
-    - add more detailed burst that just hit (vital, critical, ...)
-    - keep blood on the ground?
-  - when shooting empty hex, indicate this is only if a target go in the hex
 - Obstacles
   - walls 
   - doors except saloon
   - windows
 - Commit-reveal for plans (`PhaseCommit`/`PhaseRevaeal` reserved): secret
-  simultaneous selection and dice seeded from revealed salts.
+  simultaneous selection and dice seeded from revealed salts. Maybe make this
+  optionnal?
 - Sounds
   - Add western music
     
