@@ -236,6 +236,11 @@ const CSS = `
 .gv-legend span{display:flex;align-items:center;gap:5px}
 .gv-legend em{width:12px;height:12px;border:2px solid #2A1C14;border-radius:3px}
 .gv-plan{--rule:#B5482A}
+.gv-me{gap:12px}
+.gv-bare{display:flex;flex-direction:column;gap:10px}
+.gv-char.gv-bare{background:transparent;border:0;border-radius:10px;padding:6px;margin:-6px}
+.gv-char.gv-bare:hover,.gv-char.gv-bare.hl{background:#FBF4E4}
+.gv-plan.gv-bare{border-top:3px double #5A4636;padding-top:12px}
 .gv-plan-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;border-bottom:3px solid #2A1C14;padding-bottom:6px}
 .gv-plan-head h2{margin:0;font-family:Rye,Georgia,serif;font-weight:400;font-size:24px;color:#33307F}
 .gv-plan-head span{font-size:16px;font-weight:700}
@@ -465,7 +470,11 @@ export class ShowdownView {
       this.bottom.innerHTML = this.replayHtml(m);
     } else {
       // My plan goes with my character and the segment tracker; the other characters fill the right, compact when they are several.
-      this.left.innerHTML = m.left.map((c) => this.charHtml(c, false)).join("") + this.planHtml(m);
+      // My character and my plan share one panel, in my seat's colour.
+      const me = m.left.length === 1 && m.left[0].you && m.plan ? m.left[0] : null;
+      this.left.innerHTML = me
+        ? `<div class="gv-panel gv-me" style="--rule:${esc(me.color)}">${this.charHtml(me, false, true)}${this.planHtml(m, true)}</div>`
+        : m.left.map((c) => this.charHtml(c, false)).join("") + this.planHtml(m);
       this.right.innerHTML = m.others.map((c) => this.charHtml(c, m.others.length > 1)).join("");
       this.bottom.innerHTML = this.handHtml(m);
     }
@@ -522,7 +531,8 @@ export class ShowdownView {
     );
   }
 
-  private charHtml(c: CharPanel, small: boolean): string {
+  /** A character's panel; bare, its content only, to go inside another panel (gv-me). */
+  private charHtml(c: CharPanel, small: boolean, bare = false): string {
     const boxes = Array.from({ length: c.maxEndurance }, (_, i) => `<span${i < c.endurance ? "" : ' class="x"'}></span>`).join("");
     const guns = c.guns
       .map(
@@ -541,7 +551,7 @@ export class ShowdownView {
         guns;
     const rule = c.color;
     return (
-      `<button type="button" class="gv-panel gv-char${small ? " gv-small" : ""}${c.out ? " out" : ""}" style="--rule:${rule}" data-act="sheet" data-seat="${c.seat}" aria-label="${esc(c.name)}: open the character sheet">` +
+      `<button type="button" class="${bare ? "gv-bare" : "gv-panel"} gv-char${small ? " gv-small" : ""}${c.out ? " out" : ""}" style="--rule:${rule}" data-act="sheet" data-seat="${c.seat}" aria-label="${esc(c.name)}: open the character sheet">` +
       `<div class="gv-who">${tokenImg(c.charKey)}<div class="gv-who-txt">${c.you ? '<span class="gv-kicker">YOUR CHARACTER</span>' : ""}` +
       `<span class="gv-name">${esc(c.name)}</span><span class="gv-where">${esc(c.where)}</span></div>${badge}</div>${detail}</button>`
     );
@@ -559,7 +569,7 @@ export class ShowdownView {
     );
   }
 
-  private planHtml(m: ShowdownModel): string {
+  private planHtml(m: ShowdownModel, bare = false): string {
     const p = m.plan;
     if (!p) return "";
     const lines = p.lines
@@ -569,7 +579,7 @@ export class ShowdownView {
       .map((b) => `<button type="button" class="gv-btn ${b.tone}" data-act="btn" data-id="${esc(b.id)}"${b.disabled ? " disabled" : ""}>${esc(b.label)}</button>`)
       .join("");
     return (
-      `<section class="gv-panel gv-plan" aria-labelledby="gv-plan"><div class="gv-plan-head"><h2 id="gv-plan">${esc(p.title)}</h2><span>${esc(p.points)}</span></div>` +
+      `<section class="${bare ? "gv-bare" : "gv-panel"} gv-plan" aria-labelledby="gv-plan"><div class="gv-plan-head"><h2 id="gv-plan">${esc(p.title)}</h2><span>${esc(p.points)}</span></div>` +
       this.trackerHtml(m.tracker) +
       (lines ? `<ol>${lines}</ol>` : `<p class="gv-empty">${esc(p.empty)}</p>`) +
       (p.note ? `<p class="gv-note${p.warn ? " warn" : ""}">${esc(p.note)}</p>` : "") +

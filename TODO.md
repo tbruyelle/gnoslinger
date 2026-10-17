@@ -50,7 +50,6 @@
 ## Showdown
 - add address/namepsace info to character sheets and panels
 - implement character's run away
-- Merge your character panel and your plan
 - aim transfer own-hex exception (12.5): AIM markers cannot move into or out
   of the shooter's own hex (allowed between two targets both in it, or both
   out of it); missing in the engine's `reveal` and the client's `replayPlan`
