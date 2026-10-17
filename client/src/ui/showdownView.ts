@@ -24,6 +24,8 @@ export interface BoardRect {
 
 export interface ShowdownLayout {
   header: number;
+  /** The status ribbon's strip, over the board. */
+  ribbon: number;
   left: number;
   right: number;
   bottom: number;
@@ -37,12 +39,14 @@ export interface ShowdownLayout {
  */
 export function showdownLayout(w: number, h: number): ShowdownLayout {
   const header = 56;
+  const ribbon = 48;
   const bottom = 268;
   // Both columns the same width; narrower in a small window, so the board keeps some room.
   const side = w < 1180 ? 255 : 296;
   const left = side;
   const right = side;
-  return { header, left, right, bottom, board: { x: left, y: header, w: Math.max(120, w - left - right), h: Math.max(120, h - header - bottom) } };
+  const top = header + ribbon;
+  return { header, ribbon, left, right, bottom, board: { x: left, y: top, w: Math.max(120, w - left - right), h: Math.max(120, h - top - bottom) } };
 }
 
 export interface GunLine {
@@ -174,7 +178,8 @@ const CSS = `
 .gv-lobby{display:flex;align-items:center;gap:6px;min-height:44px;padding:0 6px;background:transparent;border:0;color:#F2B544;font-size:17px;font-weight:700;cursor:pointer}
 .gv-lobby:hover{color:#FBF4E4}
 .gv-title{font-family:Rye,Georgia,serif;font-size:21px;letter-spacing:1px;white-space:nowrap}
-.gv-status{border:2px solid #F3E7CE;border-radius:999px;padding:3px 14px;font-size:16px;font-weight:700;letter-spacing:.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.gv-ribbon{grid-area:ribbon;display:flex;align-items:center;padding:6px 12px 0;min-width:0}
+.gv-status{flex:1;text-align:center;border:2px solid #F3E7CE;border-radius:999px;padding:6px 18px;font-size:18px;font-weight:700;letter-spacing:.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .gv-status.move{background:#B5482A;color:#FBF4E4}
 .gv-status.replay{background:#33307F;color:#FBF4E4}
 .gv-status.wait,.gv-status.info{background:transparent;color:#F3E7CE;border-color:#5A4636}
@@ -323,6 +328,7 @@ function tokenImg(charKey: string): string {
 export class ShowdownView {
   private root: HTMLDivElement;
   private header: HTMLElement;
+  private ribbon: HTMLElement;
   private left: HTMLElement;
   private right: HTMLElement;
   private bottom: HTMLElement;
@@ -340,13 +346,16 @@ export class ShowdownView {
     this.root.className = "gv-root";
     this.header = document.createElement("header");
     this.header.className = "gv-header";
+    this.ribbon = document.createElement("div");
+    this.ribbon.className = "gv-ribbon";
+    this.ribbon.setAttribute("role", "status");
     this.left = document.createElement("aside");
     this.left.className = "gv-left";
     this.right = document.createElement("aside");
     this.right.className = "gv-right";
     this.bottom = document.createElement("section");
     this.bottom.className = "gv-bottom";
-    this.root.append(this.header, this.left, this.right, this.bottom);
+    this.root.append(this.header, this.ribbon, this.left, this.right, this.bottom);
     this.preview = document.createElement("img");
     this.preview.className = "gv-preview";
     this.preview.alt = "";
@@ -380,12 +389,13 @@ export class ShowdownView {
 
   render(m: ShowdownModel, layout: ShowdownLayout) {
     Object.assign(this.root.style, {
-      gridTemplateRows: `${layout.header}px 1fr ${layout.bottom}px`,
+      gridTemplateRows: `${layout.header}px ${layout.ribbon}px 1fr ${layout.bottom}px`,
       gridTemplateColumns: `${layout.left}px 1fr ${layout.right}px`,
-      gridTemplateAreas: '"header header header" "left . right" "bottom bottom bottom"',
+      gridTemplateAreas: '"header header header" "left ribbon right" "left . right" "bottom bottom bottom"',
       display: "grid",
     });
     this.header.innerHTML = this.headerHtml(m);
+    this.ribbon.innerHTML = m.status ? `<span class="gv-status ${m.statusTone}">${esc(m.status)}</span>` : "";
     if (m.replay) {
       this.left.innerHTML = m.left.map((c) => this.charHtml(c, true)).join("");
       this.right.innerHTML = this.logHtml(m);
@@ -407,7 +417,6 @@ export class ShowdownView {
     return (
       `<button type="button" class="gv-lobby" data-act="btn" data-id="lobby">${BACK_SVG}Lobby</button>` +
       `<span class="gv-title">${esc(m.title)}</span>` +
-      (m.status ? `<span class="gv-status ${m.statusTone}">${esc(m.status)}</span>` : "") +
       `<span class="gv-hright${m.rightError ? " err" : ""}">${esc(m.right)}</span>`
     );
   }
