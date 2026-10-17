@@ -549,7 +549,8 @@ played, victory points, since). `game/lobby.ts` sorts the games into
   several) on the right, and the hand along
   the bottom: one double-sided card per column, top or bottom half picked,
   the whole card shown on hover; in a replay, every character on the left,
-  the resolution log on the right (a click on it opens it in a wide
+  the resolution log on the right (every character name bold in its
+  seat's colour, `colorNames`; a click on it opens it in a wide
   dialog, kept up to date while the replay moves, Esc or the cross
   closing it), and a timeline (one row per character,
   `turnSegmentCells`, thinner rows past two, the blue pointer over the segment shown, a click on a

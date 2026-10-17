@@ -147,6 +147,8 @@ export interface ShowdownModel {
   replay: {
     logTitle: string;
     log: string[];
+    /** Every seat's character name and colour: the names in the log show in their seat's colour. */
+    names: { name: string; color: string }[];
     /** The segment shown, 0 for the turn start. */
     seg: number;
     rows: TimelineRow[];
@@ -303,6 +305,7 @@ const CSS = `
 .gv-log h2{margin:0;font-family:Rye,Georgia,serif;font-weight:400;font-size:22px;color:#33307F;border-bottom:3px solid #2A1C14;padding-bottom:6px}
 .gv-log ol{margin:0;padding:0 0 0 2px;list-style:none;display:flex;flex-direction:column;gap:7px;font-size:15px;line-height:1.35}
 .gv-log li.sub{padding-left:18px}
+.gv-log .gv-who-c{font-weight:700}
 .gv-log[data-act]{cursor:pointer}
 .gv-log[data-act]:hover{background:#FBF4E4}
 .gv-log-head{display:flex;align-items:center;gap:8px;border-bottom:3px solid #2A1C14;padding-bottom:6px}
@@ -326,6 +329,26 @@ const CHECK_SVG =
 const HOURGLASS_SVG =
   '<svg width="18" height="22" viewBox="0 0 52 62" aria-hidden="true"><rect x="6" y="2" width="40" height="7" rx="2" fill="#F3E7CE"></rect><rect x="6" y="53" width="40" height="7" rx="2" fill="#F3E7CE"></rect>' +
   '<path d="M11,9 H41 Q41,24 26,31 Q11,24 11,9 Z M11,53 H41 Q41,38 26,31 Q11,38 11,53 Z" fill="none" stroke="#F3E7CE" stroke-width="4" stroke-linejoin="round"></path><path d="M17,48 Q26,40 35,48 Z" fill="#F3E7CE"></path></svg>';
+/**
+ * Escapes a log line with every character name in it bold, in its seat's
+ * colour: whole words, case kept, the longest names tried first.
+ */
+export function colorNames(names: { name: string; color: string }[]): (line: string) => string {
+  const byName = new Map(names.filter((n) => n.name).map((n) => [n.name, n.color]));
+  if (byName.size === 0) return esc;
+  const alts = [...byName.keys()].sort((a, b) => b.length - a.length).map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const re = new RegExp(`\\b(${alts.join("|")})\\b`, "g");
+  return (line) => {
+    let out = "";
+    let last = 0;
+    for (const m of line.matchAll(re)) {
+      out += esc(line.slice(last, m.index)) + `<span class="gv-who-c" style="color:${esc(byName.get(m[1]) ?? "")}">${esc(m[1])}</span>`;
+      last = (m.index ?? 0) + m[1].length;
+    }
+    return out + esc(line.slice(last));
+  };
+}
+
 /** A plan line's detail, the target's name in its seat's colour. */
 function detailHtml(l: PlanLine): string {
   const t = l.target;
@@ -584,7 +607,8 @@ export class ShowdownView {
   }
 
   private logLines(m: ShowdownModel): string {
-    return m.replay!.log.map((l) => (l.startsWith("    ") ? `<li class="sub">${esc(l.trim())}</li>` : `<li>${esc(l)}</li>`)).join("");
+    const color = colorNames(m.replay!.names);
+    return m.replay!.log.map((l) => (l.startsWith("    ") ? `<li class="sub">${color(l.trim())}</li>` : `<li>${color(l)}</li>`)).join("");
   }
 
   /** The resolution log on the right; a click anywhere on it opens it wider (logModalHtml). */

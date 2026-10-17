@@ -85,8 +85,8 @@ and knock outs name seats (`AimAt`, `Killers`, `SeriousFrom`, `LegFrom`,
 11. **The timeline** *Done:* thinner rows (34 px) and a seat-colour dot on
     the names past two rows, so four fit the bottom strip. *Left:* a
     "Me / everyone" filter for 8.
-12. **Log step tags** ("MARSHAL") *Left:* the seat's colour on the names in
-    the log lines.
+12. **Log step tags** ("MARSHAL") *Done:* the names in the log lines show
+    bold in their seat's colour.
 
 ## Splash
 

@@ -1677,6 +1677,7 @@ export class GameScene extends Phaser.Scene {
         replay: {
           logTitle: pb.seg === 0 ? `Turn ${t.turn}: the plans` : `Segment ${pb.seg}`,
           log: this.logLines(),
+          names: (this.view?.players ?? []).map((p, i) => ({ name: charName(p.char), color: seatColor(i) })),
           seg: pb.seg,
           rows,
           turnLabel: pb.turns.length > 1 ? `${t.turn} / ${pb.turns[pb.turns.length - 1].turn}` : String(t.turn),
