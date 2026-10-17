@@ -212,6 +212,14 @@ export function soundsForEvents(events: TurnEvent[]): SoundCue[] {
 }
 
 /**
+ * Whether a plan step took an aim: more AIM points, or markers on a new
+ * target, which a target farther than one hex from them starts again at 2 (12.5).
+ */
+export function aimTaken(before: CharView, after: CharView): boolean {
+  return after.aim > 0 && (after.aim > before.aim || after.aimHex !== before.aimHex || after.aimAt !== before.aimAt);
+}
+
+/**
  * The sounds of a plan step while planning, from the preview before and
  * after it: only what the plan alone decides (moves, climbing over an
  * obstacle, turns, going down, drawing or picking a gun up, cocking, aiming, loading); shots and penalties wait for the cards
@@ -225,7 +233,7 @@ export function soundsForPreview(before: CharView, after: CharView, crossesObsta
   }
   if (after.facing !== before.facing) cues.push({ group: "turn", delayMs: 0 });
   if (after.down && !before.down) cues.push({ group: "fall", delayMs: 0 });
-  if (after.aim > before.aim) cues.push({ group: "aim", delayMs: 0 });
+  if (aimTaken(before, after)) cues.push({ group: "aim", delayMs: 0 });
   for (const g of after.guns) {
     const b = before.guns.find((x) => x.id === g.id);
     if (!b || b.location !== g.location) {

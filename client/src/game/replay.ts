@@ -37,8 +37,15 @@ export function copyChar(c: CharView): CharView {
  * one, exactly as the realm replays the committed plan. ground is the
  * weapons lying on the board as the chain has them: a pick-up finds its gun
  * in the hex the character stands in by then, as the realm checks it.
+ * seatHexes is where each seat stands, for the aims and shots naming one.
  */
-export function replayPlan(start: CharView, plan: PlanEntry[], board: BoardMap, ground: GroundGunView[] = []): CharView {
+export function replayPlan(
+  start: CharView,
+  plan: PlanEntry[],
+  board: BoardMap,
+  ground: GroundGunView[] = [],
+  seatHexes: string[] = [],
+): CharView {
   const s = copyChar(start);
   for (const e of plan) {
     const def = getActionDef(e);
@@ -49,6 +56,16 @@ export function replayPlan(start: CharView, plan: PlanEntry[], board: BoardMap, 
       s.aim = 0;
       s.aimAt = -1;
       s.aimHex = "";
+    }
+    if (gunAction && s.aim > 0) {
+      // A new target keeps the markers only within one hex of their place (12.5).
+      const markers = s.aimAt >= 0 ? (seatHexes[s.aimAt] ?? "") : s.aimHex;
+      const named = e.target !== undefined ? (seatHexes[e.target] ?? "") : (e.hex ?? "");
+      if (named && (!markers || board.distance(markers, named) > 1)) {
+        s.aim = 0;
+        s.aimAt = -1;
+        s.aimHex = "";
+      }
     }
     if (gunAction) {
       const g = firingGun(s.guns);

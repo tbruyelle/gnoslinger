@@ -24,7 +24,7 @@ import { firingGun, gunInHand, replayPlan, type CharView } from "../game/replay"
 import { SEGMENTS, segmentFills, turnSegmentCells } from "../game/segments";
 import { COCK_AIM_SHOOT_AIM_TIME, SHOOT_AIM_TIME, shotOdds } from "../game/shotOdds";
 import { canSee, standingOn } from "../game/sight";
-import { SOUND_FILES, SOUND_VOLUME, shotDelays, soundKey, soundsForDelay, soundsForEvents, soundsForPreview, woundDelays, type SoundCue, type SoundGroup } from "../game/sounds";
+import { SOUND_FILES, SOUND_VOLUME, aimTaken, shotDelays, soundKey, soundsForDelay, soundsForEvents, soundsForPreview, woundDelays, type SoundCue, type SoundGroup } from "../game/sounds";
 import { SHOOT_OPTIONS, isShooting, type ShootOption } from "../game/plan";
 import { closeCharacterSheet, openCharacterSheet, type GunPick } from "../ui/characterSheet";
 import { ShowdownView, showdownLayout, type BoardRect, type CharPanel, type HandSide, type ShowdownLayout, type ShowdownModel, type TimelineRow } from "../ui/showdownView";
@@ -2718,14 +2718,15 @@ export class GameScene extends Phaser.Scene {
     const before = this.preview ?? me;
     const plan = this.currentPlan();
     // The chain's ground: the board's (displayGround) has the planned pick-up lifted off already.
-    this.preview = replayPlan(me, plan, BOARD_A, this.view?.ground ?? []);
+    const seatHexes = this.committed.map((c) => c?.hex ?? "");
+    this.preview = replayPlan(me, plan, BOARD_A, this.view?.ground ?? [], seatHexes);
     this.refreshTokens(true);
     const encoded = encodePlan(plan);
     const prev = this.previewPlan;
     this.previewPlan = encoded;
     if (!withSounds || encoded.length <= prev.length || !encoded.startsWith(prev)) return;
     this.playCues(soundsForPreview(before, this.preview, (from, to) => BOARD_A.crossesObstacle(from, to)));
-    if (this.preview.aim > before.aim) this.landPlannedAim();
+    if (aimTaken(before, this.preview)) this.landPlannedAim();
   }
 
   /** An aim just added to the plan: the dotted line to its target, then the markers pulse, as in the playback. */

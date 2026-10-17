@@ -109,6 +109,8 @@ describe("soundsForPreview", () => {
     expect(groups(char(), char({ facing: 2 }))).toEqual(["turn"]);
     expect(groups(char(), char({ down: true }))).toEqual(["fall"]);
     expect(groups(char({ aim: 2 }), char({ aim: 4 }))).toEqual(["aim"]);
+    // An aim farther than one hex from the markers starts again at 2: still an aim.
+    expect(groups(char({ aim: 4, aimHex: "A-F6" }), char({ aim: 2, aimHex: "A-F9" }))).toEqual(["aim"]);
     expect(groups(char({ down: true }), char())).toEqual([]);
     expect(groups(char(), char({ guns: [colt({ location: "gun_hand", cocked: true })] }))).toEqual(["unholster", "cock"]);
     expect(groups(char(), char({ guns: [colt({ location: "gun_hand", jammed: true })] }))).toEqual(["unholster"]);

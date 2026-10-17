@@ -47,10 +47,6 @@
     - OK coral with the whyatt earp (adapt with number of players)
 
 ## Showdown
-- bug: when aim a second time, any other hex keeps the aim points while it
-  should be only the adjacent ones for transfer aim functionnality. Other hexes
-  than adjacent of current aimed hex should restart the counter to 2 (last aim
-  is lost).
 - >4 players (the showdown's set up stops at four characters) and teams, 
   see DESIGN_SHOWDOWNS.md and DESIGN_MULTIPLAYER.md
   - >2 players in the same hex

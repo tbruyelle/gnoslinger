@@ -48,6 +48,12 @@ describe("replayPlan", () => {
     expect(shot.aimHex).toBe("");
     expect(shot.aimAt).toBe(-1);
     expect(shot.guns[0]).toEqual({ ...armed, cocked: false, shells: 5 });
+    // A new target keeps the AIM points within one hex of the markers, farther they start again (12.5).
+    expect(replayPlan({ ...start, guns: [armed] }, decodePlan("5f:aim:A-F6,6f:aim:A-F9"), BOARD_A).aim).toBe(2);
+    expect(replayPlan({ ...start, aim: 4, aimHex: "A-F6", guns: [armed] }, decodePlan("5f:aim:A-F9"), BOARD_A).aim).toBe(2);
+    const kidAt = ["A-F1", "A-F7"];
+    expect(replayPlan({ ...start, aim: 4, aimAt: 1, guns: [armed] }, decodePlan("5f:aim:A-F6"), BOARD_A, [], kidAt).aim).toBe(6);
+    expect(replayPlan({ ...start, aim: 4, aimHex: "A-F9", guns: [armed] }, decodePlan("5f:aim:@1"), BOARD_A, [], kidAt).aim).toBe(2);
     // Revealing a foot action loses the aim; a Turn keeps it; cocking loses it.
     expect(replayPlan({ ...start, aim: 4 }, decodePlan("1f:ahead"), BOARD_A).aim).toBe(0);
     expect(replayPlan({ ...start, aim: 4 }, decodePlan("3b:ahead"), BOARD_A).aim).toBe(4);
