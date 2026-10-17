@@ -570,7 +570,7 @@ played, victory points, since). `game/lobby.ts` sorts the games into
   character panel opens its sheet; each panel shows who plays the
   character (`playerLabel`, the full address on hover), the sheet the
   registered name and the full address, a click copying it (`wireCopy`); hovering a token outlines its
-  character's panel in gold (`ShowdownView.highlightSeat`). The hand builds an
+  character's panel in its seat's colour (`ShowdownView.highlightSeat`). The hand builds an
   ordered plan with a live preview (`replayPlan`) and relative-direction hex
   picks (move choices and the aim zone highlight whole hexes,
   `GameScene.hexHighlight` over `BoardMap.outline`: a regular hexagon of

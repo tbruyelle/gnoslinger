@@ -202,7 +202,8 @@ const CSS = `
 .gv-panel{background:#F3E7CE;border:3px solid #2A1C14;border-radius:16px;box-shadow:inset 0 0 0 4px #F3E7CE,inset 0 0 0 6px var(--rule,#2A1C14);padding:14px;display:flex;flex-direction:column;gap:10px}
 .gv-char{cursor:pointer;text-align:left;width:100%;font:inherit;color:inherit}
 .gv-char:hover{background:#FBF4E4}
-.gv-char.hl{background:#FBF4E4;outline:4px solid #F2B544;outline-offset:2px}
+.gv-char.hl{background:#FBF4E4;outline:4px solid var(--rule,#F2B544);outline-offset:2px}
+.gv-me.hl{outline:4px solid var(--rule,#F2B544);outline-offset:2px}
 .gv-char.out{filter:grayscale(.85);opacity:.75}
 .gv-who{display:flex;align-items:center;gap:10px}
 .gv-who img{width:52px;height:52px;flex-shrink:0}
@@ -244,7 +245,7 @@ const CSS = `
 .gv-me{gap:12px}
 .gv-bare{display:flex;flex-direction:column;gap:10px}
 .gv-char.gv-bare{background:transparent;border:0;border-radius:10px;padding:6px;margin:-6px}
-.gv-char.gv-bare:hover,.gv-char.gv-bare.hl{background:#FBF4E4}
+.gv-char.gv-bare:hover{background:#FBF4E4}
 .gv-plan.gv-bare{border-top:3px double #5A4636;padding-top:12px}
 .gv-plan-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;border-bottom:3px solid #2A1C14;padding-bottom:6px}
 .gv-plan-head h2{margin:0;font-family:Rye,Georgia,serif;font-weight:400;font-size:24px;color:#33307F}
@@ -520,8 +521,10 @@ export class ShowdownView {
     this.hlSeat = seat;
     for (const el of Array.from(this.root.querySelectorAll<HTMLElement>(".gv-char[data-seat]"))) {
       const on = Number(el.dataset.seat) === seat;
-      if (on && !el.classList.contains("hl")) el.scrollIntoView({ block: "nearest" });
-      el.classList.toggle("hl", on);
+      // My character shares its panel with my plan: the whole panel is outlined.
+      const panel = el.closest<HTMLElement>(".gv-me") ?? el;
+      if (on && !panel.classList.contains("hl")) panel.scrollIntoView({ block: "nearest" });
+      panel.classList.toggle("hl", on);
     }
   }
 
