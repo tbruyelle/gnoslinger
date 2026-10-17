@@ -35,9 +35,10 @@ yet); throwing, brawling and multi-board layouts come later.
   port it; take the rules from `RULES.md`, not from git history.
 - **Design**: the Claude Design canvas
   https://claude.ai/artifact/LeDyXGrNgMY8miYHV9MYF7 (private) is the visual
-  reference: the action cards, the character sheet, the segment tracker, the
-  HIT!/MISSED!/JAMMED!/EXPLODED! bursts and the screen mockups (splash,
-  lobby, game while planning, replay). Palette: ground `#1E1618`, ink
+  reference for the action cards, the character sheet, the segment tracker
+  and the HIT!/MISSED!/JAMMED!/EXPLODED! bursts. Its screen mockups (splash,
+  lobby, game while planning, replay) were drawn for a duel and are not kept
+  up to date: the screens as the game has them are the reference. Palette: ground `#1E1618`, ink
   `#2A1C14`, rule `#5A4636`, parchment `#F3E7CE`, cream `#FBF4E4`, brick
   `#B5482A`/`#8E2F1A`, indigo `#33307F`, gold `#F2B544`, action green
   `#4F7A3A`; fonts Rye (titles) and Zilla Slab (text), from Google Fonts.

@@ -56,20 +56,6 @@
   out of it); missing in the engine's `reveal` and the client's `replayPlan`
 - >4 players (the showdown's set up stops at four characters) and teams, 
   see DESIGN_SHOWDOWNS.md and DESIGN_MULTIPLAYER.md
-- four seats, left from DESIGN_MULTIPLAYER.md:
-  - the design canvas: the four-seat palette and the lobby form (re-read
-    each screen first, it may hold hand edits)
-    - game screen (ScreenGame): one panel per other character instead of
-      the single "Opponent" panel, compact when several, each ringed in
-      its seat colour; the four seat colours (indigo, brick, green, teal),
-      only indigo and brick show; seat-colour rings on the board tokens;
-      header "The Marshal (you) vs The Kid" listing every seat; the status
-      as a ribbon over the board; "Resign" is now "Surrender"
-    - lobby (ScreenLobby), a catch-up, no redesign (characters follow the
-      join order): a Players select (2 to 4) like Turns in the New
-      showdown form; wording: "Waiting on others", "Waiting for players ·
-      3 of 4 seats taken", "Join as El Jefe · 2 of 4 seats taken", the
-      timeout note (out of time means out, the others go on)
 - add winning/losing burst
 - show tips (or highlight a card with some text)
   - when no gun: show need to draw and cock

@@ -5,10 +5,10 @@ duel. Showdowns with more players are coming (DESIGN_SHOWDOWNS.md): battle
 royale (2 to 8), teams (OK Corral). This reviews every artifact for that,
 and lists the changes, most important first, with what is done.
 
-**Status, 2026-10-17: done for 2 to 4 seats.** The few items left for four
-seats (names on hover, target colours in the plan list, seat colours in the
-log, the canvas) are in TODO.md, Showdown; the rest comes with more than
-four seats and teams, the showdown packages (DESIGN_SHOWDOWNS.md, step 4).
+**Status, 2026-10-17: done for 2 to 4 seats.** The canvas's screen mockups
+are not kept up to date any more: the screens as the game has them are the
+reference (AGENTS.md, Design). What is left comes with more than four seats
+and teams, the showdown packages (DESIGN_SHOWDOWNS.md, step 4).
 
 ## Done on 2026-10-16: two to four seats
 
@@ -41,13 +41,13 @@ and knock outs name seats (`AimAt`, `Killers`, `SeriousFrom`, `LegFrom`,
    and in lightness so it holds for colour-blind players; it drives the
    panels' rule, the token rings, the timeline, the sheet and the AIM
    markers' rings. *Left:* four more colours for 8 seats; in team modes,
-   team colours replace seat colours. The canvas still shows two.
+   team colours replace seat colours.
 2. **Tokens on the board.** *Done:* each token gets a ring in its seat's
    colour (mine wider, pulsing while it is my move), and a gold halo under
    the pointer; AIM markers on a token are one per aimer, fanned along the
    rim, each ringed in the aimer's colour, since several characters may aim
    at the same token; tokens sharing a hex fan out in a star, spread wide
-   under the pointer. *Left:* the name on hover.
+   under the pointer, and a hovered token outlines its character's panel.
 
 ## Lobby
 
@@ -93,15 +93,9 @@ and knock outs name seats (`AimAt`, `Killers`, `SeriousFrom`, `LegFrom`,
 13. **"Two gunfighters, five segments a turn…"** *Done in the code*
     (`SPLASH_LINE` in `client/src/scenes/LobbyScene.ts`: "Gunfighters, five
     segments a turn, one hand of cards. Every turn is settled on chain.").
-    *Left:* the same line on the canvas.
 
 ## Order of what is left
 
-1. The canvas: the four-seat palette and the lobby form, re-reading each
-   screen first (it may hold edits made by hand since these screens were
-   drawn). In TODO.md, Showdown.
-2. Names on hover (2), the plan list's target colours (9), the log tags (12):
-   moved to TODO.md, Showdown.
-3. Beyond four seats and teams, with the showdown packages
+1. Beyond four seats and teams, with the showdown packages
    (DESIGN_SHOWDOWNS.md): the roster (7, 10), the mode select (5), team
    picks (3), the timeline filter (11), four more colours (1).
