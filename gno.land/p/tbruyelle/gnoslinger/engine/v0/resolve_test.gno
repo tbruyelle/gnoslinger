@@ -613,6 +613,38 @@ func TestAimTransfer(t *testing.T) {
 	if st.Chars[0].Aim != 2 || st.Chars[0].AimHex != "" || len(ofKind(evs, 0, EvLoseAim)) != 1 {
 		t.Errorf("char = %+v, %v", st.Chars[0], evs)
 	}
+	// The markers never move into or out of the character's own hex (12.5):
+	// from F4 to its own F3, and back, the aim is lost (and starts again at 2).
+	st = armed(0)
+	st.Chars[0].Aim, st.Chars[0].AimHex = 4, "A-F4"
+	st, evs = resolve(t, st, "5f:aim:A-F3", "")
+	if la := ofKind(evs, 0, EvLoseAim); st.Chars[0].Aim != 2 || len(la) != 1 || la[0].Reason != ReasonOwnHex {
+		t.Errorf("into the own hex: char = %+v, %v", st.Chars[0], evs)
+	}
+	st = armed(0)
+	st.Chars[0].Aim, st.Chars[0].AimHex = 4, "A-F3"
+	st, evs = resolve(t, st, "5f:aim:A-F4", "")
+	if la := ofKind(evs, 0, EvLoseAim); st.Chars[0].Aim != 2 || len(la) != 1 || la[0].Reason != ReasonOwnHex {
+		t.Errorf("out of the own hex: char = %+v, %v", st.Chars[0], evs)
+	}
+	// Both in the own hex: the Kid stands in F3 with the marshal, the
+	// markers on F3 move onto him.
+	st = armed(0)
+	st.Chars[1].Hex = "A-F3"
+	st.Chars[0].Aim, st.Chars[0].AimHex = 4, "A-F3"
+	st, evs = resolve(t, st, "5f:aim:@1", "")
+	if st.Chars[0].Aim != 6 || st.Chars[0].AimAt != 1 || len(ofKind(evs, 0, EvLoseAim)) != 0 {
+		t.Errorf("both in the own hex: char = %+v, %v", st.Chars[0], evs)
+	}
+	// Keeping the old target is no transfer: markers on the Kid, who came
+	// into the marshal's hex, stay on him.
+	st = armed(0)
+	st.Chars[1].Hex = "A-F3"
+	st.Chars[0].Aim, st.Chars[0].AimAt = 4, 1
+	st, evs = resolve(t, st, "5f:aim:@1", "")
+	if st.Chars[0].Aim != 6 || len(ofKind(evs, 0, EvLoseAim)) != 0 {
+		t.Errorf("same target: char = %+v, %v", st.Chars[0], evs)
+	}
 	// Markers on a hex that leaves the aim zone are lost at the end of the
 	// segment: G4 is SE of F3, on the edge of the zone when facing S, out of
 	// it once the marshal turns to face SW (a Turn keeps the aim on reveal).

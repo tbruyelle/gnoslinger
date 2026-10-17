@@ -40,6 +40,9 @@ describe("shotOdds", () => {
     const aimed = me({ aim: 4, aimHex: "A-F5" });
     expect(shotOdds(aimed, 1, "A-F6", "A-F5", BOARD_A)).toMatchObject({ aimTime: 5, range: 3, hit: 42 });
     expect(shotOdds(aimed, 1, "A-F7", "A-F5", BOARD_A)).toMatchObject({ aimTime: 1, aimPoints: 0 });
+    // Never into or out of the shooter's own hex (A-F3), though one hex away (12.5).
+    expect(shotOdds(me({ aim: 4, aimHex: "A-F4" }), 1, "A-F3", "A-F4", BOARD_A)).toMatchObject({ aimPoints: 0 });
+    expect(shotOdds(me({ aim: 4, aimHex: "A-F3" }), 1, "A-F3", "A-F3", BOARD_A)).toMatchObject({ aimPoints: 4 });
   });
   it("GUN ARM wounds cut the aim time of a gun in the gun hand", () => {
     expect(shotOdds(me({ gunArm: 2, otherArm: 3 }), 2, "A-F5", "", BOARD_A)).toMatchObject({ aimTime: 0, hit: 0 });

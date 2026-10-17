@@ -60,6 +60,7 @@ const (
 	ReasonNoLOS     = "no_los"      // no line of sight to the target, an obstacle in the way by the heights (31): an aim is cancelled, a shot is held, AIM points are lost
 	ReasonReveal    = "reveal"      // revealing an action other than Turn or a gun action (12.44)
 	ReasonTransfer  = "transfer"    // a new target more than one hex from the markers (12.5)
+	ReasonOwnHex    = "own_hex"     // a new target moving the markers into or out of the character's own hex (12.5)
 	ReasonNoHex     = "no_hex"      // aiming at a hex that is not on the board
 	ReasonShot      = "shot"        // aim spent by a shot (12.43)
 	ReasonStagger   = "stagger"     // thrown by a STAGGER penalty
@@ -341,8 +342,9 @@ func runningDelay(evs []Event, start []int) {
 // the aim is lost unless the action is a Turn, an aim or a shot (which
 // spends it when it goes off); cocking, uncocking or doing nothing with a
 // gun lose it like any other action. An aim or a shot naming a new target
-// keeps the markers only within one hex of their place, and a shot moves
-// them onto its target.
+// keeps the markers only within one hex of their place, and never moves
+// them into or out of the character's own hex (both targets in it, or
+// both out of it); a shot moves them onto its target.
 func reveal(board *hex.Board, p int, st *State, a Action, seg int, evs *[]Event) {
 	c := &st.Chars[p]
 	if c.Aim == 0 {
@@ -358,8 +360,12 @@ func reveal(board *hex.Board, p int, st *State, a Action, seg int, evs *[]Event)
 		if t := st.char(a.Target); a.Target >= 0 && t != nil {
 			named = t.Hex
 		}
-		if board.Distance(aimTarget(c, st), named) > 1 {
+		old := aimTarget(c, st)
+		same := (a.Target >= 0 && a.Target == c.AimAt) || (a.Target < 0 && c.AimAt < 0 && a.Hex == c.AimHex)
+		if board.Distance(old, named) > 1 {
 			loseAim(p, c, seg, ReasonTransfer, evs)
+		} else if !same && (old == c.Hex) != (named == c.Hex) {
+			loseAim(p, c, seg, ReasonOwnHex, evs)
 		} else if a.Opt == OptShoot {
 			c.AimHex = a.Hex // "" when the shot names a character
 			c.AimAt = a.Target

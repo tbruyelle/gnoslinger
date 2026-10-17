@@ -23,13 +23,15 @@ export interface ShotOdds extends HitChance {
  * The chance of hitting target from where me stands, as the realm computes
  * the shot: the card's aim time + AIM points − the arm wounds of the hands
  * holding the gun, at the range between the hexes. AIM points count only
- * when the target is within one hex of the markers (12.5); markersHex is
+ * when the target is within one hex of the markers and on the same side of
+ * the shooter's own hex (both in it or both out of it, 12.5); markersHex is
  * where they stand (the aimed hex, or the hex of the character they follow).
  * standing is the character standing on the target hex, if any: the sight
  * (rule 31) is traced to it at its height, else to the hex.
  */
 export function shotOdds(me: CharView, cardAimTime: number, target: string, markersHex: string, board: BoardMap, standing?: CharView | null): ShotOdds {
-  const aimPoints = me.aim > 0 && markersHex !== "" && board.distance(markersHex, target) <= 1 ? me.aim : 0;
+  const kept = markersHex !== "" && board.distance(markersHex, target) <= 1 && (markersHex === me.hex) === (target === me.hex);
+  const aimPoints = me.aim > 0 && kept ? me.aim : 0;
   const gun = gunInFiringBox(me.guns);
   let wounds = 0;
   if (gun?.location === "gun_hand" || gun?.location === "both_hands") wounds += me.gunArm;

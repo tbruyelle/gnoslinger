@@ -58,10 +58,13 @@ export function replayPlan(
       s.aimHex = "";
     }
     if (gunAction && s.aim > 0) {
-      // A new target keeps the markers only within one hex of their place (12.5).
+      // A new target keeps the markers only within one hex of their place,
+      // and never moves them into or out of the character's own hex (12.5).
       const markers = s.aimAt >= 0 ? (seatHexes[s.aimAt] ?? "") : s.aimHex;
       const named = e.target !== undefined ? (seatHexes[e.target] ?? "") : (e.hex ?? "");
-      if (named && (!markers || board.distance(markers, named) > 1)) {
+      const same = e.target !== undefined ? e.target === s.aimAt : s.aimAt < 0 && e.hex === s.aimHex;
+      const ownHex = !same && (markers === s.hex) !== (named === s.hex);
+      if (named && (!markers || board.distance(markers, named) > 1 || ownHex)) {
         s.aim = 0;
         s.aimAt = -1;
         s.aimHex = "";

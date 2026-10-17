@@ -286,6 +286,8 @@ func describeEvent(g *Game, e engine.Event) string {
 	case engine.EvLoseAim:
 		if e.Reason == engine.ReasonNoLOS {
 			what = who + " loses the aim (" + noSight(e) + ")"
+		} else if e.Reason == engine.ReasonOwnHex {
+			what = who + " loses the aim (the markers cannot move into or out of its own hex)"
 		} else {
 			what = who + " loses the aim (" + strings.ReplaceAll(e.Reason, "_", " ") + ")"
 		}

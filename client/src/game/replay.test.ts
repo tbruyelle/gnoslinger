@@ -54,6 +54,10 @@ describe("replayPlan", () => {
     const kidAt = ["A-F1", "A-F7"];
     expect(replayPlan({ ...start, aim: 4, aimAt: 1, guns: [armed] }, decodePlan("5f:aim:A-F6"), BOARD_A, [], kidAt).aim).toBe(6);
     expect(replayPlan({ ...start, aim: 4, aimHex: "A-F9", guns: [armed] }, decodePlan("5f:aim:@1"), BOARD_A, [], kidAt).aim).toBe(2);
+    // Never into or out of the own hex (A-F1): lost both ways, kept between two targets in it.
+    expect(replayPlan({ ...start, aim: 4, aimHex: "A-F2", guns: [armed] }, decodePlan("5f:aim:A-F1"), BOARD_A).aim).toBe(2);
+    expect(replayPlan({ ...start, aim: 4, aimHex: "A-F1", guns: [armed] }, decodePlan("5f:aim:A-F2"), BOARD_A).aim).toBe(2);
+    expect(replayPlan({ ...start, aim: 4, aimHex: "A-F1", guns: [armed] }, decodePlan("5f:aim:@1"), BOARD_A, [], ["A-F1", "A-F1"]).aim).toBe(6);
     // Revealing a foot action loses the aim; a Turn keeps it; cocking loses it.
     expect(replayPlan({ ...start, aim: 4 }, decodePlan("1f:ahead"), BOARD_A).aim).toBe(0);
     expect(replayPlan({ ...start, aim: 4 }, decodePlan("3b:ahead"), BOARD_A).aim).toBe(4);

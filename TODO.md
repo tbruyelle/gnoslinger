@@ -50,9 +50,6 @@
 ## Showdown
 - add address/namepsace info to character sheets and panels
 - implement character's run away
-- aim transfer own-hex exception (12.5): AIM markers cannot move into or out
-  of the shooter's own hex (allowed between two targets both in it, or both
-  out of it); missing in the engine's `reveal` and the client's `replayPlan`
 - add winning/losing burst
 - show tips (or highlight a card with some text)
   - when no gun: show need to draw and cock

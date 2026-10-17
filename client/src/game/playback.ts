@@ -193,6 +193,7 @@ const MISS_REASONS: Record<string, string> = { out_of_zone: "out of the aim zone
 /** What a cancel or an aim loss is put down to: a target out of sight names the obstacle in the way (rule 31). */
 function reasonText(e: TurnEvent): string {
   if (e.reason === "no_los") return e.to ? `no line of sight, ${e.to} in the way` : "no line of sight";
+  if (e.reason === "own_hex") return "the markers cannot move into or out of its own hex";
   return e.reason.replace(/_/g, " ");
 }
 

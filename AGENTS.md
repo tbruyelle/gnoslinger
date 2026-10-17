@@ -330,7 +330,10 @@ needs it cocked and loaded. **Aim** is lost when revealing any action but a
 Turn, an aim or a shot (stricter than 12.44: cocking, uncocking and a Shoot
 doing nothing lose it too), when a new target (the hex
 aimed at, or the opponent shot at) is more than one hex from the markers
-(12.5; within one hex the markers move), when the markers' hex leaves the
+(12.5; within one hex the markers move) or would move the markers into or
+out of the character's own hex (12.5, Reason `own_hex`; kept between two
+targets both in it, and when the old target is named again), when the
+markers' hex leaves the
 aim zone at the end of a segment (12.41), when the markers' target is out
 of sight at the end of a segment (31.1, Reason `no_los`, `To` the obstacle
 in the way), after a shot (12.43) and on penalties. **Aim zone** (8.32) =
