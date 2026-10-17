@@ -547,7 +547,8 @@ played, victory points, since). `game/lobby.ts` sorts the games into
   points, Send / Clear / Replay / Surrender, or the plan sent, Claim, Cancel
   for the creator while seats are free) on
   the left, in one panel framed in my seat's colour (`gv-me`; allies will
-  go under it), the other characters ("plan sent"; compact rows when they are
+  go under it), the other characters under an Opponents title
+  (Characters for a spectator) ("plan sent"; compact rows when they are
   several) on the right, and the hand along
   the bottom: one double-sided card per column, top or bottom half picked,
   the whole card shown on hover; in a replay, every character on the left,

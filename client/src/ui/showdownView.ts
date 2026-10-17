@@ -194,6 +194,7 @@ const CSS = `
 .gv-x:hover{color:#FBF4E4;background:#5A4636}
 .gv-left,.gv-right{background:#1E1618;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:12px}
 .gv-left{grid-area:left}
+.gv-col-title{margin:0 0 -4px;font-family:Rye,Georgia,serif;font-weight:400;font-size:22px;letter-spacing:1px;color:#F3E7CE}
 .gv-right{grid-area:right}
 .gv-panel{background:#F3E7CE;border:3px solid #2A1C14;border-radius:16px;box-shadow:inset 0 0 0 4px #F3E7CE,inset 0 0 0 6px var(--rule,#2A1C14);padding:14px;display:flex;flex-direction:column;gap:10px}
 .gv-char{cursor:pointer;text-align:left;width:100%;font:inherit;color:inherit}
@@ -475,7 +476,10 @@ export class ShowdownView {
       this.left.innerHTML = me
         ? `<div class="gv-panel gv-me" style="--rule:${esc(me.color)}">${this.charHtml(me, false, true)}${this.planHtml(m, true)}</div>`
         : m.left.map((c) => this.charHtml(c, false)).join("") + this.planHtml(m);
-      this.right.innerHTML = m.others.map((c) => this.charHtml(c, m.others.length > 1)).join("");
+      // Titled Opponents beside my own character, Characters for a spectator.
+      const title = m.left.some((c) => c.you) ? (m.others.length > 1 ? "Opponents" : "Opponent") : "Characters";
+      this.right.innerHTML =
+        (m.others.length ? `<h2 class="gv-col-title">${title}</h2>` : "") + m.others.map((c) => this.charHtml(c, m.others.length > 1)).join("");
       this.bottom.innerHTML = this.handHtml(m);
     }
     this.highlightSeat(this.hlSeat); // the panels were rebuilt
