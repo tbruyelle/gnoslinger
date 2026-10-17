@@ -1210,7 +1210,7 @@ export class GameScene extends Phaser.Scene {
       });
       img.on("pointerover", () => {
         this.tokens[i]?.setHighlight(0xffe2a0, 1, 4);
-        this.showAimZone(i);
+        if (!this.playback) this.showAimZone(i); // not in a replay
       });
       img.on("pointerout", () => {
         this.applyTokenHighlight(i);
@@ -2883,6 +2883,7 @@ export class GameScene extends Phaser.Scene {
     this.stopAuto();
     this.clearSelection();
     this.playback = { turns, index, seg: 0, cut: null, anim: 0, live, auto: null };
+    this.hideAimZone();
     this.mode = "playback";
     this.refreshTokens(true);
     this.renderView();

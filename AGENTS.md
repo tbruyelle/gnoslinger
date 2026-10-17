@@ -590,7 +590,7 @@ played, victory points, since). `game/lobby.ts` sorts the games into
   the guns). Hovering a token shows that character's aim zone, where it can aim and
 shoot (`showAimZone`: brick red for an enemy, action green for mine, under
 the tokens, not clickable; the hexes it cannot see, `game/sight.ts` over
-`BoardMap.lineOfSight`, are left out).
+`BoardMap.lineOfSight`, are left out; not during a replay or a turn's playback).
 Clicking a token opens the **character
   sheet** (`ui/characterSheet.ts`): an HTML overlay built from the design
   template `ui/characterSheet.html` (1100×850, fonts Rye / Zilla Slab from
