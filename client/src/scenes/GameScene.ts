@@ -672,7 +672,8 @@ export class GameScene extends Phaser.Scene {
   private optMenu: { card: CardNumber; side: CardSide; objects: Phaser.GameObjects.GameObject[] } | null = null;
   /** The target picked for each aim (a hex, or the seat of a character standing on the clicked hex); the pick overlays while one is pending. */
   private pendingAims: Map<number, { hex?: string; target?: number }> = new Map();
-  private aimMode: { card: CardNumber; side: CardSide; objects: Phaser.GameObjects.GameObject[] } | null = null;
+  /** menuHex: the hex whose target menu is open (several characters in it), "" for none. */
+  private aimMode: { card: CardNumber; side: CardSide; objects: Phaser.GameObjects.GameObject[]; menuHex: string; menu: Phaser.GameObjects.GameObject[] } | null = null;
   /** The AIM markers on hexes, by the seat holding the aim. */
   private aimMarkers: Map<number, Phaser.GameObjects.Image> = new Map();
   /** The guns lying in hexes, as drawn (index = position in displayGround(); null while one waits to be shown). */
@@ -1042,7 +1043,10 @@ export class GameScene extends Phaser.Scene {
     this.aimMarkers = new Map();
     this.groundIcons = [];
     if (this.optMenu) this.optMenu.objects = [];
-    if (this.aimMode) this.aimMode.objects = [];
+    if (this.aimMode) {
+      this.aimMode.objects = [];
+      this.aimMode.menu = [];
+    }
     if (this.setup) {
       this.setup.zone = [];
       this.setup.ghost = null;
@@ -1064,7 +1068,7 @@ export class GameScene extends Phaser.Scene {
     this.renderView();
     if (this.choiceMode) this.showChoiceOverlays();
     if (this.optMenu) this.openOptMenu(this.optMenu.card, this.optMenu.side);
-    if (this.aimMode) this.enterAimMode(this.aimMode.card, this.aimMode.side);
+    if (this.aimMode) this.enterAimMode(this.aimMode.card, this.aimMode.side, this.aimMode.menuHex);
     this.input.mouse?.disableContextMenu();
   }
 
@@ -1437,7 +1441,7 @@ export class GameScene extends Phaser.Scene {
     this.clearChoiceOverlays();
     if (this.choiceMode) this.showChoiceOverlays();
     if (this.optMenu) this.openOptMenu(this.optMenu.card, this.optMenu.side); // follows the token on zoom and pan
-    if (this.aimMode) this.enterAimMode(this.aimMode.card, this.aimMode.side);
+    if (this.aimMode) this.enterAimMode(this.aimMode.card, this.aimMode.side, this.aimMode.menuHex);
   }
 
   // ── HUD ───────────────────────────────────────────────────────────────────
@@ -2289,8 +2293,11 @@ export class GameScene extends Phaser.Scene {
     this.closeAimMode();
   }
 
-  /** Highlights every hex of my aim zone; clicking one is where the aim or the shot goes. */
-  private enterAimMode(card: CardNumber, side: CardSide) {
+  /**
+   * Highlights every hex of my aim zone; clicking one is where the aim or the
+   * shot goes. menuHex reopens the target menu of that hex (zoom, pan, rebuild).
+   */
+  private enterAimMode(card: CardNumber, side: CardSide, menuHex = "") {
     this.closeAimMode();
     const chars = this.displayChars();
     const me = this.myIndex >= 0 ? chars[this.myIndex] : null;
@@ -2307,7 +2314,9 @@ export class GameScene extends Phaser.Scene {
       const { sx, sy } = this.hexToScreen(hex);
       // The sight (rule 31) goes to the character standing there, else to
       // the hex, which counts as upright (31.3).
-      const standing = standingOn(chars, hex, this.myIndex);
+      // The first character in sight there, else the first standing there.
+      const seen = this.aimTargets(chars, hex)[0];
+      const standing = seen !== undefined ? chars[seen] : standingOn(chars, hex, this.myIndex);
       const sight = canSee(BOARD_A, me, hex, standing);
       const hexSight = standing ? canSee(BOARD_A, me, hex) : sight;
       // The hex itself out of sight: nothing can go there (an aim is
@@ -2367,28 +2376,54 @@ export class GameScene extends Phaser.Scene {
         detail?.destroy();
         detail = null;
       });
-      circle.on("pointerup", () => this.resolveAim(hex, hexOnly));
+      circle.on("pointerup", () => this.resolveAim(hex));
       objects.push(circle);
     }
-    this.aimMode = { card, side, objects };
+    this.aimMode = { card, side, objects, menuHex: "", menu: [] };
+    if (menuHex) this.resolveAim(menuHex);
   }
 
   private closeAimMode() {
     if (!this.aimMode) return;
-    for (const o of this.aimMode.objects) o.destroy();
+    for (const o of [...this.aimMode.objects, ...this.aimMode.menu]) o.destroy();
     this.aimMode = null;
   }
 
+  /** The seats an aim or a shot can name in a hex: the enemies alive there that I can see (31.1). */
+  private aimTargets(chars: CharView[], hex: string): number[] {
+    const me = this.myIndex >= 0 ? chars[this.myIndex] : null;
+    if (!me) return [];
+    return chars.flatMap((c, i) => (c && i !== this.myIndex && c.status === "alive" && c.hex === hex && canSee(BOARD_A, me, hex, c).clear ? [i] : []));
+  }
+
   /**
-   * A click on a hex with a character on it targets the character, else the
-   * hex; hexOnly targets the hex whoever stands there (an aim over an
-   * occupant out of sight, 31.3).
+   * A click on a hex with a character in sight on it targets the character,
+   * else the hex (nobody there, or an aim over an occupant out of sight,
+   * 31.3); with several in sight, a menu next to the hex names them.
    */
-  private resolveAim(hex: string, hexOnly = false) {
+  private resolveAim(hex: string) {
+    if (!this.aimMode) return;
+    const targets = this.aimTargets(this.displayChars(), hex);
+    if (targets.length < 2) return this.finishAim(targets.length ? { target: targets[0] } : { hex });
+    this.closeTargetMenu();
+    const items = targets.map((seat) => ({ label: charName(this.view?.players[seat]?.char), enabled: true, pick: () => this.finishAim({ target: seat }) }));
+    const { sx, sy } = this.hexToScreen(hex);
+    const r = (BOARD_A.hexRadius * this.displayTransform().scale * Math.sqrt(3)) / 2;
+    this.aimMode.menu = this.menuButtons(sx + r, sy, items);
+    this.aimMode.menuHex = hex;
+  }
+
+  private closeTargetMenu() {
+    if (!this.aimMode) return;
+    for (const o of this.aimMode.menu) o.destroy();
+    this.aimMode.menu = [];
+    this.aimMode.menuHex = "";
+  }
+
+  private finishAim(aim: { hex?: string; target?: number }) {
     if (!this.aimMode) return;
     const chars = this.displayChars();
-    const seat = hexOnly ? -1 : chars.findIndex((c, i) => c && i !== this.myIndex && c.hex === hex && c.status === "alive");
-    this.pendingAims.set(this.aimMode.card, seat >= 0 ? { target: seat } : { hex });
+    this.pendingAims.set(this.aimMode.card, aim);
     if (this.pendingOpts.get(this.aimMode.card) === "shoot") {
       // The plan alone tells a gun with no shell left: the shot will only click.
       const gun = this.myIndex >= 0 ? firingGun(chars[this.myIndex]?.guns ?? []) : undefined;
@@ -2668,33 +2703,38 @@ export class GameScene extends Phaser.Scene {
     // A jammed gun cannot be cocked until completely reloaded (13.31).
     const enabled = (o: ShootOption) => !gun || (o === "cock" ? !gun.cocked && !gun.jammed : o === "nothing" ? true : gun.cocked);
     const labels: Record<ShootOption, string> = { cock: "Cock", uncock: "Uncock", aim: "Aim", shoot: "Shoot", nothing: "Do nothing" };
-    const objects: Phaser.GameObjects.GameObject[] = [];
     const center = me ? this.tokenScreenPos(chars, this.myIndex) : { sx: this.board.x + this.board.w / 2, sy: this.board.y + this.board.h / 2 };
-    const x = center.sx + this.tokenDiameter() * 0.8;
+    const items = opts.map((o) => ({ label: labels[o], enabled: enabled(o), pick: () => this.resolveOpt(o) }));
+    this.optMenu = { card, side, objects: this.menuButtons(center.sx + this.tokenDiameter() * 0.8, center.sy, items) };
+  }
+
+  /** A column of buttons starting at x, centred on y; a disabled one is dimmed and does nothing. */
+  private menuButtons(x: number, cy: number, items: { label: string; enabled: boolean; pick: () => void }[]): Phaser.GameObjects.GameObject[] {
+    const objects: Phaser.GameObjects.GameObject[] = [];
     const gap = 6;
-    const texts = opts.map((o) =>
+    const texts = items.map((it) =>
       this.add
-        .text(x, 0, labels[o], { fontSize: "18px", fontStyle: "bold", color: "#F3E7CE", padding: { x: 14, y: 8 } })
+        .text(x, 0, it.label, { fontSize: "18px", fontStyle: "bold", color: "#F3E7CE", padding: { x: 14, y: 8 } })
         .setOrigin(0, 0.5)
         .setMask(this.arrMask)
         .setDepth(602),
     );
     const width = Math.max(...texts.map((t) => t.width));
     const total = texts.reduce((h, t) => h + t.height, 0) + gap * (texts.length - 1);
-    let y = center.sy - total / 2;
-    opts.forEach((o, i) => {
+    let y = cy - total / 2;
+    items.forEach((it, i) => {
       const text = texts[i];
       y += text.height / 2;
       text.setY(y);
       const box = this.add.rectangle(x, y, width, text.height, 0x8e2f1a, 1).setOrigin(0, 0.5).setStrokeStyle(3, GOLD, 1).setMask(this.arrMask).setDepth(601);
       y += text.height / 2 + gap;
-      if (enabled(o)) {
+      if (it.enabled) {
         box.setInteractive({ useHandCursor: true });
         box.on("pointerover", () => box.setFillStyle(0xb8442a, 1));
         box.on("pointerout", () => box.setFillStyle(0x8e2f1a, 1));
         box.on("pointerup", () => {
           this.playCues([{ group: "select", delayMs: 0 }]);
-          this.resolveOpt(o);
+          it.pick();
         });
       } else {
         // Dimmed but opaque, so nothing on the board shows through it.
@@ -2703,7 +2743,7 @@ export class GameScene extends Phaser.Scene {
       }
       objects.push(box, text);
     });
-    this.optMenu = { card, side, objects };
+    return objects;
   }
 
   private closeOptMenu() {
