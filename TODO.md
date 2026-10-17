@@ -10,6 +10,7 @@
 - add report bug button
 
 ## General
+- remove unused assets
 - Replace the tbruyelle realm to sthing else
 - upgrade architecture
   - how to add more boards/gun in the future w/o changing the realms
@@ -47,13 +48,31 @@
     - OK coral with the whyatt earp (adapt with number of players)
 
 ## Showdown
+- add address/namepsace info to character sheets and panels
+- implement character's run away
+- Merge your character panel and your plan
 - aim transfer own-hex exception (12.5): AIM markers cannot move into or out
   of the shooter's own hex (allowed between two targets both in it, or both
   out of it); missing in the engine's `reveal` and the client's `replayPlan`
 - >4 players (the showdown's set up stops at four characters) and teams, 
   see DESIGN_SHOWDOWNS.md and DESIGN_MULTIPLAYER.md
-  - can we consider DESIGN_MULTIPLAYER.md implemented ?
-  - >2 players in the same hex
+- four seats, left from DESIGN_MULTIPLAYER.md:
+  - a character's name on token hover (or highlight player's panel)
+  - the target's seat colour in the plan list ("aim at El Jefe")
+  - the seats' colours on the names in the resolution log
+  - the design canvas: the four-seat palette and the lobby form (re-read
+    each screen first, it may hold hand edits)
+    - game screen (ScreenGame): one panel per other character instead of
+      the single "Opponent" panel, compact when several, each ringed in
+      its seat colour; the four seat colours (indigo, brick, green, teal),
+      only indigo and brick show; seat-colour rings on the board tokens;
+      header "The Marshal (you) vs The Kid" listing every seat; the status
+      as a ribbon over the board; "Resign" is now "Surrender"
+    - lobby (ScreenLobby), a catch-up, no redesign (characters follow the
+      join order): a Players select (2 to 4) like Turns in the New
+      showdown form; wording: "Waiting on others", "Waiting for players ·
+      3 of 4 seats taken", "Join as El Jefe · 2 of 4 seats taken", the
+      timeout note (out of time means out, the others go on)
 - add winning/losing burst
 - show tips (or highlight a card with some text)
   - when no gun: show need to draw and cock

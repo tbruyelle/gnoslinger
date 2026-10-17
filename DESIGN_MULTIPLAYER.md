@@ -5,6 +5,11 @@ duel. Showdowns with more players are coming (DESIGN_SHOWDOWNS.md): battle
 royale (2 to 8), teams (OK Corral). This reviews every artifact for that,
 and lists the changes, most important first, with what is done.
 
+**Status, 2026-10-17: done for 2 to 4 seats.** The few items left for four
+seats (names on hover, target colours in the plan list, seat colours in the
+log, the canvas) are in TODO.md, Showdown; the rest comes with more than
+four seats and teams, the showdown packages (DESIGN_SHOWDOWNS.md, step 4).
+
 ## Done on 2026-10-16: two to four seats
 
 The realm and the client play showdowns of **2 to 4 players**, every
@@ -15,7 +20,8 @@ around the middle of the corral (D5-D7 with E6-E7, H5-H7 with G6-G7, E8/F7/F8/G8
 AGENTS.md, Set up). No character
 pick yet, no teams, not more than four (the showdown's set up stops
 there). The engine takes any number of seats; targets, AIM markers, kills
-and knock outs name seats (`AimAt`, `KilledBy`, `Hurt`).
+and knock outs name seats (`AimAt`, `Killers`, `SeriousFrom`, `LegFrom`,
+`Hurt`).
 
 ## Already fine
 
@@ -36,10 +42,12 @@ and knock outs name seats (`AimAt`, `KilledBy`, `Hurt`).
    panels' rule, the token rings, the timeline, the sheet and the AIM
    markers' rings. *Left:* four more colours for 8 seats; in team modes,
    team colours replace seat colours. The canvas still shows two.
-2. **Tokens on the board.** *Done:* each token but mine gets a ring in its
-   seat's colour (mine stays white); AIM markers on a token are one per
-   aimer, fanned along the rim, each ringed in the aimer's colour, since
-   several characters may aim at the same token. *Left:* the name on hover.
+2. **Tokens on the board.** *Done:* each token gets a ring in its seat's
+   colour (mine wider, pulsing while it is my move), and a gold halo under
+   the pointer; AIM markers on a token are one per aimer, fanned along the
+   rim, each ringed in the aimer's colour, since several characters may aim
+   at the same token; tokens sharing a hex fan out in a star, spread wide
+   under the pointer. *Left:* the name on hover.
 
 ## Lobby
 
@@ -49,8 +57,8 @@ and knock outs name seats (`AimAt`, `KilledBy`, `Hurt`).
 4. **"vs The Kid · g1q8…"** *Done for four:* every other player is listed.
    *Left:* a row of small tokens, "+3" past four.
 5. **"New showdown" has no mode or seats**: *Done:* a Players select (2 to
-   4) with the seats' line-up in their colours. *Left:* the mode (Duel /
-   Battle royale / Teams), team sizes in team modes.
+   4) with the seats' line-up in their colours. *Left:* the mode (Battle
+   royale / Teams), team sizes in team modes.
 6. **"Waiting for a second player"** *Done:* "Waiting for players · 3 of 4
    seats taken"; the game starts once full (the creator cannot start it
    at the minimum; it can cancel while a seat is free, which drops the
@@ -67,7 +75,8 @@ and knock outs name seats (`AimAt`, `KilledBy`, `Hurt`).
    waiting for The Kid, Axe…"). *Left:* the mode's name and "plans sent:
    3 / 5" past four.
 9. **Picking a target**: *Done:* clicking a token still works for any
-   seat; the plan list names the target ("aim at El Jefe"). *Left:* the
+   seat; a hex with several enemies in sight opens a menu naming them; the
+   plan list names the target ("aim at El Jefe"). *Left:* the
    target's seat colour in the plan list.
 
 ## Game, replay
@@ -91,8 +100,9 @@ and knock outs name seats (`AimAt`, `KilledBy`, `Hurt`).
 
 1. The canvas: the four-seat palette and the lobby form, re-reading each
    screen first (it may hold edits made by hand since these screens were
-   drawn).
-2. Names on hover (2), the plan list's target colours (9), the log tags (12).
+   drawn). In TODO.md, Showdown.
+2. Names on hover (2), the plan list's target colours (9), the log tags (12):
+   moved to TODO.md, Showdown.
 3. Beyond four seats and teams, with the showdown packages
    (DESIGN_SHOWDOWNS.md): the roster (7, 10), the mode select (5), team
    picks (3), the timeline filter (11), four more colours (1).

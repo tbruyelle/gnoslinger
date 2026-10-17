@@ -1,9 +1,9 @@
 # Showdowns: architecture plan
 
-Today the realm plays one showdown: board A, two players, one character
-each. More are planned: more than two players, battle royale (2 to 8),
-teams (OK Corral). This plan makes a showdown a pluggable **package**,
-registered with the one game realm.
+Today the realm plays one showdown, the battle royale: board A, 2 to 4
+players, one character each, every character a side of its own. More are
+planned: the battle royale up to 8, teams (OK Corral). This plan makes a
+showdown a pluggable **package**, registered with the one game realm.
 
 ## Where the code assumed two players (done on 2026-10-16)
 
@@ -11,7 +11,7 @@ registered with the one game realm.
   opponent is `1 - p`" in 6 (`target := 1 - p` in `Resolve`, AIM markers that
   follow "the opponent"). Now slices, one entry per seat (2 to 4,
   `engine.MinPlayers`..`MaxPlayers`), targets by seat everywhere
-  (`Character.AimAt`, `KilledBy`, `Hurt`); the realm seats the players in
+  (`Character.AimAt`, `Killers`, `Hurt`); the realm seats the players in
   join order with fixed characters (AGENTS.md, Set up). Phase 2 below is
   done but for teams and more than four seats.
 - Client: about 8 `1 - seat` spots, gone the same way (`aimAt`,
@@ -49,8 +49,9 @@ gno.land/p/tbruyelle/gnoslinger/
                         per seat, targets by seat, teams (friendly fire),
                         victory conditions
   showdown/v0           the Showdown interface every showdown implements
-  showdowns/duel/v0     today's rules: board A, 2 seats
-  showdowns/royale/v0   3 to 8 seats, last one standing
+  showdowns/battleroyale/v0
+                        today's rules: board A, 2 to 4 seats, every
+                        character a side of its own (v1: up to 8 seats)
   showdowns/corral/v0   teams, the OK Corral scenario
 
 gno.land/r/tbruyelle/gnoslinger/v0
@@ -85,10 +86,10 @@ package main
 
 import (
     gnoslinger "gno.land/r/tbruyelle/gnoslinger/v0"
-    "gno.land/p/tbruyelle/gnoslinger/showdowns/royale/v0"
+    "gno.land/p/tbruyelle/gnoslinger/showdowns/battleroyale/v0"
 )
 
-func main() { gnoslinger.Register(cross, "royale/v0", royale.Showdown{}) }
+func main() { gnoslinger.Register(cross, "battleroyale/v0", battleroyale.Showdown{}) }
 ```
 
 Who may register depends on where the showdown's code lives:
@@ -104,7 +105,7 @@ type: `Info()` cannot be trusted (any package can claim any path) and Gno has
 no `reflect`, so how to read it is a spike question (Phases, 1). The realm
 keeps the
 showdowns in an `avl.Tree` by key; each game records the key it was created
-with. Packages are immutable, which helps: `royale/v1` is registered next to
+with. Packages are immutable, which helps: `battleroyale/v1` is registered next to
 `v0`, and running games keep their rules.
 
 ```go
@@ -139,16 +140,20 @@ Render("json/games/{addr}")
      today's numbers (AGENTS.md, Storage deposit).
 2. **Engine to N players.** Replace `[NumPlayers]` with slices and `1 - p`
    with explicit targets; add teams and victory conditions (victory points,
-   TODO.md). The duel must stay identical: today's tests and filetests are the
-   safety net.
-3. **The `Showdown` contract and `duel/v0`.** Move the duel's specifics
-   (setup, validation, outcome) from the realm into `showdowns/duel/v0`; the
-   realm gains the registry. It stays `gnoslinger/v0`, changed in place: it
-   only runs on dev chains so far, where gnodev redeploys it from the files.
+   TODO.md). Today's showdown must stay identical: its tests and filetests
+   are the safety net.
+3. **The `Showdown` contract and `battleroyale/v0`.** Move today's
+   showdown's specifics (setup, validation, outcome) from the realm into
+   `showdowns/battleroyale/v0`; the realm gains the registry. It stays
+   `gnoslinger/v0`, changed in place: it only runs on dev chains so far,
+   where gnodev redeploys it from the files.
    Once a deployment must be kept (testnet, mainnet), packages are immutable
    and an incompatible change needs the next version path.
-4. **Client.** Mode list in the lobby, N-player game screen.
-5. **New showdowns.** `royale/v0`, then `corral/v0`. With more than two
+4. **Client.** Mode list in the lobby, N-player game screen (what the
+   screens need past four seats and for teams: DESIGN_MULTIPLAYER.md,
+   Order of what is left, 3).
+5. **New showdowns.** `battleroyale/v1` (up to 8 seats), then
+   `corral/v0`. With more than two
    players commit-reveal matters more: every extra player is one more who
    could read the others' plans before sending their own.
 
