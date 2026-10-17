@@ -108,6 +108,8 @@ const HEX_HIGHLIGHT_INSET = 4;
 /** The aim zone shown while the pointer is on a token: the palette's brick for an enemy, its action green for mine. */
 const ENEMY_ZONE_COLOR = 0xb5482a;
 const MY_ZONE_COLOR = 0x4f7a3a;
+/** A move choice off the map, which runs away (15.5): the palette's gold. */
+const RUN_AWAY_COLOR = 0xf2b544;
 /** How long a second click on Send plan confirms passing with an empty plan. */
 const PASS_CONFIRM_MS = 5000;
 /** The tracer a bullet leaves behind it. */
@@ -534,11 +536,41 @@ class CharacterToken {
   }
 
   /** Greys out a character that is out of the fight. */
+  /** Whether the token is on the board (not gone off the map). */
+  onBoard(): boolean {
+    return this.sprite.visible;
+  }
+
+  /**
+   * Walks the token off the map to (sx, sy), its ring with it, fading out;
+   * what it carries goes at once. setStatus brings it all back.
+   */
+  leave(tweens: Phaser.Tweens.TweenManager, sx: number, sy: number) {
+    for (const tw of this.posTweens) tw.stop();
+    this.posTweens = [];
+    for (const p of this.parts) if (p !== this.sprite && p !== this.highlight) (p as unknown as Phaser.GameObjects.Components.Visible).setVisible(false);
+    this.posTweens = [tweens.add({ targets: this.sprite, x: sx, y: sy, duration: 700, ease: "Cubic.easeIn", onUpdate: () => this.follow() })];
+    tweens.add({
+      targets: [this.sprite, this.highlight],
+      alpha: 0,
+      duration: 700,
+      ease: "Cubic.easeIn",
+      onComplete: () => {
+        this.sprite.setVisible(false);
+        this.highlight.setVisible(false).setAlpha(1);
+      },
+    });
+  }
+
   setStatus(status: PlayerStatus) {
     const out = status !== "alive";
     this.sprite.setAlpha(out ? 0.75 : 1);
     this.baseTint = out ? 0x808080 : 0xffffff;
     this.applyBaseTint();
+    // Off the map (15.5): the token and all it carries leave the board.
+    const gone = status === "ran_away";
+    for (const p of this.parts) (p as unknown as Phaser.GameObjects.Components.Visible).setVisible(!gone);
+    this.highlight.setAlpha(1); // back from an exit cut short (leave)
   }
 
   /** The flinch of a hit: the token rocks quickly back and forth around its facing. */
@@ -1318,6 +1350,14 @@ export class GameScene extends Phaser.Scene {
         t.setGun(this, gunInHand(c.guns), this.arrMask);
         t.setEndurance(this, c.endurance, this.arrMask);
         t.setTargetAims(this, this.aimersOn(chars, i), this.arrMask);
+        // Running away (15.5): the token walks off the map one hex that way and fades out.
+        if (animate && c.status === "ran_away" && c.away !== undefined && t.onBoard()) {
+          const from = BOARD_A.hexPos(c.hex);
+          const a = (DIR_ANGLE[c.away] * Math.PI) / 180;
+          const to = this.boardToScreen(from.x + Math.cos(a) * HEX_SPACING, from.y + Math.sin(a) * HEX_SPACING);
+          t.leave(this.tweens, to.sx, to.sy);
+          return had;
+        }
         t.setStatus(c.status);
         // Standing on an obstacle raises the character (36.5): drawn a bit bigger.
         t.setLift(this.tweens, BOARD_A.obstacle(c.hex) ? OBSTACLE_LIFT : 1, animate ? 450 : 0);
@@ -1360,7 +1400,7 @@ export class GameScene extends Phaser.Scene {
   private occupantsAt(chars: CharView[], ground: GroundGunView[], hex: string): string[] {
     const out: string[] = [];
     chars.forEach((c, j) => {
-      if (c && c.hex && this.charOf(j) && c.hex === hex) out.push(`s${j}`);
+      if (c && c.hex && c.status !== "ran_away" && this.charOf(j) && c.hex === hex) out.push(`s${j}`);
     });
     ground.forEach((g, j) => {
       if (g.hex === hex) out.push(`g${j}`);
@@ -1612,7 +1652,7 @@ export class GameScene extends Phaser.Scene {
       player: p?.addr ? playerLabel(p) : "",
       addr: p?.addr ?? "",
       where: c.hex ? `${c.hex} · facing ${DIR_NAMES[c.facing] ?? "?"}${c.down ? " · down" : ""}` : "nowhere yet: pick a hex",
-      out: c.status === "killed" ? "DEAD" : c.status === "passed_out" ? "PASSED OUT" : "",
+      out: c.status === "killed" ? "DEAD" : c.status === "passed_out" ? "PASSED OUT" : c.status === "ran_away" ? "RAN AWAY" : "",
       endurance: c.endurance,
       maxEndurance: MAX_ENDURANCE,
       delay: c.delay,
@@ -2128,8 +2168,9 @@ export class GameScene extends Phaser.Scene {
         const pos = hex ? BOARD_A.hexPos(hex) : { x: from.x + Math.cos(a) * HEX_SPACING, y: from.y + Math.sin(a) * HEX_SPACING };
         return { rel, hex, x: pos.x, y: pos.y };
       })
-      // Moves: one option per hex (two directions can lead to the same half-hex).
-      .filter((o, i, all) => isTurn || (o.hex !== null && all.findIndex((x) => x.hex === o.hex) === i));
+      // Moves: one option per hex (two directions can lead to the same half-hex);
+      // a direction off the map is kept: moving there runs away (15.5).
+      .filter((o, i, all) => isTurn || o.hex === null || all.findIndex((x) => x.hex === o.hex) === i);
     this.choiceMode = { card, side, choiceType, options };
     this.showChoiceOverlays();
   }
@@ -2142,14 +2183,34 @@ export class GameScene extends Phaser.Scene {
       const { sx, sy } = this.boardToScreen(opt.x, opt.y);
       // A move highlights the hex it goes to; a turn, the hex-sized spot that way (always six apart).
       const outline = opt.hex && !isTurn ? BOARD_A.outline(opt.hex) : BOARD_A.regularOutline(opt.x, opt.y);
-      const circle = this.hexHighlight(outline, sx, sy, 0x44cc44, 0.35, 0x44cc44);
+      // A move off the map runs away: in gold, said so, and on hover what it means.
+      const away = !isTurn && !opt.hex;
+      const color = away ? RUN_AWAY_COLOR : 0x44cc44;
+      const circle = this.hexHighlight(outline, sx, sy, color, away ? 0.55 : 0.35, color);
       const label = this.add
-        .text(sx, sy, opt.rel.replace(/_/g, "\n"), { fontSize: "10px", color: "#fff", align: "center" })
+        .text(sx, sy, away ? "RUN\nAWAY" : opt.rel.replace(/_/g, "\n"), {
+          fontSize: away ? "12px" : "10px",
+          fontStyle: away ? "bold" : "normal",
+          color: away ? "#2A1C14" : "#fff",
+          align: "center",
+        })
         .setOrigin(0.5)
         .setMask(this.arrMask)
         .setDepth(501);
       circle.on("pointerup", () => this.resolveChoice(opt.rel));
       this.choiceOverlays.push(circle, label);
+      if (away) {
+        const r = (BOARD_A.hexRadius * this.displayTransform().scale * Math.sqrt(3)) / 2;
+        let detail: Phaser.GameObjects.Text | null = null;
+        circle.on("pointerover", () => {
+          detail = this.hoverDetail(sx, sy, r, ["Off the map: your character runs away,", "out of the showdown (Run away −2 VP)"]);
+          this.choiceOverlays.push(detail);
+        });
+        circle.on("pointerout", () => {
+          detail?.destroy();
+          detail = null;
+        });
+      }
     }
   }
 
@@ -2327,8 +2388,10 @@ export class GameScene extends Phaser.Scene {
       .text(sx, sy - r - 6, lines.join("\n"), { fontSize: "13px", color: "#f3e7ce", backgroundColor: "#0d0704", padding: { x: 8, y: 5 }, align: "center" })
       .setOrigin(0.5, 1)
       .setDepth(502);
-    detail.setX(Phaser.Math.Clamp(sx, detail.width / 2 + 8, this.scale.width - detail.width / 2 - 8));
-    if (detail.y - detail.height < 4) detail.setOrigin(0.5, 0).setY(sy + r + 6);
+    // Kept inside the board's cell: the side columns and the header cover the rest of the canvas.
+    const b = this.board;
+    detail.setX(Phaser.Math.Clamp(sx, b.x + detail.width / 2 + 8, b.x + b.w - detail.width / 2 - 8));
+    if (detail.y - detail.height < b.y + 4) detail.setOrigin(0.5, 0).setY(sy + r + 6);
     return detail;
   }
 

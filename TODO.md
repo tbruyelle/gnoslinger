@@ -29,6 +29,7 @@
 ## Tutorial
 - Basic tutorial
   - Movement
+  - win conditions (dead or runaway)
   - draw & cock
   - aim & shoot
 - Advanced tutorial
@@ -48,7 +49,6 @@
     - OK coral with the whyatt earp (adapt with number of players)
 
 ## Showdown
-- implement character's run away
 - add winning/losing burst
 - show tips (or highlight a card with some text)
   - when no gun: show need to draw and cock

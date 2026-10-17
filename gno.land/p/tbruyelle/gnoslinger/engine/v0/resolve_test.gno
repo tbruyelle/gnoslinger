@@ -266,23 +266,34 @@ func TestCrawlPenalty(t *testing.T) {
 	}
 }
 
-func TestOffBoardMoveIsCancelledButConsumesTime(t *testing.T) {
+func TestMoveOffTheMapRunsAway(t *testing.T) {
+	// The Kid on the bottom edge (F12, facing S) advances off the map on
+	// segment 2: it runs away (15.5), the turn after it never happens, and
+	// the marshal's AIM markers on it are lost at the end of the segment.
 	st := startState()
-	st.Chars[1] = Character{Hex: "A-F12", Facing: hex.S} // the bottom edge
-	st, evs := resolve(t, st, "", "1f:ahead,3b:ahead_left")
-	if m := ofKind(evs, 1, EvMove); len(m) != 0 {
-		t.Errorf("unexpected moves: %v", m)
+	st.Chars[1].Hex, st.Chars[1].Facing = "A-F12", hex.S
+	st.Chars[0].Aim, st.Chars[0].AimAt = 2, 1
+	start := CloneChars(st.Chars)
+	after, evs := resolve(t, st, "", "1f:ahead,3b:ahead_left")
+	r := ofKind(evs, 1, EvRunAway)
+	if len(r) != 1 || r[0].Seg != 2 || r[0].Action != cards.Advance || r[0].From != "A-F12" || r[0].Facing != hex.S {
+		t.Errorf("run away = %v", r)
 	}
-	c := ofKind(evs, 1, EvCancel)
-	if len(c) != 1 || c[0].Seg != 2 || c[0].Action != cards.Advance || c[0].Reason != ReasonOffBoard {
-		t.Errorf("cancels = %v", c)
+	if len(ofKind(evs, 1, EvMove)) != 0 || len(ofKind(evs, 1, EvTurn)) != 0 || len(ofKind(evs, 1, EvCancel)) != 0 {
+		t.Errorf("events = %v", evs)
 	}
-	turns := ofKind(evs, 1, EvTurn)
-	if len(turns) != 1 || turns[0].Seg != 3 || turns[0].Facing != hex.SE {
-		t.Errorf("turns = %v", turns)
+	if c := after.Chars[1]; c.Status != RanAway || c.Hex != "A-F12" || AliveCount(after) != 1 {
+		t.Errorf("char 1 = %+v", c)
 	}
-	if st.Chars[1].Hex != "A-F12" || st.Chars[1].Delay != 0 {
-		t.Errorf("char 1 = %+v", st.Chars[1])
+	if la := ofKind(evs, 0, EvLoseAim); len(la) != 1 || la[0].Reason != ReasonNoTarget || after.Chars[0].Aim != 0 {
+		t.Errorf("marshal's aim: %v, %+v", la, after.Chars[0])
+	}
+	// Run away: -2, and no end-of-showdown points for it (15.5, 15.6).
+	if a := awardsString(TurnVictoryPoints(State{Chars: start}, after)); a != " 1:run_away" {
+		t.Errorf("turn awards = %q", a)
+	}
+	if a := awardsString(EndVictoryPoints(after)); a != " 0:survive 0:hold_field" {
+		t.Errorf("end awards = %q", a)
 	}
 }
 

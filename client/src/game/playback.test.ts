@@ -33,6 +33,12 @@ describe("snapshotAfterSegment", () => {
     expect(start[1].down).toBe(false);
   });
 
+  it("takes a character off the map when it runs away", () => {
+    const ran = snapshotAfterSegment(start, [ev({ seg: 2, p: 1, kind: "run_away", action: "advance", from: "A-F12", facing: 3 })], 2);
+    expect(ran[1]).toMatchObject({ status: "ran_away", hex: start[1].hex, aim: 0 });
+    expect(describeEvent(ev({ p: 1, kind: "run_away", from: "A-F12" }), ["marshal", "dude"])).toBe("dude runs away off the map from A-F12");
+  });
+
   it("folds gun events", () => {
     const s = [{ ...start[0], guns: [colt] }, start[1]];
     const evs = [

@@ -297,8 +297,18 @@ I10 J10 I11 I11 H11 H10, reached from I10, J10, H10 and H11) and **A-I11**
 (the empty bottom half, neighbours I11* J10 J11 I12 H11 I11*, reached from
 J11 and I12); both keep the whole hex's axial coordinates, and board A has
 138 hexes. Hex ids may end in `*` (plan strings accept it). `BoardMap.crossesObstacle`
-tells the planning preview when to play the obstacle sound. Off-board moves are cancelled but still
-consume their time. Unexecuted actions are cancelled after segment 5. End of
+tells the planning preview when to play the obstacle sound. A move off
+the map (Advance, Run, Back Up, Sprint, crawling too) **runs away** (15.5):
+status `RanAway` (`"ran_away"` in the JSON), an `EvRunAway` event (`From`
+the edge hex left, `Facing` the way it went), its other actions dropped,
+AIM markers on it lost at the end of the segment (Reason `no_target`); it
+scores Run away −2 on that turn and nothing at the end of the showdown
+(15.6), and no SERIOUS check follows it (a simplification of 15.9). The
+client hides its token, says RAN AWAY on its panel, and offers each
+direction off the map as a gold "RUN AWAY" spot when picking a move
+(its hover says what it means; picking it, and its playback, play
+`run-away.wav`)
+(older turns' records hold a cancel, Reason `offboard`). Unexecuted actions are cancelled after segment 5. End of
 turn (`EndTurn`, returns events) removes half the delay, rounded up, and a
 character with more delay than endurance at the end of two turns in a row
 (checked after the halving) passes out. Events have `Seg` 0 for turn-start
@@ -437,8 +447,7 @@ Knock out +1 as above; passed out or surrendered, Captured −4 when an enemy
 holds the field (15.63). Those awards close the turn's log as `vp` events
 (`EvVP`, Seg 6, N = points, Reason = the award). `Surrender` and a
 `timeout` claim that leave one character score `EndVictoryPoints` at once
-(no turn). No Ally killed,
-Run away, money bags or special rules. `Game.award` records each award
+(no turn). No Ally killed, money bags or special rules. `Game.award` records each award
 (`Awards`, `VP` totals, a `VictoryPoints` event, the profile's total in
 the profiles realm);
 `finish` gives the win to the most points, a tie for the most a draw. The game

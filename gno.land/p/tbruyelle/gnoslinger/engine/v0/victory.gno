@@ -1,9 +1,8 @@
 package engine
 
 // Victory point awards (rule 15), for showdowns where each character is a
-// side of its own: there are no allies (no "Ally killed"), moving off the
-// board is cancelled (no "Run away"), and no special rule captures or kills
-// anyone.
+// side of its own: there are no allies (no "Ally killed"), and no special
+// rule captures or kills anyone.
 const (
 	VPSurvive   = "survive"         // +2: conscious and unsurrendered at the end (15.62)
 	VPHoldField = "hold_field"      // +2: the only side with survivors (15.63)
@@ -12,6 +11,7 @@ const (
 	VPKilled    = "killed"          // -8 (15.2)
 	VPKill      = "kill_enemy"      // +2: the enemy who killed him (15.2)
 	VPKnockOut  = "knock_out_enemy" // +1: the enemy who crossed off most of his endurance boxes (15.3, 15.41)
+	VPRunAway   = "run_away"        // -2: moved off the map (15.5); no end-of-showdown points (15.6)
 )
 
 // VPPoints is what each award is worth (the VICTORY POINTS schedule, 15.11).
@@ -24,6 +24,7 @@ var VPPoints = map[string]int{
 	VPKilled:    -8,
 	VPKill:      2,
 	VPKnockOut:  1,
+	VPRunAway:   -2,
 }
 
 // VPSharedKill is what each enemy gets when several KILLs land in the same
@@ -71,6 +72,8 @@ func TurnVictoryPoints(before, after State) []Award {
 			if k := knockedOutBy(c); k >= 0 {
 				out = append(out, award(k, VPKnockOut))
 			}
+		case RanAway:
+			out = append(out, award(p, VPRunAway))
 		}
 	}
 	return out

@@ -9,6 +9,7 @@ const REASONS: Record<string, string> = {
   killed: "killed",
   kill_enemy: "killed the enemy",
   knock_out_enemy: "knocked the enemy out",
+  run_away: "ran away",
 };
 
 /** A number of victory points with its sign, "+2", "−4", "0". */

@@ -38,13 +38,15 @@ export const SOUND_FILES = {
   obstacle: ["obstacle1.wav", "obstacle2.wav"],
   wounded: ["wounded1.wav", "wounded2.ogg"],
   dead: ["dead1.wav", "dead2.wav", "dead3.wav", "dead4.wav", "dead5.wav"],
+  // A character leaving the map (15.5).
+  runAway: ["run-away.wav"],
 } as const;
 
 export type SoundGroup = keyof typeof SOUND_FILES;
 
 /** Volume per group: gunshots stand out, footsteps stay in the background. */
 export const SOUND_VOLUME: Record<SoundGroup, number> = {
-  pickCard: 0.6, unpickCard: 0.6, select: 0.6, step: 0.5, turn: 0.5, unholster: 0.8, groundPick: 0.8, cock: 0.8, aim: 0.8, planShoot: 0.8, gunshot: 1, ricochet: 0.8, emptyGun: 0.9, reload: 0.8, delay: 0.7, undelay: 0.7, fall: 0.8, obstacle: 0.8, wounded: 0.9, dead: 0.9,
+  pickCard: 0.6, unpickCard: 0.6, select: 0.6, step: 0.5, turn: 0.5, unholster: 0.8, groundPick: 0.8, cock: 0.8, aim: 0.8, planShoot: 0.8, gunshot: 1, ricochet: 0.8, emptyGun: 0.9, reload: 0.8, delay: 0.7, undelay: 0.7, fall: 0.8, obstacle: 0.8, wounded: 0.9, dead: 0.9, runAway: 0.8,
 };
 
 /** The Phaser audio key of one variant of a group. */
@@ -206,6 +208,9 @@ export function soundsForEvents(events: TurnEvent[]): SoundCue[] {
       case "pass_out":
         cues.push({ group: "fall", delayMs: 0 });
         break;
+      case "run_away":
+        cues.push({ group: "runAway", delayMs: 0 });
+        break;
     }
   });
   return cues;
@@ -232,6 +237,7 @@ export function soundsForPreview(before: CharView, after: CharView, crossesObsta
     if (crossesObstacle?.(before.hex, after.hex)) cues.push({ group: "obstacle", delayMs: OBSTACLE_AFTER_MOVE_MS });
   }
   if (after.facing !== before.facing) cues.push({ group: "turn", delayMs: 0 });
+  if (after.status === "ran_away" && before.status !== "ran_away") cues.push({ group: "runAway", delayMs: 0 });
   if (after.down && !before.down) cues.push({ group: "fall", delayMs: 0 });
   if (aimTaken(before, after)) cues.push({ group: "aim", delayMs: 0 });
   for (const g of after.guns) {

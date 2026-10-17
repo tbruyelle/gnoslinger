@@ -30,6 +30,7 @@ const (
 	EvPassOut      = "pass_out"      // end of turn: more delay than endurance two turns in a row
 	EvSeriousCheck = "serious_check" // end of showdown: Card, N = DELAY + SERIOUS points (4 kills)
 	EvVP           = "vp"            // end of turn: victory points (rule 15), N = points (< 0 for a loss), Reason = the award (VPSurvive...)
+	EvRunAway      = "run_away"      // the character moved off the map (15.5): From = the edge hex it left, Facing = the way it went, Action
 )
 
 // Delay and cancel reasons.
@@ -45,7 +46,7 @@ const (
 	ReasonLight     = "light"       // a LIGHT draws fatigue cards (14.11)
 	ReasonSerious   = "serious"     // fatigue cards at the start of the turn (14.12)
 	ReasonLeg       = "leg"         // fatigue cards per hex moved upright (14.12)
-	ReasonOffBoard  = "offboard"    // the move would leave the board
+	ReasonOffBoard  = "offboard"    // older records: a move off the board was cancelled (it now runs away, EvRunAway)
 	ReasonTime      = "time"        // not executed by the end of segment 5 (rule 7.53)
 	ReasonNoGun     = "no_gun"      // no gun in the box the action needs (11.3)
 	ReasonHandFull  = "hand_full"   // the destination hand already holds a gun
@@ -263,6 +264,10 @@ func Resolve(board *hex.Board, st State, plans []Plan, d Drawer) (State, []Event
 			if c.AimAt >= 0 {
 				t = st.char(c.AimAt)
 				if t == nil {
+					loseAim(p, c, seg, ReasonNoTarget, &evs)
+					continue
+				}
+				if t.Status == RanAway { // gone off the map: nothing left to aim at
 					loseAim(p, c, seg, ReasonNoTarget, &evs)
 					continue
 				}
@@ -824,11 +829,16 @@ func execute(board *hex.Board, p int, a Action, st *State, seg int, d Drawer, ev
 		return gained, false
 	}
 	cancel := func(reason string) (int, bool) { return cancelAt(reason, "") }
+	// move takes the character one hex in dir; off the map it runs away
+	// (15.5): it leaves the showdown, guns and all, and the move counts as
+	// done.
 	move := func(dir hex.Dir) bool {
 		to, ok := board.Neighbor(c.Hex, dir)
 		if !ok {
-			cancel(ReasonOffBoard)
-			return false
+			c.Status = RanAway
+			clearAim(c)
+			*evs = append(*evs, Event{Seg: seg, Player: p, Kind: EvRunAway, Action: a.Code, From: c.Hex, Facing: dir})
+			return true
 		}
 		from := c.Hex
 		c.Hex = to
@@ -850,8 +860,8 @@ func execute(board *hex.Board, p int, a Action, st *State, seg int, d Drawer, ev
 		ok := move(hex.Resolve(c.Facing, a.Dir))
 		return gained, ok
 	case cards.Sprint:
-		if !move(c.Facing) { // straight ahead (9.23)
-			return gained, false
+		if !move(c.Facing) || c.Status != Alive { // straight ahead (9.23); gone off the map, nothing more
+			return gained, true
 		}
 		gained += drawDelay(p, c, seg, ReasonSprint, d, evs)
 		return gained, true

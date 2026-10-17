@@ -330,6 +330,8 @@ func describeEvent(g *Game, e engine.Event) string {
 		what = who + " drops the " + e.Gun.Spec().Name + " in " + e.To
 	case engine.EvPassOut:
 		what = who + " passes out"
+	case engine.EvRunAway:
+		what = who + " runs away off the map from " + e.From
 	case engine.EvSeriousCheck:
 		what = who + " draws card " + strconv.Itoa(e.Card) + " for the SERIOUS wounds: " + strconv.Itoa(e.N) + " points"
 	case engine.EvVP:

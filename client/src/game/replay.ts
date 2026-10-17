@@ -13,6 +13,8 @@ export interface CharView extends WoundFields {
   status: PlayerStatus;
   /** The character's guns; the one in a hand shows on the token. */
   guns: GunView[];
+  /** Ran away: the absolute direction it left the map in, for the token's exit. */
+  away?: number;
 }
 
 /** The gun that can fire from its box: a one-handed gun in the gun hand or both hands. */
@@ -48,6 +50,7 @@ export function replayPlan(
 ): CharView {
   const s = copyChar(start);
   for (const e of plan) {
+    if (s.status === "ran_away") break; // off the map: nothing more happens
     const def = getActionDef(e);
     // Revealing anything but a Turn, an aim or a shot loses the aim (12.44 as played here).
     const gunAction = def.name === "Cock/Aim/Shoot" || def.name === "Shoot";
@@ -127,14 +130,29 @@ export function replayPlan(
     switch (def.choiceType) {
       case "move_ahead":
       case "move_back":
-        if (e.dir) s.hex = board.relNeighbor(s.hex, s.facing, e.dir) ?? s.hex;
+        // Off the map, the character runs away (15.5).
+        if (e.dir) {
+          const to = board.relNeighbor(s.hex, s.facing, e.dir);
+          if (to) s.hex = to;
+          else {
+            s.status = "ran_away";
+            s.away = relativeToAbsoluteDir(s.facing, e.dir);
+          }
+        }
         break;
       case "turn_ahead":
       case "turn_back":
         if (e.dir) s.facing = relativeToAbsoluteDir(s.facing, e.dir);
         break;
       case "none":
-        if (def.name === "Sprint") s.hex = board.neighbor(s.hex, s.facing) ?? s.hex;
+        if (def.name === "Sprint") {
+          const to = board.neighbor(s.hex, s.facing);
+          if (to) s.hex = to;
+          else {
+            s.status = "ran_away";
+            s.away = s.facing;
+          }
+        }
         else if (def.name === "Leap/Drop" || def.name === "Get Up/Down") s.down = !s.down;
         break;
     }

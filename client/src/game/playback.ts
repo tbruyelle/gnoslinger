@@ -147,6 +147,14 @@ export function snapshotAfterSegment(start: CharView[], events: TurnEvent[], seg
             break;
         }
         break;
+      case "run_away":
+        // Off the map (15.5): out of the showdown, its token gone from the board.
+        c.status = "ran_away";
+        c.away = e.facing;
+        c.aim = 0;
+        c.aimAt = -1;
+        c.aimHex = "";
+        break;
       case "pass_out":
         c.status = "passed_out";
         c.down = true;
@@ -288,6 +296,8 @@ export function describeEvent(e: TurnEvent, names: string[]): string {
       return `${who} drops the ${GUN_NAMES[e.gun] ?? e.gun} in ${e.to}`;
     case "pass_out":
       return `${who} passes out`;
+    case "run_away":
+      return `${who} runs away off the map from ${e.from}`;
     case "serious_check":
       return `${who} draws card ${e.card} for the SERIOUS wounds: ${e.n} points`;
     case "vp":

@@ -33,6 +33,9 @@ const (
 	Killed
 	// PassedOut characters carried more delay than endurance for two turns (14.2).
 	PassedOut
+	// RanAway characters moved off the map (15.5): out of the showdown,
+	// their hex the edge hex they left from.
+	RanAway
 )
 
 // String returns the status name used in JSON views.
@@ -46,6 +49,8 @@ func (s Status) String() string {
 		return "killed"
 	case PassedOut:
 		return "passed_out"
+	case RanAway:
+		return "ran_away"
 	}
 	return "?"
 }

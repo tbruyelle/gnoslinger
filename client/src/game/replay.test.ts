@@ -8,6 +8,12 @@ describe("replayPlan", () => {
   const start = { hex: "A-F1", facing: 3, down: false, delay: 0, guns: [], status: "alive" as const, aim: 0, aimAt: -1, aimHex: "", endurance: 20, serious: 0, gunArm: 0, otherArm: 0, leg: 0 };
   const colt: GunView = { id: 1, type: "colt45", name: "Colt 45", location: "holstered", cocked: false, shells: 6, capacity: 6, jammed: false, exploded: false };
 
+  it("runs away off the map, and nothing happens after", () => {
+    // F0 is on the top edge: backing up north leaves the map (15.5).
+    const away = replayPlan({ ...start, hex: "A-F0", facing: 3 }, decodePlan("1b:back,3b:ahead_left"), BOARD_A);
+    expect(away).toMatchObject({ status: "ran_away", hex: "A-F0", facing: 3 });
+  });
+
   it("moves, turns and flips in plan order", () => {
     // Advance ahead-left (SE) from F1 -> G2, then turn ahead_right (SW), then drop.
     const end = replayPlan(start, decodePlan("1f:ahead_left,3b:ahead_right,4b"), BOARD_A);

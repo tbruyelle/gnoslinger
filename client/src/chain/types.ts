@@ -1,10 +1,10 @@
 /** Mirrors of the realm's JSON views (see gno.land/r/tbruyelle/gnoslinger/v0/json.gno). */
 
 export type Phase = "waiting" | "planning" | "finished";
-export type PlayerStatus = "alive" | "out" | "killed" | "passed_out";
+export type PlayerStatus = "alive" | "out" | "killed" | "passed_out" | "ran_away";
 export type EventKind =
   | "move" | "turn" | "flip" | "delay" | "cancel" | "draw" | "wild_shot"
-  | "cock" | "uncock" | "load" | "aim" | "lose_aim" | "nothing" | "shot" | "malfunction" | "wound" | "direction" | "drop_gun" | "pass_out" | "serious_check" | "vp";
+  | "cock" | "uncock" | "load" | "aim" | "lose_aim" | "nothing" | "shot" | "malfunction" | "wound" | "direction" | "drop_gun" | "pass_out" | "serious_check" | "vp" | "run_away";
 
 /** Seg of the events recorded after segment 5 (cancels, passing out, the serious-wound check, victory points); turn-start events have seg 0. */
 export const END_OF_TURN_SEG = 6;
@@ -172,7 +172,7 @@ export interface GameView {
   lastTurn: TurnResult | null;
 }
 
-/** Victory points a seat earns (points > 0) or loses: reason is survive, hold_field, surrender, captured, killed, kill_enemy or knock_out_enemy. */
+/** Victory points a seat earns (points > 0) or loses: reason is survive, hold_field, surrender, captured, killed, kill_enemy, knock_out_enemy or run_away. */
 export interface VPAward {
   p: number;
   reason: string;
