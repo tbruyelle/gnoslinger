@@ -623,7 +623,8 @@ Clicking a token opens the **character
   string). Aim then highlights the aim zone (`BoardMap.aimZone`,
   same axial maths as the realm) and the clicked hex goes into the plan
   (`pendingAims`, `5f:aim:A-F6`); a hex with several enemies in sight
-  opens a menu naming them (`aimTargets`, `resolveAim`). A hex of the
+  opens a menu naming them (`aimTargets`, `resolveAim`); Your plan names
+  the target in its seat's colour (`PlanLine.target`). A hex of the
   zone that is itself out of sight (as upright, 31.3) is left out, aiming or shooting, as on token
   hover; with the opponent hidden but its hex in sight
   the pick names the hex (`5f:aim:A-I11` or `7f:shoot:A-I11`, not `@1`):

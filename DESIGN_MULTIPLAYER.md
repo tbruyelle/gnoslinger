@@ -76,8 +76,7 @@ and knock outs name seats (`AimAt`, `Killers`, `SeriousFrom`, `LegFrom`,
    3 / 5" past four.
 9. **Picking a target**: *Done:* clicking a token still works for any
    seat; a hex with several enemies in sight opens a menu naming them; the
-   plan list names the target ("aim at El Jefe"). *Left:* the
-   target's seat colour in the plan list.
+   plan list names the target ("aim at El Jefe"), in its seat's colour.
 
 ## Game, replay
 

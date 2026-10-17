@@ -101,6 +101,8 @@ export interface PlanLine {
   detail: string;
   /** Time points, in the circle on the right; none for a line that is not an action. */
   cost?: number;
+  /** The character the action names ("aim at El Jefe"): its name in detail goes in its seat's colour. */
+  target?: { name: string; color: string };
 }
 
 export interface Button {
@@ -241,6 +243,7 @@ const CSS = `
 .gv-plan li div{flex:1;display:flex;flex-direction:column;min-width:0}
 .gv-plan li strong{font-size:16px}
 .gv-plan li small{font-size:14px;font-style:italic;color:#5A4636}
+.gv-plan li small .gv-tgt{font-style:normal;font-weight:700}
 .gv-plan li em{font-family:Rye,Georgia,serif;font-style:normal;font-size:17px;color:#8E2F1A}
 .gv-empty{margin:0;font-size:15px;font-style:italic;color:#5A4636}
 .gv-note{margin:0;font-size:15px;color:#5A4636}
@@ -323,6 +326,14 @@ const CHECK_SVG =
 const HOURGLASS_SVG =
   '<svg width="18" height="22" viewBox="0 0 52 62" aria-hidden="true"><rect x="6" y="2" width="40" height="7" rx="2" fill="#F3E7CE"></rect><rect x="6" y="53" width="40" height="7" rx="2" fill="#F3E7CE"></rect>' +
   '<path d="M11,9 H41 Q41,24 26,31 Q11,24 11,9 Z M11,53 H41 Q41,38 26,31 Q11,38 11,53 Z" fill="none" stroke="#F3E7CE" stroke-width="4" stroke-linejoin="round"></path><path d="M17,48 Q26,40 35,48 Z" fill="#F3E7CE"></path></svg>';
+/** A plan line's detail, the target's name in its seat's colour. */
+function detailHtml(l: PlanLine): string {
+  const t = l.target;
+  const at = t ? l.detail.lastIndexOf(t.name) : -1;
+  if (!t || at < 0) return esc(l.detail);
+  return esc(l.detail.slice(0, at)) + `<span class="gv-tgt" style="color:${esc(t.color)}">${esc(t.name)}</span>` + esc(l.detail.slice(at + t.name.length));
+}
+
 const GROW_SVG =
   '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4 H20 V10"></path><path d="M20 4 L13 11"></path><path d="M10 20 H4 V14"></path><path d="M4 20 L11 13"></path></svg>';
 const CLOSE_SVG =
@@ -529,7 +540,7 @@ export class ShowdownView {
     const p = m.plan;
     if (!p) return "";
     const lines = p.lines
-      .map((l, i) => `<li><b>${i + 1}</b><div><strong>${esc(l.name)}</strong>${l.detail ? `<small>${esc(l.detail)}</small>` : ""}</div>${l.cost === undefined ? "" : `<em>${l.cost}</em>`}</li>`)
+      .map((l, i) => `<li><b>${i + 1}</b><div><strong>${esc(l.name)}</strong>${l.detail ? `<small>${detailHtml(l)}</small>` : ""}</div>${l.cost === undefined ? "" : `<em>${l.cost}</em>`}</li>`)
       .join("");
     const buttons = p.buttons
       .map((b) => `<button type="button" class="gv-btn ${b.tone}" data-act="btn" data-id="${esc(b.id)}"${b.disabled ? " disabled" : ""}>${esc(b.label)}</button>`)

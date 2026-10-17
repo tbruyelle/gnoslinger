@@ -1759,7 +1759,13 @@ export class GameScene extends Phaser.Scene {
       };
     }
     if (!view) return { title: "Loading", points: "", lines: [], empty: "Reading the showdown from the chain…", note: "", warn: false, buttons: [] };
-    const lines = (plan: PlanEntry[]) => plan.map((e) => ({ name: getActionDef(e).name, detail: planDetail(e, names), cost: getActionDef(e).cost }));
+    const lines = (plan: PlanEntry[]) =>
+      plan.map((e) => ({
+        name: getActionDef(e).name,
+        detail: planDetail(e, names),
+        cost: getActionDef(e).cost,
+        target: e.target !== undefined && names[e.target] ? { name: names[e.target], color: seatColor(e.target) } : undefined,
+      }));
     const replay = { id: "replay", label: "Replay", tone: "plain" as const, disabled: !view.lastTurn };
     const me = this.myIndex >= 0 ? view.players[this.myIndex] : null;
     const pending = this.pendingNames();

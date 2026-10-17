@@ -57,7 +57,6 @@
 - >4 players (the showdown's set up stops at four characters) and teams, 
   see DESIGN_SHOWDOWNS.md and DESIGN_MULTIPLAYER.md
 - four seats, left from DESIGN_MULTIPLAYER.md:
-  - the target's seat colour in the plan list ("aim at El Jefe")
   - the seats' colours on the names in the resolution log
   - the design canvas: the four-seat palette and the lobby form (re-read
     each screen first, it may hold hand edits)
