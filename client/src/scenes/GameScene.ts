@@ -1214,6 +1214,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private buildTokens() {
+    this.showdown?.highlightSeat(-1); // a rebuilt token never gets the pointerout
     for (const t of this.tokens) {
       if (t) {
         t.killTweens(this.tweens);
@@ -1259,10 +1260,12 @@ export class GameScene extends Phaser.Scene {
       });
       img.on("pointerover", () => {
         this.tokens[i]?.setHover(this, true, this.arrMask);
+        this.showdown?.highlightSeat(i);
         if (!this.playback) this.showAimZone(i); // not in a replay
       });
       img.on("pointerout", () => {
         this.tokens[i]?.setHover(this, false, this.arrMask);
+        this.showdown?.highlightSeat(-1);
         this.hideAimZone();
       });
       const token = new CharacterToken(charKey, img, hl, CharacterToken.depthFor(i));

@@ -558,7 +558,8 @@ played, victory points, since). `game/lobby.ts` sorts the games into
   since the AIM markers' frames use the same ones; a token under the
   pointer gets a gold halo behind it instead, `setHover`, `haloTexture`), the timeline's dot, the character
   sheet's accent and the frame of its AIM markers. Clicking a
-  character panel opens its sheet. The hand builds an
+  character panel opens its sheet; hovering a token outlines its
+  character's panel in gold (`ShowdownView.highlightSeat`). The hand builds an
   ordered plan with a live preview (`replayPlan`) and relative-direction hex
   picks (move choices and the aim zone highlight whole hexes,
   `GameScene.hexHighlight` over `BoardMap.outline`: a regular hexagon of

@@ -194,6 +194,7 @@ const CSS = `
 .gv-panel{background:#F3E7CE;border:3px solid #2A1C14;border-radius:16px;box-shadow:inset 0 0 0 4px #F3E7CE,inset 0 0 0 6px var(--rule,#2A1C14);padding:14px;display:flex;flex-direction:column;gap:10px}
 .gv-char{cursor:pointer;text-align:left;width:100%;font:inherit;color:inherit}
 .gv-char:hover{background:#FBF4E4}
+.gv-char.hl{background:#FBF4E4;outline:4px solid #F2B544;outline-offset:2px}
 .gv-char.out{filter:grayscale(.85);opacity:.75}
 .gv-who{display:flex;align-items:center;gap:10px}
 .gv-who img{width:52px;height:52px;flex-shrink:0}
@@ -329,6 +330,8 @@ export class ShowdownView {
   private root: HTMLDivElement;
   private header: HTMLElement;
   private ribbon: HTMLElement;
+  /** The seat whose panel is highlighted (a token hovered), -1 for none. */
+  private hlSeat = -1;
   private left: HTMLElement;
   private right: HTMLElement;
   private bottom: HTMLElement;
@@ -405,6 +408,17 @@ export class ShowdownView {
       this.left.innerHTML = m.left.map((c) => this.charHtml(c, false)).join("") + this.planHtml(m);
       this.right.innerHTML = m.others.map((c) => this.charHtml(c, m.others.length > 1)).join("");
       this.bottom.innerHTML = this.handHtml(m);
+    }
+    this.highlightSeat(this.hlSeat); // the panels were rebuilt
+  }
+
+  /** Marks the panel of the character whose token is under the pointer (-1: none), scrolling it into view. */
+  highlightSeat(seat: number) {
+    this.hlSeat = seat;
+    for (const el of Array.from(this.root.querySelectorAll<HTMLElement>(".gv-char[data-seat]"))) {
+      const on = Number(el.dataset.seat) === seat;
+      if (on && !el.classList.contains("hl")) el.scrollIntoView({ block: "nearest" });
+      el.classList.toggle("hl", on);
     }
   }
 
