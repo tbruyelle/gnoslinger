@@ -6,6 +6,9 @@ import { seatColor } from "./seats";
 /** What the sheet shows for one character. */
 export interface SheetData {
   name: string;
+  /** Who plays it: the registered name ("" for none) and the full address, which a click copies. */
+  player: string;
+  addr: string;
   charKey: string;
   seat: number;
   hex: string;
@@ -113,6 +116,7 @@ export function openCharacterSheet(d: SheetData, onClosed?: () => void, pick?: G
     `transition:transform ${ANIM_MS}ms cubic-bezier(.2,.8,.3,1.1),opacity ${ANIM_MS}ms ease-out;opacity:0`;
   frame.innerHTML = (pick ? promptBanner(pick.prompt) : "") + html;
   markEndurance(frame, d.endurance);
+  wireCopy(frame);
   if (pick) wirePick(frame, pick);
   const close = document.createElement("button");
   close.textContent = "×";
@@ -200,7 +204,43 @@ function statusRow(d: SheetData, accent: string): string {
   ];
   if (d.aimedBy.length > 0) chips.push(chip("AIMED BY", escapeHtml(d.aimedBy.join(", ")), true));
   if (d.isMe) chips.push(`<div style="margin-left: auto; font-family: Rye, Georgia, serif; font-size: 22px; color: ${accent}; letter-spacing: 1px">YOUR CHARACTER</div>`);
-  return `<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px">${chips.join("")}</div>`;
+  const row = `<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px">${chips.join("")}</div>`;
+  // Who plays the character goes on a line of its own, in ink, above the status chips.
+  return d.addr ? `<div style="display: flex; flex-direction: column; align-items: flex-start; gap: 10px">${playerRow(d)}${row}</div>` : row;
+}
+
+/** Who plays the character, in ink: the name if registered, and the full address as a button that copies it (wireCopy). */
+function playerRow(d: SheetData): string {
+  const name = d.player ? `<span style="font-family: Rye, Georgia, serif; font-size: 20px; letter-spacing: 1px">${escapeHtml(d.player)}</span>` : "";
+  return (
+    `<div style="display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; max-width: 100%; box-sizing: border-box; background: #2A1C14; color: #F3E7CE; border-radius: 8px; padding: 6px 14px">` +
+    `<span style="font-size: 14px; letter-spacing: 2px; font-weight: 700; color: #F2B544">PLAYED BY</span>${name}` +
+    `<button type="button" data-copy="${escapeHtml(d.addr)}" title="Copy the address" aria-label="Copy the address ${escapeHtml(d.addr)}" style="display: inline-flex; align-items: center; gap: 8px; padding: 0; background: none; border: 0; font: inherit; font-size: 17px; font-weight: 700; color: #F3E7CE; cursor: copy; word-break: break-all; text-align: left">` +
+    `<span data-copy-text>${escapeHtml(d.addr)}</span>${COPY_SVG}</button></div>`
+  );
+}
+
+/** Two overlapping sheets, the copy icon beside the address. */
+const COPY_SVG =
+  '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#F2B544" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><rect x="9" y="9" width="12" height="12" rx="2"></rect><path d="M5 15 H4 a1 1 0 0 1 -1 -1 V4 a1 1 0 0 1 1 -1 H14 a1 1 0 0 1 1 1 V5"></path></svg>';
+
+/** A click on the address copies it; the button says so for a moment. */
+function wireCopy(frame: HTMLElement) {
+  const btn = frame.querySelector<HTMLButtonElement>("[data-copy]");
+  const text = btn?.querySelector<HTMLElement>("[data-copy-text]");
+  if (!btn || !text) return;
+  const addr = btn.dataset.copy ?? "";
+  btn.addEventListener("click", async () => {
+    let said = "copied";
+    try {
+      await navigator.clipboard.writeText(addr);
+    } catch {
+      said = "could not copy";
+    }
+    text.textContent = said;
+    btn.blur(); // no focus ring left after a click
+    setTimeout(() => (text.textContent = addr), 1500);
+  });
 }
 
 /** A permanent wound value, with its meaning; empty when none. */

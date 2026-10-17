@@ -1602,12 +1602,15 @@ export class GameScene extends Phaser.Scene {
   /** A character as the side panels show it. */
   private charPanel(seat: number, c: CharView, badge: string): CharPanel {
     const charKey = this.charOf(seat);
+    const p = this.view?.players[seat];
     return {
       seat,
       color: seatColor(seat),
       name: charName(charKey),
       charKey,
       you: seat === this.myIndex,
+      player: p?.addr ? playerLabel(p) : "",
+      addr: p?.addr ?? "",
       where: c.hex ? `${c.hex} · facing ${DIR_NAMES[c.facing] ?? "?"}${c.down ? " · down" : ""}` : "nowhere yet: pick a hex",
       out: c.status === "killed" ? "DEAD" : c.status === "passed_out" ? "PASSED OUT" : "",
       endurance: c.endurance,
@@ -1972,6 +1975,8 @@ export class GameScene extends Phaser.Scene {
     openCharacterSheet(
       {
       name: charName(charKey),
+      player: p.name ?? "",
+      addr: p.addr,
       charKey,
       seat,
       hex: c.hex,

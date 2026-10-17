@@ -68,6 +68,9 @@ export interface CharPanel {
   name: string;
   charKey: string;
   you: boolean;
+  /** Who plays it: the registered name, else the short address ("" for a free seat); addr the full address, on hover. */
+  player: string;
+  addr: string;
   /** "A-F4 · facing S · down". */
   where: string;
   /** "" while in the fight, else "DEAD" / "PASSED OUT". */
@@ -207,6 +210,7 @@ const CSS = `
 .gv-kicker{font-size:12px;font-weight:700;letter-spacing:1.5px;color:#33307F}
 .gv-name{font-family:Rye,Georgia,serif;font-size:21px;line-height:1.1}
 .gv-where{font-size:14px;color:#5A4636}
+.gv-player{font-size:14px;font-weight:700;color:#2A1C14;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .gv-badge{font-size:12px;font-weight:700;letter-spacing:1px;color:#FBF4E4;background:#4F7A3A;border-radius:999px;padding:3px 9px;white-space:nowrap}
 .gv-badge.out{background:#8E2F1A}
 .gv-end{display:flex;flex-direction:column;gap:4px}
@@ -557,7 +561,9 @@ export class ShowdownView {
     return (
       `<button type="button" class="${bare ? "gv-bare" : "gv-panel"} gv-char${small ? " gv-small" : ""}${c.out ? " out" : ""}" style="--rule:${rule}" data-act="sheet" data-seat="${c.seat}" aria-label="${esc(c.name)}: open the character sheet">` +
       `<div class="gv-who">${tokenImg(c.charKey)}<div class="gv-who-txt">${c.you ? '<span class="gv-kicker">YOUR CHARACTER</span>' : ""}` +
-      `<span class="gv-name">${esc(c.name)}</span><span class="gv-where">${esc(c.where)}</span></div>${badge}</div>${detail}</button>`
+      `<span class="gv-name">${esc(c.name)}</span>` +
+      (c.player ? `<span class="gv-player" title="${esc(c.addr)}">${esc(c.player)}</span>` : "") +
+      `<span class="gv-where">${esc(c.where)}</span></div>${badge}</div>${detail}</button>`
     );
   }
 

@@ -567,7 +567,9 @@ played, victory points, since). `game/lobby.ts` sorts the games into
   since the AIM markers' frames use the same ones; a token under the
   pointer gets a gold halo behind it instead, `setHover`, `haloTexture`), the timeline's dot, the character
   sheet's accent and the frame of its AIM markers. Clicking a
-  character panel opens its sheet; hovering a token outlines its
+  character panel opens its sheet; each panel shows who plays the
+  character (`playerLabel`, the full address on hover), the sheet the
+  registered name and the full address, a click copying it (`wireCopy`); hovering a token outlines its
   character's panel in gold (`ShowdownView.highlightSeat`). The hand builds an
   ordered plan with a live preview (`replayPlan`) and relative-direction hex
   picks (move choices and the aim zone highlight whole hexes,

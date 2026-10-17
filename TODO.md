@@ -48,7 +48,6 @@
     - OK coral with the whyatt earp (adapt with number of players)
 
 ## Showdown
-- add address/namepsace info to character sheets and panels
 - implement character's run away
 - add winning/losing burst
 - show tips (or highlight a card with some text)
