@@ -113,9 +113,24 @@ const PASS_CONFIRM_MS = 5000;
 /** The tracer a bullet leaves behind it. */
 const SHOT_LINE_COLOR = 0xffffff;
 
-const STACK_REST = 0.12;
-const STACK_SPREAD = 0.42;
+/** How far from the hex centre the occupants of a shared hex sit, in token diameters: at rest, and spread under the pointer. */
+const STACK_REST = 0.17;
+const STACK_SPREAD = 0.6;
+/** The room between two spread neighbours' centres, in token diameters, so they barely overlap. */
+const STACK_GAP = 0.9;
 const STACK_MS = 180;
+
+/**
+ * Where occupant i of n sits around a shared hex's centre, in token
+ * diameters: a star, the first one up-left and the others clockwise (two
+ * make the down-right diagonal). Spread, the star widens with the count so
+ * neighbours stay apart.
+ */
+function stackOffset(i: number, n: number, spread: boolean): { dx: number; dy: number } {
+  const r = spread ? Math.max(STACK_SPREAD, STACK_GAP / 2 / Math.sin(Math.PI / n)) : STACK_REST;
+  const a = (-3 * Math.PI) / 4 + (2 * Math.PI * i) / n;
+  return { dx: r * Math.cos(a), dy: r * Math.sin(a) };
+}
 
 /**
  * What a step's refresh keeps as it is for a while: the tokens of the seats
@@ -1305,8 +1320,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * Where an occupant of a hex goes: the hex centre, shifted along the
-   * diagonal when the hex is shared; a gun on the ground also lies off to
+   * Where an occupant of a hex goes: the hex centre, or a point of a star
+   * around it when the hex is shared (stackOffset); a gun on the ground also lies off to
    * the lower-right side of the hex rather than in its middle. At rest,
    * characters sharing the hex fan out among themselves, whatever lies
    * there (a gun dropped by one killed there would otherwise push it back
@@ -1320,14 +1335,13 @@ export class GameScene extends Phaser.Scene {
     const all = this.occupantsAt(chars, ground, hex);
     if (all.length < 2) return { sx: sx + aside, sy: sy + aside };
     const spread = this.spreadHex === hex;
-    const frac = spread ? STACK_SPREAD : STACK_REST;
     const seats = all.filter((k) => k[0] === "s");
     const row = !spread && key[0] === "s" && seats.length > 1 ? seats : all;
-    const shift = d * frac * ((2 * row.indexOf(key)) / (row.length - 1) - 1);
-    return { sx: sx + shift + aside, sy: sy + shift + aside };
+    const { dx, dy } = stackOffset(row.indexOf(key), row.length, spread);
+    return { sx: sx + d * dx + aside, sy: sy + d * dy + aside };
   }
 
-  /** Where seat i's token goes: its hex centre, shifted along the diagonal when it shares the hex. */
+  /** Where seat i's token goes: its hex centre, on a star around it when it shares the hex. */
   private tokenScreenPos(chars: CharView[], i: number): { sx: number; sy: number } {
     return this.occupantScreenPos(chars, this.displayGround(), chars[i].hex, `s${i}`);
   }
@@ -1372,11 +1386,13 @@ export class GameScene extends Phaser.Scene {
     }
     const chars = this.displayChars();
     const ground = this.displayGround();
-    const radius = this.tokenDiameter() * (0.5 + STACK_SPREAD);
     let hit: string | null = null;
     const hexes = new Set<string>([...chars.filter((c) => c && c.hex).map((c) => c.hex), ...ground.map((g) => g.hex)]);
     for (const hex of hexes) {
-      if (this.occupantsAt(chars, ground, hex).length < 2) continue;
+      const n = this.occupantsAt(chars, ground, hex).length;
+      if (n < 2) continue;
+      const { dx, dy } = stackOffset(0, n, true);
+      const radius = this.tokenDiameter() * (0.5 + Math.hypot(dx, dy));
       const { sx, sy } = this.hexToScreen(hex);
       if (Phaser.Math.Distance.Between(pointer.x, pointer.y, sx, sy) <= radius) {
         hit = hex;

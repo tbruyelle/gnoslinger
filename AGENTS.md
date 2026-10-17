@@ -569,10 +569,12 @@ played, victory points, since). `game/lobby.ts` sorts the games into
   replay, from the final turn when the game ends while watched, and that
   replay has no cross (`finalReplay`); Lobby leaves it. Only the last selected card can be deselected (choices are
   relative to the state before it). Tokens sharing a hex are fanned out
-  along a diagonal (`STACK_REST`, the characters among themselves, so a
-  gun dropped in the hex does not push one back to the centre), and spread
-  fully, guns included, while the pointer is over the stack
-  (`updateStackHover`, animated) so each one can be clicked.
+  in a star around its centre (`stackOffset`, the first up-left, two make
+  the diagonal; `STACK_REST`, the characters among themselves, so a gun
+  dropped in the hex does not push one back to the centre), and spread
+  fully, guns included, while the pointer is over the stack, the star
+  widening with the count (`STACK_SPREAD`, `STACK_GAP`;
+  `updateStackHover`, animated) so each one can be clicked.
   A gun held in a hand shows as its icon (`assets/guns/<type>.gif`) at the
   token corner above the arrow, "above" in the figure's upright frame
   (`CharacterToken.setGun`, `gunAngle`), with its shells as red dots along
