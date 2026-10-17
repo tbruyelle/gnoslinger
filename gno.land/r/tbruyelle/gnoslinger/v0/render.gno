@@ -256,14 +256,19 @@ func describeEvent(g *Game, e engine.Event) string {
 	case engine.EvDelay:
 		what = who + " gains " + strconv.Itoa(e.N) + " delay (" + e.Reason + "), now " + strconv.Itoa(e.Delay)
 		if e.Card > 0 {
-			card := "card " + strconv.Itoa(e.Card)
-			if e.Result == "" {
-				what = who + " gains " + strconv.Itoa(e.N) + " delay (" + e.Reason + ", " + card + "), now " + strconv.Itoa(e.Delay)
+			// Every card drawn reads the same: who draws which card and why, then what it does.
+			drawn := who + " draws card " + strconv.Itoa(e.Card) + " (" + e.Reason + "): "
+			if e.Result != "" {
+				what = drawn + strings.ToUpper(strings.ReplaceAll(e.Result, "_", " "))
+			} else {
+				gain := "no delay"
+				if e.N > 0 {
+					gain = "gains " + strconv.Itoa(e.N) + " delay"
+				}
+				what = drawn + gain + ", now " + strconv.Itoa(e.Delay)
 				if e.Endurance > 0 {
 					what += ", loses " + strconv.Itoa(e.Endurance) + " endurance"
 				}
-			} else {
-				what = who + " draws " + card + " (" + e.Reason + "): " + strings.ToUpper(strings.ReplaceAll(e.Result, "_", " "))
 			}
 		}
 	case engine.EvWildShot:

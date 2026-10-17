@@ -94,7 +94,7 @@ describe("snapshotAfterSegment", () => {
     expect(describeEvent(ev({ p: 1, kind: "wound", result: "stun", n: 4 }), names)).toBe("dude suffers STUN 4");
     expect(describeEvent(evs[1], names)).toBe("marshal aims at A-F6: 2 AIM points");
     expect(describeEvent(ev({ p: 0, kind: "aim", to: "A-F9", target: 1, n: 4 }), names)).toBe("marshal aims at A-F9 (dude): 4 AIM points");
-    expect(describeEvent(evs[0], names)).toBe("marshal gains 1 delay (serious, card 37), now 1, loses 1 endurance");
+    expect(describeEvent(evs[0], names)).toBe("marshal draws card 37 (serious): gains 1 delay, now 1, loses 1 endurance");
     expect(endOfTurnEvents(evs)).toHaveLength(1);
     expect(eventsForSegment(evs, 0)).toHaveLength(1);
   });
@@ -110,8 +110,9 @@ describe("snapshotAfterSegment", () => {
     expect(describeEvent(events[3], names)).toBe("marshal turn: now facing SW");
     expect(describeEvent(events[0], names)).toBe("dude goes down");
     expect(describeEvent(events[1], names)).toBe("dude gains 2 delay (leap), now 2");
-    expect(describeEvent(ev({ p: 1, kind: "delay", n: 1, delay: 3, reason: "sprint", card: 42 }), names)).toBe("dude gains 1 delay (sprint, card 42), now 3");
+    expect(describeEvent(ev({ p: 1, kind: "delay", n: 1, delay: 3, reason: "sprint", card: 42 }), names)).toBe("dude draws card 42 (sprint): gains 1 delay, now 3");
     expect(describeEvent(ev({ p: 1, kind: "delay", reason: "leap", card: 95, result: "lose_aim" }), names)).toBe("dude draws card 95 (leap): LOSE AIM");
+    expect(describeEvent(ev({ p: 1, kind: "delay", n: 0, delay: 0, reason: "occupied", card: 15 }), names)).toBe("dude draws card 15 (occupied): no delay, now 0");
     expect(describeEvent(ev({ p: 1, kind: "delay", reason: "occupied", card: 107, result: "drop" }), names)).toBe("dude draws card 107 (occupied): DROP");
     expect(describeEvent(ev({ p: 0, kind: "wild_shot", gun: "colt45", gunId: 1 }), names)).toBe("marshal's Colt 45 goes off (wild shot)");
     expect(describeEvent(events[4], names)).toBe("dude: advance is cancelled (time)");

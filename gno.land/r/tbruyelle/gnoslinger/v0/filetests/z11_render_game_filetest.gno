@@ -62,8 +62,8 @@ func main(cur realm) {
 // Result cards drawn: 33, 2
 //
 // - seg 1: the\_kid goes down
-// - seg 1: the\_kid gains 0 delay (leap, card 33), now 0
-// - seg 1: the\_kid gains 0 delay (leap, card 2), now 0
+// - seg 1: the\_kid draws card 33 (leap): no delay, now 0
+// - seg 1: the\_kid draws card 2 (leap): no delay, now 0
 // - seg 2: marshal advance: A-D5 → A-E6
 // - seg 3: marshal run: A-E6 → A-E7
 // - seg 3: the\_kid advance: A-H7 → A-H6 (crawling)
@@ -77,7 +77,7 @@ func main(cur realm) {
 // - seg 2: marshal advance: A-E7 → A-E8
 // - seg 3: marshal run: A-E8 → A-E9
 // - seg 4: marshal sprint: A-E9 → A-E10
-// - seg 4: marshal gains 2 delay (sprint, card 70), now 2
+// - seg 4: marshal draws card 70 (sprint): gains 2 delay, now 2
 //
 // [Submit a plan]($help&func=SubmitPlan&id=0000001&plan=) · [Surrender]($help&func=Surrender&id=0000001) · [Claim timeout]($help&func=ClaimTimeout&id=0000001) (after 2009-02-15 23:31 UTC)
 //
