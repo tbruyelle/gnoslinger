@@ -300,6 +300,17 @@ const CSS = `
 .gv-log h2{margin:0;font-family:Rye,Georgia,serif;font-weight:400;font-size:22px;color:#33307F;border-bottom:3px solid #2A1C14;padding-bottom:6px}
 .gv-log ol{margin:0;padding:0 0 0 2px;list-style:none;display:flex;flex-direction:column;gap:7px;font-size:15px;line-height:1.35}
 .gv-log li.sub{padding-left:18px}
+.gv-log[data-act]{cursor:pointer}
+.gv-log[data-act]:hover{background:#FBF4E4}
+.gv-log-head{display:flex;align-items:center;gap:8px;border-bottom:3px solid #2A1C14;padding-bottom:6px}
+.gv-log-head h2{flex:1;border-bottom:0;padding-bottom:0}
+.gv-grow{width:36px;height:36px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:transparent;border:2px solid #2A1C14;border-radius:8px;color:#2A1C14;cursor:pointer}
+.gv-grow:hover{background:#2A1C14;color:#F3E7CE}
+.gv-modal-back{position:fixed;inset:0;z-index:420;pointer-events:auto;background:rgba(30,22,24,.72);display:flex;align-items:flex-start;justify-content:center;padding:64px 16px 24px}
+.gv-modal{position:relative;width:100%;max-width:56rem;max-height:calc(100vh - 88px);overflow-y:auto;padding:22px 64px 24px 28px}
+.gv-modal ol{font-size:18px;gap:9px}
+.gv-modal .gv-x{top:10px;right:10px;color:#2A1C14}
+.gv-modal .gv-x:hover{color:#F3E7CE;background:#2A1C14}
 `;
 
 const POINTER_SVG =
@@ -312,6 +323,8 @@ const CHECK_SVG =
 const HOURGLASS_SVG =
   '<svg width="18" height="22" viewBox="0 0 52 62" aria-hidden="true"><rect x="6" y="2" width="40" height="7" rx="2" fill="#F3E7CE"></rect><rect x="6" y="53" width="40" height="7" rx="2" fill="#F3E7CE"></rect>' +
   '<path d="M11,9 H41 Q41,24 26,31 Q11,24 11,9 Z M11,53 H41 Q41,38 26,31 Q11,38 11,53 Z" fill="none" stroke="#F3E7CE" stroke-width="4" stroke-linejoin="round"></path><path d="M17,48 Q26,40 35,48 Z" fill="#F3E7CE"></path></svg>';
+const GROW_SVG =
+  '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4 H20 V10"></path><path d="M20 4 L13 11"></path><path d="M10 20 H4 V14"></path><path d="M4 20 L11 13"></path></svg>';
 const CLOSE_SVG =
   '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M6 6 L18 18 M18 6 L6 18"></path></svg>';
 
@@ -332,6 +345,11 @@ export class ShowdownView {
   private ribbon: HTMLElement;
   /** The seat whose panel is highlighted (a token hovered), -1 for none. */
   private hlSeat = -1;
+  /** The resolution log read wide (a click on it during a replay), and the model it shows. */
+  private logOpen = false;
+  private logModal: HTMLElement | null = null;
+  private last: ShowdownModel | null = null;
+  private onKey: (e: KeyboardEvent) => void;
   private left: HTMLElement;
   private right: HTMLElement;
   private bottom: HTMLElement;
@@ -378,8 +396,16 @@ export class ShowdownView {
           return this.actions.sheet(Number(d.seat));
         case "seg":
           return this.actions.segment(Number(d.seg));
+        case "log":
+          return this.setLogOpen(true);
+        case "unlog":
+          return this.setLogOpen(false);
       }
     });
+    this.onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && this.logOpen) this.setLogOpen(false);
+    };
+    window.addEventListener("keydown", this.onKey);
     // The whole card over the side under the pointer, just above the hand.
     this.bottom.addEventListener("mouseover", (e) => {
       const el = (e.target as Element).closest<HTMLElement>("[data-image]");
@@ -410,6 +436,32 @@ export class ShowdownView {
       this.bottom.innerHTML = this.handHtml(m);
     }
     this.highlightSeat(this.hlSeat); // the panels were rebuilt
+    this.last = m;
+    this.renderLogModal();
+  }
+
+  private setLogOpen(open: boolean) {
+    this.logOpen = open;
+    this.renderLogModal();
+  }
+
+  /** The wide log while it is open and a replay shows; it closes by itself when the replay ends. */
+  private renderLogModal() {
+    if (!this.last?.replay) this.logOpen = false;
+    if (!this.logOpen || !this.last) {
+      this.logModal?.remove();
+      this.logModal = null;
+      return;
+    }
+    if (!this.logModal) {
+      this.logModal = document.createElement("div");
+      this.root.append(this.logModal);
+    }
+    // Redrawn on every step of the replay: keep where the reader scrolled to.
+    const top = this.logModal.querySelector(".gv-modal")?.scrollTop ?? 0;
+    this.logModal.innerHTML = this.logModalHtml(this.last);
+    const box = this.logModal.querySelector(".gv-modal");
+    if (box) box.scrollTop = top;
   }
 
   /** Marks the panel of the character whose token is under the pointer (-1: none), scrolling it into view. */
@@ -423,6 +475,7 @@ export class ShowdownView {
   }
 
   destroy() {
+    window.removeEventListener("keydown", this.onKey);
     this.root.remove();
     this.preview.remove();
   }
@@ -519,10 +572,28 @@ export class ShowdownView {
     );
   }
 
+  private logLines(m: ShowdownModel): string {
+    return m.replay!.log.map((l) => (l.startsWith("    ") ? `<li class="sub">${esc(l.trim())}</li>` : `<li>${esc(l)}</li>`)).join("");
+  }
+
+  /** The resolution log on the right; a click anywhere on it opens it wider (logModalHtml). */
   private logHtml(m: ShowdownModel): string {
-    const r = m.replay!;
-    const lines = r.log.map((l) => (l.startsWith("    ") ? `<li class="sub">${esc(l.trim())}</li>` : `<li>${esc(l)}</li>`)).join("");
-    return `<section class="gv-panel gv-log" aria-labelledby="gv-log"><h2 id="gv-log">${esc(r.logTitle)}</h2><ol>${lines}</ol></section>`;
+    return (
+      `<section class="gv-panel gv-log" aria-labelledby="gv-log" data-act="log" title="Click to read it wider">` +
+      `<div class="gv-log-head"><h2 id="gv-log">${esc(m.replay!.logTitle)}</h2>` +
+      `<button type="button" class="gv-grow" data-act="log" aria-label="Read the log wider">${GROW_SVG}</button></div>` +
+      `<ol>${this.logLines(m)}</ol></section>`
+    );
+  }
+
+  /** The same log in a wide dialog over the screen, kept up to date while the replay moves on. */
+  private logModalHtml(m: ShowdownModel): string {
+    return (
+      '<div class="gv-modal-back" data-act="unlog">' +
+      `<section class="gv-panel gv-log gv-modal" role="dialog" aria-modal="true" aria-labelledby="gv-log-wide" data-act="none">` +
+      `<h2 id="gv-log-wide">${esc(m.replay!.logTitle)}</h2><ol>${this.logLines(m)}</ol>` +
+      `<button type="button" class="gv-x" data-act="unlog" aria-label="Close the log">${CLOSE_SVG}</button></section></div>`
+    );
   }
 
   private replayHtml(m: ShowdownModel): string {
