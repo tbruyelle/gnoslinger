@@ -64,7 +64,7 @@
   - Check possible to move around a building corner
 - Cards
   - add drop weapon action cards (show waepon on the ground)
-  - add throw and strength
+  - enable throw and strength cards
   - add brawling
     - add knifes and others
 - Aim/Shoots
