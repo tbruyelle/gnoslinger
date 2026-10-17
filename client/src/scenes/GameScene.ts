@@ -119,6 +119,27 @@ const STACK_SPREAD = 0.6;
 /** The room between two spread neighbours' centres, in token diameters, so they barely overlap. */
 const STACK_GAP = 0.9;
 const STACK_MS = 180;
+/** The gold halo behind a token under the pointer: its diameter over the ring's. */
+const HALO_SIZE = 1.3;
+const HALO_TEXTURE = "token_halo";
+
+/** The halo's texture, a gold disc fading out towards its rim, drawn once per game. */
+function haloTexture(scene: Phaser.Scene): string {
+  if (scene.textures.exists(HALO_TEXTURE)) return HALO_TEXTURE;
+  const size = 128;
+  const tex = scene.textures.createCanvas(HALO_TEXTURE, size, size);
+  const ctx = tex?.getContext();
+  if (!tex || !ctx) return HALO_TEXTURE;
+  const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  // The ring sits at 1 / HALO_SIZE of the radius: full gold up to it, fading out beyond.
+  g.addColorStop(0, "rgba(242,181,68,0.95)");
+  g.addColorStop(0.7, "rgba(242,181,68,0.85)");
+  g.addColorStop(1, "rgba(242,181,68,0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  tex.refresh();
+  return HALO_TEXTURE;
+}
 
 /**
  * Where occupant i of n sits around a shared hex's centre, in token
@@ -218,14 +239,17 @@ class CharacterToken {
   /** The ring's breathing while the character awaits its player's move (setPulse), and its radius at rest. */
   private pulseTween: Phaser.Tweens.Tween | null = null;
   private readonly ringRadius: number;
+  /** The gold halo behind the token while the pointer is on it (setHover), made on the first hover. */
+  private halo: Phaser.GameObjects.Image | null = null;
   /** Hover handlers for the gun icon and the AIM markers (by aimer seat), set by the scene. */
   onGunHover: ((over: boolean) => void) | null = null;
   onAimHover: ((aimer: number, over: boolean) => void) | null = null;
 
   /**
-   * Each token owns a band of 5 depths (ring, sprite, DOWN overlay, gun, DEL
+   * Each token owns a band of 5 depths (sprite, ring, DOWN overlay, gun, DEL
    * badge), later seats above earlier ones, so stacked tokens layer as units
-   * and a hidden token's badge never shows over the token covering it.
+   * and a hidden token's badge never shows over the token covering it. The
+   * ring, around the sprite, goes over it; the hover halo goes under both.
    */
   constructor(
     readonly charKey: string,
@@ -233,8 +257,8 @@ class CharacterToken {
     readonly highlight: Phaser.GameObjects.Arc,
     private readonly depth: number,
   ) {
-    highlight.setDepth(depth);
-    sprite.setDepth(depth + 1);
+    sprite.setDepth(depth);
+    highlight.setDepth(depth + 1);
     this.baseScale = sprite.scaleX;
     this.ringRadius = highlight.radius;
   }
@@ -266,6 +290,7 @@ class CharacterToken {
   private applyLift() {
     this.sprite.setScale(this.baseScale * this.lift);
     this.highlight.setScale(this.lift);
+    this.sizeHalo();
     this.overlay?.setScale(this.sprite.scaleX);
     const d = this.sprite.displayWidth;
     this.badge?.setDisplaySize(d * 0.42, d * 0.42);
@@ -288,6 +313,7 @@ class CharacterToken {
   private get parts(): Phaser.GameObjects.GameObject[] {
     const list: Phaser.GameObjects.GameObject[] = [this.sprite, this.highlight];
     if (this.overlay) list.push(this.overlay);
+    if (this.halo) list.push(this.halo);
     if (this.badge) list.push(this.badge);
     if (this.gun) list.push(this.gun);
     if (this.shells) list.push(this.shells);
@@ -345,6 +371,7 @@ class CharacterToken {
   private follow() {
     const { x, y } = this.sprite;
     this.highlight.setPosition(x, y);
+    this.halo?.setPosition(x, y);
     this.overlay?.setPosition(x, y);
     if (this.badge) {
       const a = Phaser.Math.DegToRad(this.badgeAngle());
@@ -638,6 +665,27 @@ class CharacterToken {
 
   setHighlight(color: number, alpha: number, width = 3) {
     this.highlight.setStrokeStyle(width, color, alpha);
+  }
+
+  /** Fades a gold halo in behind the token while the pointer is on it, out when it leaves; the ring keeps its seat colour. */
+  setHover(scene: Phaser.Scene, on: boolean, mask: Phaser.Display.Masks.GeometryMask) {
+    if (on && !this.halo) {
+      this.halo = scene.add.image(this.sprite.x, this.sprite.y, haloTexture(scene)).setAlpha(0).setMask(mask).setDepth(this.depth - 0.25); // over the aim zone shown on hover (0.5)
+      this.sizeHalo();
+    }
+    if (!this.halo) return;
+    scene.tweens.killTweensOf(this.halo);
+    scene.tweens.add({ targets: this.halo, alpha: on ? 1 : 0, duration: on ? 120 : 180, ease: "Sine.easeOut" });
+  }
+
+  dropHalo() {
+    this.halo?.destroy();
+    this.halo = null;
+  }
+
+  private sizeHalo() {
+    const d = 2 * this.ringRadius * this.lift * HALO_SIZE;
+    this.halo?.setDisplaySize(d, d);
   }
 }
 
@@ -1171,6 +1219,7 @@ export class GameScene extends Phaser.Scene {
         t.killTweens(this.tweens);
         t.sprite.destroy();
         t.highlight.destroy();
+        t.dropHalo();
         t.setOverlay(this, null, this.arrMask);
         t.setDelay(this, 0, this.arrMask);
         t.setGun(this, null, this.arrMask);
@@ -1209,11 +1258,11 @@ export class GameScene extends Phaser.Scene {
         this.openSheet(i);
       });
       img.on("pointerover", () => {
-        this.tokens[i]?.setHighlight(0xffe2a0, 1, 4);
+        this.tokens[i]?.setHover(this, true, this.arrMask);
         if (!this.playback) this.showAimZone(i); // not in a replay
       });
       img.on("pointerout", () => {
-        this.applyTokenHighlight(i);
+        this.tokens[i]?.setHover(this, false, this.arrMask);
         this.hideAimZone();
       });
       const token = new CharacterToken(charKey, img, hl, CharacterToken.depthFor(i));

@@ -548,7 +548,8 @@ played, victory points, since). `game/lobby.ts` sorts the games into
   a colour (`ui/seats.ts`, `SEAT_COLORS`: indigo, brick, green, teal,
   apart in hue and lightness): the panels' rule, the token rings (mine wider
   and growing and shrinking while it is my move, `setPulse`; never another colour,
-  since the AIM markers' frames use the same ones), the timeline's dot, the character
+  since the AIM markers' frames use the same ones; a token under the
+  pointer gets a gold halo behind it instead, `setHover`, `haloTexture`), the timeline's dot, the character
   sheet's accent and the frame of its AIM markers. Clicking a
   character panel opens its sheet. The hand builds an
   ordered plan with a live preview (`replayPlan`) and relative-direction hex
