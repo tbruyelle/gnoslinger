@@ -125,6 +125,37 @@ Render("json/games/{addr}")
   target picker listing every character, and the replay timeline with one
   row per character (proposed in the Replay mockup on the Design canvas).
 
+## More seats and teams
+
+Two pieces of work past today's battle royale of 2 to 4, besides the
+packages themselves (Phases).
+
+**The battle royale up to 8 seats** (`battleroyale/v1`). More than raising
+`engine.MaxPlayers` (4):
+- set up: four more `CharSetup` entries (`engine/v0/setup.gno`, mirrored in
+  the client's `game/setup.ts`); eight zones around the middle of the
+  corral need more room than today's four;
+- four more characters, with their tokens and names;
+- four more seat colours (`ui/seats.ts`), apart in hue and lightness and
+  visible on the board's tan;
+- the screens (DESIGN_MULTIPLAYER.md, Order of what is left): up to seven
+  opponent panels, eight timeline rows in a replay (a "Me / everyone"
+  filter), a header of eight names ("+3");
+- cost: a turn's gas and storage deposit grow with the seats; measure a
+  turn resolving 8 plans against the client's fixed 100M gas limit
+  (`DEFAULT_GAS_WANTED`);
+- the snapshots' per-seat fields (`Hurt`, `Killers`, `SeriousFrom`,
+  `LegFrom`) grow to 8 entries; older records with 4 already read.
+
+**Teams** (the OK Corral, `corral/v0`). The engine has none today: every
+character is a side of its own (`victory.gno`). Needed:
+- a side per seat, so an aim or a shot at an ally is refused or allowed
+  (friendly fire);
+- the victory points that need sides: Ally killed (15.23), Hold the field
+  and Captured per side, a side's score;
+- a team pick in the lobby, team colours instead of seat colours, the
+  panels grouped by team.
+
 ## Phases
 
 1. **Spike (1 to 2 days).** Filetests on the pinned gno to confirm:
@@ -153,7 +184,7 @@ Render("json/games/{addr}")
    screens need past four seats and for teams: DESIGN_MULTIPLAYER.md,
    Order of what is left, 3).
 5. **New showdowns.** `battleroyale/v1` (up to 8 seats), then
-   `corral/v0`. With more than two
+   `corral/v0` with teams (More seats and teams). With more than two
    players commit-reveal matters more: every extra player is one more who
    could read the others' plans before sending their own.
 

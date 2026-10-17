@@ -53,8 +53,6 @@
 - aim transfer own-hex exception (12.5): AIM markers cannot move into or out
   of the shooter's own hex (allowed between two targets both in it, or both
   out of it); missing in the engine's `reveal` and the client's `replayPlan`
-- >4 players (the showdown's set up stops at four characters) and teams, 
-  see DESIGN_SHOWDOWNS.md and DESIGN_MULTIPLAYER.md
 - add winning/losing burst
 - show tips (or highlight a card with some text)
   - when no gun: show need to draw and cock
