@@ -54,7 +54,9 @@ func TestEncodeCharactersRoundTrip(t *testing.T) {
 	st.Chars[0].Aim, st.Chars[0].AimHex, st.Chars[0].Endurance, st.Chars[0].Exhausted = 4, "A-F6", 11, 1
 	st.Chars[0].Serious, st.Chars[0].GunArm, st.Chars[0].OtherArm, st.Chars[0].Leg = 2, 4, 1, 3
 	st.Chars[0].Guns = Guns{{ID: 1, Type: Colt45, Location: GunHand, Cocked: true, Shells: 4, Jammed: true}, {ID: 3, Type: Colt45, Location: Holstered, Shells: 6, Exploded: true}}
-	st.Chars[0].KilledBy, st.Chars[0].SeriousBy, st.Chars[0].LegBy = 1, 1, 0
+	st.Chars[0].Killers = [MaxPlayers]bool{false, true, false, true}
+	st.Chars[0].SeriousFrom = [MaxPlayers]int{0, 1, 1, 0}
+	st.Chars[0].LegFrom = [MaxPlayers]int{3, 0, 0, 0}
 	st.Chars[0].Hurt = [MaxPlayers]int{0, 7, 0, 2}
 	st.Chars[1].Guns = Guns{} // no gun at all
 	st.Chars[1].Aim, st.Chars[1].AimAt = 2, 0
@@ -76,8 +78,18 @@ func TestEncodeCharactersRoundTrip(t *testing.T) {
 	// A record of the two seat days (18 fields): nobody named, but markers
 	// off any hex followed the opponent.
 	old := DecodeChars("A-F3|3|0|0|0|0|0|0|0|4||20|0|0|0|0|0|1:colt45:1:1:6:0:0;A-F9|0|0|0|0|0|0|0|0|0||20|0|0|0|0|0|")
-	if len(old) != 2 || old[0].Aim != 4 || old[0].AimAt != 1 || old[1].AimAt != NoSeat || old[0].KilledBy != NoSeat || old[0].SeriousBy != NoSeat || old[0].Guns[0].ID != 1 {
+	if len(old) != 2 || old[0].Aim != 4 || old[0].AimAt != 1 || old[1].AimAt != NoSeat || old[0].Killers != ([MaxPlayers]bool{}) || old[0].SeriousFrom != ([MaxPlayers]int{}) || old[0].Guns[0].ID != 1 {
 		t.Errorf("18-field records: got %+v", old)
+	}
+	// A record of the single-seat days (23 fields): KilledBy 1, SeriousBy 1
+	// with 2 SERIOUS points, LegBy 0 with 3 LEG points.
+	one := DecodeCharacter("A-F3|3|1|0|2|0|0|0|0|0||0|0|2|0|0|3||-1|1|1|0|0/5/0/0")
+	if one.Killers != [MaxPlayers]bool{false, true, false, false} || one.SeriousFrom != [MaxPlayers]int{0, 2, 0, 0} || one.LegFrom != [MaxPlayers]int{3, 0, 0, 0} || one.Hurt != [MaxPlayers]int{0, 5, 0, 0} {
+		t.Errorf("23-field single-seat record: got %+v", one)
+	}
+	// Nobody named (-1).
+	if none := DecodeCharacter("A-F3|3|0|0|0|0|0|0|0|0||20|0|0|0|0|0||-1|-1|-1|-1|"); none.Killers != ([MaxPlayers]bool{}) || none.SeriousFrom != ([MaxPlayers]int{}) {
+		t.Errorf("23-field record naming nobody: got %+v", none)
 	}
 	// Four seats round trip too.
 	four := fourState()

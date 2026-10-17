@@ -26,6 +26,10 @@ var VPPoints = map[string]int{
 	VPKnockOut:  1,
 }
 
+// VPSharedKill is what each enemy gets when several KILLs land in the same
+// segment: 15.2 shares the "Kill enemy" points, kept whole here.
+const VPSharedKill = 1
+
 // Award is victory points a character earns (Points > 0) or loses.
 type Award struct {
 	Player int
@@ -35,7 +39,8 @@ type Award struct {
 
 // TurnVictoryPoints scores what a turn did, from the characters before and
 // after it: a character killed loses the "Killed" points and the enemy
-// whose hit killed it gets "Kill enemy" (15.2, Character.KilledBy); one
+// whose hit killed it gets "Kill enemy" (15.2, Character.Killers), or,
+// when several enemies share the kill, 1 point each (kept whole); one
 // who passed out gets nothing and the enemy who crossed off most of its
 // endurance boxes "Knock out enemy" (15.3, Character.Hurt). A character
 // who is not up cannot be hit, so a knocked-out one is never killed
@@ -49,8 +54,18 @@ func TurnVictoryPoints(before, after State) []Award {
 		switch c.Status {
 		case Killed:
 			out = append(out, award(p, VPKilled))
-			if k := c.KilledBy; k >= 0 && k < len(after.Chars) && k != p {
-				out = append(out, award(k, VPKill))
+			var killers []int
+			for q, k := range c.Killers {
+				if k && q != p && q < len(after.Chars) {
+					killers = append(killers, q)
+				}
+			}
+			for _, q := range killers {
+				if len(killers) == 1 {
+					out = append(out, award(q, VPKill))
+				} else {
+					out = append(out, Award{Player: q, Reason: VPKill, Points: VPSharedKill})
+				}
 			}
 		case PassedOut:
 			if k := knockedOutBy(c); k >= 0 {

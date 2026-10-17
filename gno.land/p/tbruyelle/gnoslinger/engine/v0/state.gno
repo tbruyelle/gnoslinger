@@ -96,14 +96,16 @@ type Character struct {
 	GunArm   int
 	OtherArm int
 	Leg      int
-	// Who did it, for the victory points (15.2, 15.3): the seat whose hit
-	// killed the character (NoSeat for none), the seat that gave the last
-	// SERIOUS and LEG wound (the fatigue those wounds cost later is put down
-	// to it), and the endurance boxes each seat's hits crossed off.
-	KilledBy  int
-	SeriousBy int
-	LegBy     int
-	Hurt      [MaxPlayers]int
+	// Who did it, for the victory points (15.2, 15.21, 15.3), by seat: the
+	// seats credited with the kill (several when their KILLs landed in the
+	// same segment, or tied for the most SERIOUS points), the SERIOUS and
+	// LEG points each seat's wounds gave (the fatigue those wounds cost
+	// later is put down to it), and the endurance boxes each seat's hits
+	// crossed off.
+	Killers     [MaxPlayers]bool
+	SeriousFrom [MaxPlayers]int
+	LegFrom     [MaxPlayers]int
+	Hurt        [MaxPlayers]int
 }
 
 // GroundGun is a weapon lying in a hex (10.21). ID identifies it on the
@@ -136,7 +138,7 @@ func NewState(n int) State {
 
 // newCharacter is a character's sheet at the start of a showdown.
 func newCharacter() Character {
-	return Character{Guns: startingGuns(), Endurance: StartEndurance, AimAt: NoSeat, KilledBy: NoSeat, SeriousBy: NoSeat, LegBy: NoSeat}
+	return Character{Guns: startingGuns(), Endurance: StartEndurance, AimAt: NoSeat}
 }
 
 // char is the character of a seat, nil for a seat the state does not have.
@@ -173,15 +175,13 @@ func CloneChars(cs []Character) []Character {
 			GunArm:      c.GunArm,
 			OtherArm:    c.OtherArm,
 			Leg:         c.Leg,
-			KilledBy:    c.KilledBy,
-			SeriousBy:   c.SeriousBy,
-			LegBy:       c.LegBy,
+			Killers:     c.Killers,
+			SeriousFrom: c.SeriousFrom,
+			LegFrom:     c.LegFrom,
+			Hurt:        c.Hurt,
 		}
 		for j, g := range c.Guns {
 			out[i].Guns[j] = Gun{ID: g.ID, Type: g.Type, Location: g.Location, Cocked: g.Cocked, Shells: g.Shells, Jammed: g.Jammed, Exploded: g.Exploded}
-		}
-		for j, n := range c.Hurt {
-			out[i].Hurt[j] = n
 		}
 	}
 	return out
@@ -243,8 +243,9 @@ func EndTurn(s State) (State, []Event) {
 
 // EndShowdown is the end-of-game check (14.5): every character with SERIOUS
 // wounds draws a result card and is killed when its DELAY number plus the
-// wound points reaches four; the enemy who gave the wound gets the kill
-// (15.2). The state given is left as it is.
+// wound points reaches four; the enemy who gave the most SERIOUS points
+// gets the kill, enemies tied for the most share it (15.21). The state
+// given is left as it is.
 func EndShowdown(s State, d Drawer) (State, []Event) {
 	s.Chars = CloneChars(s.Chars)
 	var evs []Event
@@ -260,7 +261,7 @@ func EndShowdown(s State, d Drawer) (State, []Event) {
 		}
 		evs = append(evs, Event{Seg: EndOfTurn, Player: p, Kind: EvSeriousCheck, Card: card.N, N: n + c.Serious})
 		if n+c.Serious >= 4 {
-			kill(c, c.SeriousBy)
+			kill(c, mostSeats(c.SeriousFrom))
 			evs = append(evs, Event{Seg: EndOfTurn, Player: p, Kind: EvWound, Result: string(Kill)})
 			dropAllGuns(p, c, EndOfTurn, &s, &evs)
 		}
@@ -268,15 +269,42 @@ func EndShowdown(s State, d Drawer) (State, []Event) {
 	return s, evs
 }
 
-// kill takes a character out of the game (14.6), killed by seat by (NoSeat
-// when nobody's hit did it): down, no delay marker, no endurance left.
-func kill(c *Character, by int) {
+// kill takes a character out of the game (14.6), killed by the seats
+// marked in by (none when nobody's hit did it): down, no delay marker, no
+// endurance left.
+func kill(c *Character, by [MaxPlayers]bool) {
 	c.Status = Killed
 	c.Down = true
 	clearAim(c)
 	c.Delay = 0
 	c.Endurance = 0
-	c.KilledBy = by
+	c.Killers = by
+}
+
+// seat marks one seat, none for NoSeat.
+func seat(p int) (out [MaxPlayers]bool) {
+	if p >= 0 && p < MaxPlayers {
+		out[p] = true
+	}
+	return out
+}
+
+// mostSeats marks the seats with the most points, every one of them on a
+// tie; none when nobody has any.
+func mostSeats(pts [MaxPlayers]int) (out [MaxPlayers]bool) {
+	most := 0
+	for _, n := range pts {
+		if n > most {
+			most = n
+		}
+	}
+	if most == 0 {
+		return out
+	}
+	for q, n := range pts {
+		out[q] = n == most
+	}
+	return out
 }
 
 // clearAim takes the AIM markers off the sheet.

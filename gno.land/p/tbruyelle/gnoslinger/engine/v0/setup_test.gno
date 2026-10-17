@@ -36,7 +36,7 @@ func TestNewStateIsUnplaced(t *testing.T) {
 			if c.Hex != "" || c.Down || c.Status != Alive || c.Endurance != StartEndurance || len(c.Guns) == 0 || c.Guns[0].Location != Holstered || c.Guns[0].Shells != 6 {
 				t.Errorf("seat %d = %+v", p, c)
 			}
-			if c.AimAt != NoSeat || c.KilledBy != NoSeat || c.SeriousBy != NoSeat || c.LegBy != NoSeat {
+			if c.AimAt != NoSeat || c.Killers != ([MaxPlayers]bool{}) || c.SeriousFrom != ([MaxPlayers]int{}) || c.LegFrom != ([MaxPlayers]int{}) {
 				t.Errorf("seat %d names a seat: %+v", p, c)
 			}
 		}

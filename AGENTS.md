@@ -412,14 +412,21 @@ points); the crawl penalty is a fixed +2 with `Card` 0. Tests use
 side of its own, are scored at the end of every turn: `TurnVictoryPoints`
 compares the characters before the turn (the `start` snapshot) and after
 it: Killed −8 and Kill enemy +2 to the enemy whose hit killed it
-(`Character.KilledBy`, set by the killing shot, or for a SERIOUS death at
-the end by `SeriousBy`); passing out 0 and Knock out enemy +1 to the enemy
-who crossed off most of its endurance boxes (`Character.Hurt[seat]`: the
-boxes each seat's hits cost, wound and fatigue cards of STUN and LIGHT to
-the shooter, the fatigue of SERIOUS and LEG wounds to the seat that gave
-the wound, `SeriousBy`, `LegBy`; a tie goes to the first seat; a character
-down and out can no longer be hit, so a knock out is never followed by a
-kill). When the showdown ends with the turn,
+(`Character.Killers`, one flag per seat, set by the killing shot), or +1
+each (`VPSharedKill`) when the kill is shared: several enemies' KILLs land
+in the same segment (15.2; the hits apply in seat order, the first kills
+and a later KILL of that segment is marked too), or a SERIOUS death at the
+end goes to the enemies tied for the most SERIOUS points (15.21,
+`EndShowdown`, `mostSeats` over `Character.SeriousFrom`); passing out 0 and
+Knock out enemy +1 to the enemy who crossed off most of its endurance boxes
+(`Character.Hurt[seat]`: the boxes each seat's hits cost, wound and fatigue
+cards of STUN and LIGHT to the shooter, each fatigue card of SERIOUS and
+LEG wounds to the seat whose wound gave that point, `SeriousFrom` and
+`LegFrom`, the points per seat, `pointFrom`; `Serious` and `Leg` stay the
+totals; the per-seat fields are encoded "/"-separated, an older record's
+single seat getting the kill or all the points); a tie goes to the first
+seat; a character down and out can no longer be hit, so a knock out is
+never followed by a kill). When the showdown ends with the turn,
 `EndVictoryPoints` follows: still up, Survive +2, and Hold the field +2 when
 the only one; Out (surrendered or out of time) Surrender −2 and the
 Knock out +1 as above; passed out or surrendered, Captured −4 when an enemy

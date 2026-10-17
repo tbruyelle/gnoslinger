@@ -986,6 +986,22 @@ func TestEndShowdownSeriousCheck(t *testing.T) {
 	if st, _ = EndShowdown(st, &seq); st.Chars[0].Status != Alive {
 		t.Error("LOSE AIM should count as 0")
 	}
+	// The kill goes to the enemy who gave the most SERIOUS points (15.21):
+	// seat 2's 3 over seat 3's 1 (+2); a 2-2 tie shares it (+1 each).
+	st = fourState()
+	st.Chars[1].Serious, st.Chars[1].SeriousFrom = 4, [MaxPlayers]int{0, 0, 3, 1}
+	seq = Sequence{37}
+	after, _ := EndShowdown(st, &seq)
+	if s := awardsString(TurnVictoryPoints(st, after)); s != " 1:killed 2:kill_enemy" || after.Chars[1].Killers != seat(2) {
+		t.Errorf("most SERIOUS points: awards %q, killers %v", s, after.Chars[1].Killers)
+	}
+	st.Chars[1].SeriousFrom = [MaxPlayers]int{0, 0, 2, 2}
+	seq = Sequence{37}
+	after, _ = EndShowdown(st, &seq)
+	a := TurnVictoryPoints(st, after)
+	if tot := VPTotals(a, 4); awardsString(a) != " 1:killed 2:kill_enemy 3:kill_enemy" || tot[2] != 1 || tot[3] != 1 {
+		t.Errorf("tied SERIOUS points: awards %q, totals %v", awardsString(a), tot)
+	}
 }
 
 func TestAimAtCharacterOrHex(t *testing.T) {
@@ -1344,6 +1360,35 @@ func TestLineOfSightShotAtHex(t *testing.T) {
 	}
 }
 
+func TestSharedKill(t *testing.T) {
+	// Seats 0 (F5, looking south) and 3 (F7, looking north) both shoot seat
+	// 2 between them in F6 with 8 AIM points: two bullseyes, two KILLs in
+	// the same segment. Seat 0 comes first and kills; seat 3's KILL lands
+	// at the same time and is put down as shared (15.2).
+	st := fourState()
+	st.Chars[0].Hex, st.Chars[0].Facing = "A-F5", hex.S
+	st.Chars[2].Hex, st.Chars[2].Facing = "A-F6", hex.N
+	st.Chars[3].Hex, st.Chars[3].Facing = "A-F7", hex.N
+	st.Chars[1].Hex = "A-B2"
+	for _, p := range []int{0, 3} {
+		st.Chars[p].Guns[0].Location, st.Chars[p].Guns[0].Cocked = GunHand, true
+		st.Chars[p].Aim, st.Chars[p].AimAt = 8, 2
+	}
+	seq := Sequence{6, 6}
+	plans := []Plan{mustPlan(t, "5f:shoot:@2"), nil, nil, mustPlan(t, "5f:shoot:@2")}
+	after, _ := Resolve(hex.A, st, plans, &seq)
+	if c := after.Chars[2]; c.Status != Killed || c.Killers != [MaxPlayers]bool{true, false, false, true} {
+		t.Fatalf("seat 2 = %+v", c)
+	}
+	a := TurnVictoryPoints(st, after)
+	if s := awardsString(a); s != " 2:killed 0:kill_enemy 3:kill_enemy" {
+		t.Errorf("awards = %q", s)
+	}
+	if tot := VPTotals(a, 4); tot[0] != 1 || tot[3] != 1 {
+		t.Errorf("totals = %v", tot)
+	}
+}
+
 func TestSeatsAsTargets(t *testing.T) {
 	// Four seats in a column: 0 at F5 looking south, 2 at F6, 3 at F8 looking
 	// south, 1 at F9. Seat 0 shoots seat 2 with 8 AIM points on it (card 6 at
@@ -1364,7 +1409,7 @@ func TestSeatsAsTargets(t *testing.T) {
 	if sh := ofKind(evs, 0, EvShot); len(sh) != 1 || sh[0].Target != 2 || sh[0].To != "A-F6" || sh[0].Range != 1 || sh[0].Hit != string(VitalHit) {
 		t.Errorf("seat 0's shot = %v", sh)
 	}
-	if c := st.Chars[2]; c.Status != Killed || c.KilledBy != 0 || c.Hex != "A-F5" || c.Guns.Count() != 0 {
+	if c := st.Chars[2]; c.Status != Killed || c.Killers != seat(0) || c.Hex != "A-F5" || c.Guns.Count() != 0 {
 		t.Errorf("seat 2 = %+v", c)
 	}
 	if len(st.Ground) != 1 || st.Ground[0].Hex != "A-F5" {
@@ -1439,23 +1484,31 @@ func TestHurtIsPutDownToTheShooter(t *testing.T) {
 		t.Fatalf("wounds = %v", w)
 	}
 	c := st.Chars[1]
-	if c.Endurance != 18 || c.Hurt != [MaxPlayers]int{0, 0, 2, 0} || c.KilledBy != NoSeat {
+	if c.Endurance != 18 || c.Hurt != [MaxPlayers]int{0, 0, 2, 0} || c.Killers != ([MaxPlayers]bool{}) {
 		t.Errorf("seat 1 = %+v", c)
 	}
 	// A LEG wound's fatigue goes to whoever gave it; a SERIOUS wound's too,
 	// drawn at the turn start.
 	st = fourState()
-	st.Chars[1].Leg, st.Chars[1].LegBy = 1, 3
-	st.Chars[1].Serious, st.Chars[1].SeriousBy = 1, 2
+	st.Chars[1].Leg, st.Chars[1].LegFrom[3] = 1, 1
+	st.Chars[1].Serious, st.Chars[1].SeriousFrom[2] = 1, 1
 	st, _ = Resolve(hex.A, st, []Plan{nil, mustPlan(t, "1f:ahead"), nil, nil}, Fixed(37))
 	if c := st.Chars[1]; c.Endurance != 18 || c.Hurt != [MaxPlayers]int{0, 0, 1, 1} {
 		t.Errorf("seat 1 = %+v", c)
 	}
 	// Boxes crossed off are counted, not points beyond the last box.
 	st = fourState()
-	st.Chars[1].Endurance, st.Chars[1].Serious, st.Chars[1].SeriousBy = 1, 3, 0
+	st.Chars[1].Endurance, st.Chars[1].Serious, st.Chars[1].SeriousFrom[0] = 1, 3, 3
 	st, _ = Resolve(hex.A, st, nil, Fixed(37))
 	if c := st.Chars[1]; c.Endurance != 0 || c.Hurt[0] != 1 {
+		t.Errorf("seat 1 = %+v", c)
+	}
+	// SERIOUS points from two seats: each fatigue card goes to the seat
+	// whose wound gave it (3 to seat 2, 1 to seat 3).
+	st = fourState()
+	st.Chars[1].Serious, st.Chars[1].SeriousFrom = 4, [MaxPlayers]int{0, 0, 3, 1}
+	st, _ = Resolve(hex.A, st, nil, Fixed(37))
+	if c := st.Chars[1]; c.Hurt != [MaxPlayers]int{0, 0, 3, 1} {
 		t.Errorf("seat 1 = %+v", c)
 	}
 }

@@ -170,8 +170,9 @@ func Resolve(board *hex.Board, st State, plans []Plan, d Drawer) (State, []Event
 		if c.Status != Alive {
 			continue
 		}
+		// Each SERIOUS point draws a fatigue card, put down to the seat whose wound gave it.
 		for i := 0; i < c.Serious; i++ {
-			c.Delay += drawCard(p, c, 0, ReasonSerious, fatigueLine, c.SeriousBy, d, &evs)
+			c.Delay += drawCard(p, c, 0, ReasonSerious, fatigueLine, pointFrom(c.SeriousFrom, i), d, &evs)
 		}
 	}
 	runningDelay(evs, startDelay)
@@ -364,6 +365,29 @@ func reveal(board *hex.Board, p int, st *State, a Action, seg int, evs *[]Event)
 			c.AimAt = a.Target
 		}
 	}
+}
+
+// pointFrom is the seat that gave the i-th of a wound's points, counted
+// seat by seat through from; NoSeat past them (points nobody is put down
+// for).
+func pointFrom(from [MaxPlayers]int, i int) int {
+	for q, n := range from {
+		if i < n {
+			return q
+		}
+		i -= n
+	}
+	return NoSeat
+}
+
+// hasKill tells whether a hit's penalties include a KILL.
+func hasKill(pens []Penalty) bool {
+	for _, pen := range pens {
+		if pen.Kind == Kill {
+			return true
+		}
+	}
+	return false
 }
 
 func loseAim(p int, c *Character, seg int, reason string, evs *[]Event) {
@@ -642,6 +666,12 @@ func targetStatus(card ResultCard, hit HitLoc, t *Character) (HitLoc, string) {
 // as the one who did it (15.2, 15.3). It returns the delay points gained.
 func applyPenalties(board *hex.Board, p int, st *State, r pending, seg int, d Drawer, evs *[]Event) (gained int) {
 	c := &st.Chars[p]
+	// Killed by an earlier shooter's KILL of this same segment (a character
+	// already out cannot be shot): this KILL lands simultaneously, they
+	// share the kill (15.2).
+	if c.Status == Killed && hasKill(r.pens) {
+		c.Killers[r.from] = true
+	}
 	for _, pen := range r.pens {
 		if c.Status != Alive {
 			break
@@ -649,7 +679,7 @@ func applyPenalties(board *hex.Board, p int, st *State, r pending, seg int, d Dr
 		*evs = append(*evs, Event{Seg: seg, Player: p, Kind: EvWound, Result: string(pen.Kind), N: pen.N})
 		switch pen.Kind {
 		case Kill:
-			kill(c, r.from)
+			kill(c, seat(r.from))
 			dropAllGuns(p, c, seg, st, evs)
 		case Stun:
 			for i := 0; i < pen.N; i++ {
@@ -660,7 +690,7 @@ func applyPenalties(board *hex.Board, p int, st *State, r pending, seg int, d Dr
 			gained += stagger(board, p, c, &st.Chars[r.from], seg, d, evs)
 		case Serious:
 			c.Serious += pen.N
-			c.SeriousBy = r.from
+			c.SeriousFrom[r.from] += pen.N
 		case DropGunHand:
 			dropHand(p, c, GunHand, OtherHand, seg, st, evs)
 			loseAim(p, c, seg, string(DropGunHand), evs)
@@ -673,7 +703,7 @@ func applyPenalties(board *hex.Board, p int, st *State, r pending, seg int, d Dr
 			c.OtherArm += pen.N
 		case LegWound:
 			c.Leg += pen.N
-			c.LegBy = r.from
+			c.LegFrom[r.from] += pen.N
 		case Light:
 			for i := 0; i < pen.N; i++ {
 				gained += drawCard(p, c, seg, ReasonLight, fatigueLine, r.from, d, evs)
@@ -801,8 +831,8 @@ func execute(board *hex.Board, p int, a Action, st *State, seg int, d Drawer, ev
 			gained += 2
 			*evs = append(*evs, Event{Seg: seg, Player: p, Kind: EvDelay, N: 2, Reason: ReasonCrawl})
 		} else {
-			for i := 0; i < c.Leg; i++ { // LEG wound (14.12)
-				gained += drawCard(p, c, seg, ReasonLeg, fatigueLine, c.LegBy, d, evs)
+			for i := 0; i < c.Leg; i++ { // LEG wound (14.12), each card put down to the seat whose wound gave it
+				gained += drawCard(p, c, seg, ReasonLeg, fatigueLine, pointFrom(c.LegFrom, i), d, evs)
 			}
 		}
 		gained += terrain(board, p, c, from, dir, seg, d, evs)

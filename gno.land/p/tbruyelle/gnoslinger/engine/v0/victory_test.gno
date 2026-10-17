@@ -23,7 +23,7 @@ func endState(s0, s1 Status, e0, e1 int) State {
 	s.Chars[1].Hurt[0] = StartEndurance - e1
 	for p := range s.Chars {
 		if s.Chars[p].Status == Killed {
-			s.Chars[p].KilledBy = 1 - p
+			s.Chars[p].Killers = seat(1 - p)
 		}
 	}
 	return s
@@ -101,7 +101,7 @@ func TestVictoryPoints_FourSeats(t *testing.T) {
 	// most; seats 0 and 2 both survive, so nobody holds the field and the
 	// surrendered one is not captured.
 	s := fourState()
-	s.Chars[1].Status, s.Chars[1].Endurance, s.Chars[1].KilledBy = Killed, 0, 2
+	s.Chars[1].Status, s.Chars[1].Endurance, s.Chars[1].Killers = Killed, 0, seat(2)
 	s.Chars[1].Hurt = [MaxPlayers]int{3, 0, 17, 0}
 	s.Chars[3].Status, s.Chars[3].Endurance = Out, 12
 	s.Chars[3].Hurt = [MaxPlayers]int{5, 0, 3, 0}
@@ -115,9 +115,17 @@ func TestVictoryPoints_FourSeats(t *testing.T) {
 	a = append(TurnVictoryPoints(fourState(), s), EndVictoryPoints(s)...)
 	uassert.Equal(t, " 1:killed 2:kill_enemy 0:knock_out_enemy 0:survive 0:hold_field 2:captured 3:surrender 0:knock_out_enemy 3:captured", awardsString(a))
 
-	// A death nobody caused (KilledBy NoSeat) gives no kill.
+	// Seats 2 and 3 killed seat 1 in the same segment: +1 each (15.2, shared).
 	s = fourState()
-	s.Chars[0].Status, s.Chars[0].KilledBy = Killed, NoSeat
+	s.Chars[1].Status, s.Chars[1].Killers = Killed, [MaxPlayers]bool{false, false, true, true}
+	a = TurnVictoryPoints(fourState(), s)
+	uassert.Equal(t, " 1:killed 2:kill_enemy 3:kill_enemy", awardsString(a))
+	totals = VPTotals(a, 4)
+	uassert.Equal(t, "0 -8 1 1", strconv.Itoa(totals[0])+" "+strconv.Itoa(totals[1])+" "+strconv.Itoa(totals[2])+" "+strconv.Itoa(totals[3]))
+
+	// A death nobody caused (no Killers) gives no kill.
+	s = fourState()
+	s.Chars[0].Status = Killed
 	uassert.Equal(t, " 0:killed", awardsString(TurnVictoryPoints(fourState(), s)))
 	// Passing out with no box crossed off by anyone: no knock out.
 	s = fourState()

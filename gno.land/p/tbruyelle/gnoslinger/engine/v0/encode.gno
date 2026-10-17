@@ -75,9 +75,11 @@ func EncodeCharacter(c Character) string {
 			strconv.Itoa(g.Shells), boolStr(g.Jammed), boolStr(g.Exploded),
 		}, ":"))
 	}
-	hurt := make([]string, len(c.Hurt))
-	for i, n := range c.Hurt {
-		hurt[i] = strconv.Itoa(n)
+	var killers [MaxPlayers]int
+	for q, k := range c.Killers {
+		if k {
+			killers[q] = 1
+		}
 	}
 	return strings.Join([]string{
 		c.Hex, strconv.Itoa(int(c.Facing)), boolStr(c.Down), strconv.Itoa(c.Delay), strconv.Itoa(int(c.Status)),
@@ -85,15 +87,47 @@ func EncodeCharacter(c Character) string {
 		strconv.Itoa(c.Aim), c.AimHex, strconv.Itoa(c.Endurance), strconv.Itoa(c.Exhausted),
 		strconv.Itoa(c.Serious), strconv.Itoa(c.GunArm), strconv.Itoa(c.OtherArm), strconv.Itoa(c.Leg),
 		strings.Join(guns, ","),
-		strconv.Itoa(c.AimAt), strconv.Itoa(c.KilledBy), strconv.Itoa(c.SeriousBy), strconv.Itoa(c.LegBy),
-		strings.Join(hurt, "/"),
+		strconv.Itoa(c.AimAt), perSeat(killers), perSeat(c.SeriousFrom), perSeat(c.LegFrom),
+		perSeat(c.Hurt),
 	}, "|")
+}
+
+// perSeat packs one number per seat, "/"-separated.
+func perSeat(v [MaxPlayers]int) string {
+	s := make([]string, len(v))
+	for i, n := range v {
+		s[i] = strconv.Itoa(n)
+	}
+	return strings.Join(s, "/")
+}
+
+// seatValues unpacks what perSeat packed. A field without "/" is a record
+// from before the per-seat fields: the one seat it names (NoSeat for
+// none) gets all of legacy.
+func seatValues(f string, legacy int) (out [MaxPlayers]int) {
+	if f == "" {
+		return out
+	}
+	if !strings.Contains(f, "/") {
+		if q := atoi(f); q >= 0 && q < MaxPlayers {
+			out[q] = legacy
+		}
+		return out
+	}
+	for i, n := range strings.Split(f, "/") {
+		if i < MaxPlayers {
+			out[i] = atoi(n)
+		}
+	}
+	return out
 }
 
 // DecodeCharacter unpacks what EncodeCharacter produced. A record of the
 // first 18 fields (before the seats were kept: AimAt, KilledBy, SeriousBy,
 // LegBy, Hurt) reads with nobody in them; DecodeChars then puts markers on
-// the opponent back on it.
+// the opponent back on it. Killers, SeriousFrom and LegFrom were single
+// seats before (KilledBy, SeriousBy, LegBy, the last one to wound): the
+// seat named gets the kill, or all of the SERIOUS or LEG points.
 func DecodeCharacter(s string) Character {
 	f := strings.Split(s, "|")
 	if len(f) == 18 {
@@ -107,8 +141,14 @@ func DecodeCharacter(s string) Character {
 		PlayedFoot: f[5] == "1", PlayedRun: f[6] == "1", RanLastTurn: f[7] == "1", Dropped: f[8] == "1",
 		Aim: atoi(f[9]), AimHex: f[10], Endurance: atoi(f[11]), Exhausted: atoi(f[12]),
 		Serious: atoi(f[13]), GunArm: atoi(f[14]), OtherArm: atoi(f[15]), Leg: atoi(f[16]),
-		AimAt: atoi(f[18]), KilledBy: atoi(f[19]), SeriousBy: atoi(f[20]), LegBy: atoi(f[21]),
+		AimAt: atoi(f[18]),
 	}
+	for q, k := range seatValues(f[19], 1) {
+		c.Killers[q] = k != 0
+	}
+	c.SeriousFrom = seatValues(f[20], c.Serious)
+	c.LegFrom = seatValues(f[21], c.Leg)
+	c.Hurt = seatValues(f[22], 0)
 	if f[17] != "" {
 		for i, rec := range strings.Split(f[17], ",") {
 			g := strings.Split(rec, ":")
@@ -118,13 +158,6 @@ func DecodeCharacter(s string) Character {
 			c.Guns[i] = Gun{
 				ID: atoi(g[0]), Type: GunType(g[1]), Location: GunLocation(atoi(g[2])), Cocked: g[3] == "1",
 				Shells: atoi(g[4]), Jammed: g[5] == "1", Exploded: g[6] == "1",
-			}
-		}
-	}
-	if f[22] != "" {
-		for i, n := range strings.Split(f[22], "/") {
-			if i < MaxPlayers {
-				c.Hurt[i] = atoi(n)
 			}
 		}
 	}
