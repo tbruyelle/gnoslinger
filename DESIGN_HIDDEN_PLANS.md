@@ -150,8 +150,11 @@ opening of its own plan, until `no_reveal` if nobody opens it.
   in the game JSON; the round is only a number, the realm never verifies
   anything about drand.
 - The realm checks the timelocked plan's size only (≤ 1 KB). Its deposit
-  (about 0.05 GNOT a seat) is refunded when the turn resolves and the
-  commits are cleared, to whoever sent the resolving reveal.
+  (about 0.05 GNOT a seat) comes back with the reveal: once the hash is
+  checked, the plan and salt are kept in clear and the seat's hash and
+  timelocked plan are cleared, refunded to whoever sent the reveal. That is
+  the player itself on an ordinary reveal, and the opener of a vanished
+  player's plan otherwise: a small bounty for opening it.
 - Without a drand relay reachable (or with the timelocked plan left
   empty), the design degrades to plain commit-reveal with the
   `no_reveal` penalty.
@@ -185,10 +188,10 @@ type Game struct {
     …
     Phase     Phase     // waiting | planning | revealing | finished
     TurnStart time.Time // the turn's clock; commits until +Timeout, reveals until +Timeout+RevealGrace
-    Commits   []Commit  // one per seat, cleared when the turn resolves
+    Commits   []Commit  // one per seat, each cleared by its seat's reveal
     Plans     []string  // the revealed plans, canonical (as today)
-    Salts     []string  // the revealed salts, part of the seed; cleared with the commits
-    Revealed  []bool    // replaces Submitted
+    Salts     []string  // the revealed salts, part of the seed; cleared when the turn resolves
+    Revealed  []bool    // replaces Submitted; a seat has committed when its Hash is set or it is revealed
     …
 }
 ```
@@ -201,7 +204,7 @@ events. Replays and the history view do not change.
 | Function | Caller | Does |
 |---|---|---|
 | `Commit(cur, id, hash, locked string) int` | the seat | phase `planning`, before D, character alive, not yet committed; `hash` 64 hex chars, `locked` ≤ 1 KB; stores; when every alive seat has committed, phase `revealing` (event `AllCommitted`). Returns Rev |
-| `Reveal(cur, id, seat int, salt, plan string) int` | anyone | phase `revealing` only (a reveal while planning would leak), seat committed and not revealed; sha256 matches; then exactly today's `SubmitPlan` checks (parse, validate, ground ids, targets, `PlayedFoot`/`PlayedRun`); stores plan and salt; when every seat is revealed, `resolveTurn` in the same tx. Returns Rev |
+| `Reveal(cur, id, seat int, salt, plan string) int` | anyone | phase `revealing` only (a reveal while planning would leak), seat committed and not revealed; sha256 matches; then exactly today's `SubmitPlan` checks (parse, validate, ground ids, targets, `PlayedFoot`/`PlayedRun`); stores plan and salt and clears the seat's commit (its deposit refunded to the caller); when every seat is revealed, `resolveTurn` in the same tx. Returns Rev |
 | `Surrender(cur, id)` | the seat | `planning` only; drops the seat's commit; as today otherwise |
 | `ClaimTimeout(cur, id)` | anyone | see the clock above; a reveal-phase claim gives every unrevealed alive seat `Out` and the award `no_reveal` −8, then resolves with the plans in |
 | `SubmitPlan` | | removed. A game created "open" (plans in clear, no secrecy, a lobby checkbox) could keep it: `Commit` of the empty hash plus an immediate reveal. Optional, not in the first cut |
@@ -254,7 +257,7 @@ commit only (the client shows its own plan from `localStorage`).
 |---|---|---|
 | Signatures a turn, a player | 1 Adena popup (0 with auto-sign) | 2 Adena popups (0 with auto-sign) |
 | Transactions a turn, a player | 1 | 2 |
-| Storage a turn | ~2 KB, the turn's record | the same, plus ~0.5 KB a seat for the commit and its timelocked plan, refunded at resolution |
+| Storage a turn | ~2 KB, the turn's record | the same, plus ~0.5 KB a seat for the commit and its timelocked plan, refunded by its reveal |
 | Turn latency, both online | the last plan | the last reveal, seconds after the last commit |
 | Turn latency, a committer offline | n/a (the turn stalls until the claim) | D + 2 min, the plan still plays |
 
