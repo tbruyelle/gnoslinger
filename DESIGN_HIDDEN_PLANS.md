@@ -39,6 +39,22 @@ below) takes both away.
 
 ## The turn
 
+Words used below:
+
+- **Reveal**: the `Reveal(id, seat, salt, plan)` transaction, which puts
+  a seat's salt and plan on chain against its hash. Anyone may send it.
+- **Open**: decrypt a seat's timelocked plan off chain, once drand's
+  round R is out. Any client can; it is followed by a reveal.
+- **Own reveal**: the player's browser reveals from the salt and plan it
+  kept at commit time. The usual path, seconds after the last commit.
+- **Opened reveal**: a client opens a vanished player's timelocked plan
+  and reveals it, after the deadline.
+
+The realm handles both the same way; the `by` of the `PlanRevealed` event
+tells them apart. Players never pick one: the client does both by itself
+and only says "Revealing…", and once, when a turn waited on the deadline,
+"The Kid's plan opened at the deadline".
+
 Two players, both online, both with auto-sign on: no popup at all.
 Without it, Adena asks for the commit and for the reveal.
 
@@ -61,11 +77,18 @@ Without it, Adena asks for the commit and for the reveal.
    │ playback                       │                                         │ playback
 ```
 
-The reveal is sent by the client as soon as the poll shows the phase
-`revealing`, from the salt and plan it kept in `localStorage` at commit
-time (keyed by game, turn and seat, so a reload or another tab still
-reveals). Four seats work the same: `revealing` starts with the last
-commit of the alive seats, and the turn resolves with the last reveal.
+The client finds a reveal due by polling the realm's views, as it does
+today (no reading of blocks): the game screen polls its game every 2 s,
+and the lobby refreshes the player's games every 5 s. When a game shows
+the phase `revealing` and this browser holds that seat's salt and plan,
+kept in `localStorage` at commit time (keyed by game, turn and seat, so a
+reload or another tab still reveals), the own reveal is due. With
+auto-sign on it goes out by itself, from the game screen or the lobby;
+with it off, it waits for the player (see Client), since each reveal is
+an Adena popup. A player whose browser is closed is covered by the
+timelocked plan only. Four seats work the same: `revealing` starts with
+the last commit of the alive seats, and the turn resolves with the last
+reveal.
 
 Per player and turn: two transactions (commit, reveal), zero signatures
 asked of the player. The reveal that completes the turn pays the
@@ -73,8 +96,11 @@ resolution, as the last `SubmitPlan` does today; the others are cheap.
 
 ### The turn's clock
 
-The clock no longer restarts on every save: `TurnStart` is set when the
-turn starts, and the deadlines follow from it.
+Today the timeout restarts on every save (`UpdatedAt`, bumped by
+`save()`). Here the turn has a fixed start, `TurnStart`, set when the turn
+starts and left alone by later saves, and the deadlines follow from it:
+the timelocked plans are locked to a round after D, so every client must
+know D when it commits.
 
 ```
 TurnStart                                 D = TurnStart + Timeout          D + RevealGrace
@@ -153,7 +179,7 @@ opening of its own plan, until `no_reveal` if nobody opens it.
   (about 0.05 GNOT a seat) comes back with the reveal: once the hash is
   checked, the plan and salt are kept in clear and the seat's hash and
   timelocked plan are cleared, refunded to whoever sent the reveal. That is
-  the player itself on an ordinary reveal, and the opener of a vanished
+  the player itself on an own reveal, and the opener of a vanished
   player's plan otherwise: a small bounty for opening it.
 - Without a drand relay reachable (or with the timelocked plan left
   empty), the design degrades to plain commit-reveal with the
@@ -244,11 +270,19 @@ commit only (the client shows its own plan from `localStorage`).
   "Committed 1 of 2", then "Revealing…"; on every poll, with the phase
   `revealing`: my pending reveal goes out; past `lockRound`, every
   unrevealed seat with a timelocked plan is opened and revealed (one tx at a
-  time, as the realm client allows one in flight); without auto-sign
-  the same steps show as buttons (an Adena popup each). The planning
+  time, as the realm client allows one in flight). Without auto-sign
+  the same steps wait for a click, an Adena popup each, rather than
+  opening Adena unasked (a popup the player did not expect is easily
+  dismissed): the status ribbon says "Reveal your plan" (flashing, as on
+  every change) with a **REVEAL** button, and **OPEN THE PLAN** for a
+  vanished player's timelocked plan. The planning
   panel shows my plan from `localStorage` while waiting. **Claim** only
   shows once past `revealUntil` and after the timelocked plans were tried.
-- `ui/lobbyView.ts`: "Your move" from `committed`/`revealed`.
+- `LobbyScene`, `ui/lobbyView.ts`: "Your move" from `committed`/`revealed`.
+  On every refresh, each game in `revealing` whose seat has a pending
+  reveal in this browser: with auto-sign on, the reveal goes out from the
+  lobby (one at a time); with it off, the game is listed under **Your
+  move** as "Reveal your plan", its button opening the game.
 - `game/lobby.ts`, `chain/types.ts`: the new fields.
 
 ## Costs

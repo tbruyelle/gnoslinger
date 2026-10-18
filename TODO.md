@@ -13,6 +13,11 @@
 - Replace the tbruyelle realm to sthing else
 - upgrade architecture
   - DESIGN_SHOWDOWN
+- Missed turns: a player without a plan at the timeout passes the turn
+  (empty plan) instead of being Out at once; Out (scored as a surrender)
+  at the 3rd missed turn in a row, a plan resetting the count. Nobody
+  played: abandoned, as today. An automatic pass (5+ delay) is not a miss.
+  Before the hidden plans (DESIGN_HIDDEN_PLANS.md), which then build on it
 
 ## Player profile
 - Add profile page with specific token and linked reputation (check RPG rules)
