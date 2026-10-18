@@ -82,7 +82,7 @@ gno.land/
   r/tbruyelle/gnoslinger/v0          the realm: games, lobby, SubmitPlan, JSON views, Render, filetests/
   r/tbruyelle/gnoslinger/profiles/v0 the players' profiles and ranking, kept across game versions; written only by the allowed game realms
 client/src/
-  chain/      rpc.ts (abci_query/status/tx), adena.ts (wallet), realm.ts (typed calls), poller.ts, types.ts
+  chain/      rpc.ts (abci_query/status/tx/broadcast), adena.ts (wallet), session.ts (session key wallet), tx.ts (sign + encode a call), realm.ts (typed calls), poller.ts, types.ts
   rules/      cards.ts, facing.ts, sight.ts (pure card data, facing math, sight heights; mirrors the Gno packages)
   board/      board_A.json (generated) + boardA.ts (BoardMap: adjacency, aim zone, between table, line of sight)
   game/       setup.ts (where each character sets up, as the engine), plan.ts (encode/validate), replay.ts (preview), playback.ts (resolution log), sight.ts (a character's sight, as the engine)
@@ -494,6 +494,31 @@ calls; `testing.SkipHeights(n)` advances block time 5 s per height.
   `ui/walletNotices.ts` toasts "locked"/"unlocked" and the lobby top bar
   shows an "Adena locked" badge; a call left unanswered for
   `WALLET_NOTICE_MS` (6 s) shows "Waiting for Adena…" until it answers.
+- `chain/session.ts`: **account sessions** (the chain's `auth` module,
+  `MsgCreateSession`; no realm code). `SessionWallet` is the `Wallet` every
+  scene uses (`chain.wallet`): with a live session it signs each call with a
+  secp256k1 key kept in `localStorage` (`gnoslinger.session.<chainId>.<addr>`)
+  and broadcasts it itself (`broadcast_tx_sync`), so no Adena popup; the
+  realm sees the player's address as the caller. Otherwise, and when the
+  chain refuses the session (expired, revoked, over its limit: a
+  `Session…Error` at CheckTx, or "session not allowed error" at delivery
+  when a storage deposit goes over), it falls back to Adena, and
+  `ui/walletNotices.ts` says auto-sign stopped; past the limit it is not
+  tried again before the next spend period. `enable` sends
+  `/auth.m_create_session` through Adena's `DoContract` (accepted since
+  Adena's session-account release; `AdenaWallet.doMessages`), revoking the
+  previous key of the browser in the same tx; `revoke` sends
+  `/auth.m_revoke_session`. A session may call `vm/exec:<VITE_REALM_PATH>`
+  only, spends at most its daily limit (fees **and** storage deposits; a
+  refund does not give it back), and is read from
+  `auth/accounts/<addr>/session/<key addr>` (account number and sequence
+  for signing, `spend_used`). The fee is the gas price
+  (`auth/gasprice`) times the gas wanted plus 20 %, unless `VITE_GAS_FEE`.
+  `chain/tx.ts` builds the sign bytes (sorted amino JSON) and the amino
+  binary of a one-`MsgCall` tx with the signature's `session_addr`; its
+  tests hold vectors printed by the pinned gno. The lobby top bar shows
+  **Auto-sign on · time left** / **Auto-sign off**, opening a dialog (time
+  left, spent today, Revoke; or 1/7/30 days and 5/10/25 GNOT a day, Turn on).
 - `ui/toast.ts`: toasts are DOM elements over the canvas, because the
   scenes rebuild their display list (`children.removeAll`) on every refresh,
   which destroyed Phaser toasts the moment they appeared; identical texts

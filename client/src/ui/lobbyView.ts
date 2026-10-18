@@ -1,3 +1,5 @@
+import { formatCoins } from "../chain/rpc";
+import { spentNow, type SessionState } from "../chain/session";
 import { playerLabel, type GameSummary, type GamesView, type PlayersView, type Profile } from "../chain/types";
 import { uprightTokenAngle } from "../rules";
 import { charName, formatDuration, formatLeft, lobbySections, outcomeLine, runningOut, seatsTaken, secondsLeft } from "../game/lobby";
@@ -22,7 +24,23 @@ export type LobbyDialog =
   /** fromPage: the ranking page the profile was opened from, to go back to. */
   | { kind: "profile"; addr: string; profile: Profile | null; loading: boolean; error: string; fromPage: number | null }
   /** page: 0-based; players null while loading. */
-  | { kind: "players"; page: number; players: PlayersView | null; error: string };
+  | { kind: "players"; page: number; players: PlayersView | null; error: string }
+  /** This browser's session: what it is, and the terms of a new one. */
+  | { kind: "session" };
+
+/** Days a new session lasts. */
+export const SESSION_DAYS = [1, 7, 30];
+/** What a session may spend a day, in GNOT (fees and storage deposits: calling a showdown takes about 2.5). */
+export const SESSION_LIMITS = [5, 10, 25];
+
+export interface SessionModel {
+  state: SessionState;
+  /** Waiting on Adena or the chain for an enable or a revoke. */
+  busy: boolean;
+  error: string;
+  daysIndex: number;
+  limitIndex: number;
+}
 
 export interface LobbyModel {
   status: "connecting" | "ready" | "error";
@@ -35,6 +53,7 @@ export interface LobbyModel {
   /** "" while loading. */
   balance: string;
   locked: boolean;
+  session: SessionModel;
   games: GamesView | null;
   /** The character I play in a game I create: the first seat's (joining, I play the next free seat's). */
   creatorChar: string;
@@ -63,6 +82,11 @@ export interface LobbyActions {
   openProfile(addr: string, fromPage: number | null): void;
   /** Opens the ranking dialog at a page (0-based). */
   openPlayers(page: number): void;
+  openSession(): void;
+  enableSession(): void;
+  revokeSession(): void;
+  setSessionDays(index: number): void;
+  setSessionLimit(index: number): void;
   closeDialog(): void;
 }
 
@@ -77,6 +101,12 @@ const CSS = `
 .gl-mark{font-family:Rye,Georgia,serif;font-size:30px;letter-spacing:2px;color:#F3E7CE}
 .gl-right{margin-left:auto;display:flex;flex-wrap:wrap;align-items:center;gap:12px;color:#F3E7CE}
 .gl-net{font-size:15px;font-weight:700;border:2px solid #5A4636;border-radius:999px;padding:4px 12px}
+.gl-session{font-size:15px;font-weight:700;line-height:inherit;background:transparent;color:#F3E7CE;border:2px solid #5A4636;border-radius:999px;padding:4px 12px;cursor:pointer}
+.gl-session:hover{border-color:#F3E7CE}
+.gl-session.on{color:#F2B544;border-color:#F2B544}
+.gl-session.on:hover{background:rgba(242,181,68,.12)}
+.gl-session.ended{border-color:#B5482A}
+.gl-actions{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
 .gl-locked{font-size:15px;font-weight:700;background:#B5482A;color:#FBF4E4;border-radius:999px;padding:4px 12px}
 .gl-account{display:flex;align-items:center;gap:8px;background:#F3E7CE;color:#2A1C14;border-radius:12px;padding:4px 6px 4px 12px}
 .gl-icon{width:44px;height:44px;display:flex;align-items:center;justify-content:center;background:transparent;border:0;border-radius:8px;cursor:pointer;color:#2A1C14}
@@ -192,6 +222,12 @@ export class LobbyView {
           return this.actions.openProfile(id, page);
         case "players":
           return this.actions.openPlayers(page ?? 0);
+        case "session":
+          return this.actions.openSession();
+        case "session-on":
+          return this.actions.enableSession();
+        case "session-off":
+          return this.actions.revokeSession();
         case "close":
           return this.actions.closeDialog();
         case "retry":
@@ -224,6 +260,8 @@ export class LobbyView {
       if (el.id === "gl-seats") this.actions.setSeats(Number(el.value));
       if (el.id === "gl-turns") this.actions.setTurns(Number(el.value));
       if (el.id === "gl-timeout") this.actions.setTimeout(Number(el.value));
+      if (el.id === "gl-session-days") this.actions.setSessionDays(Number(el.value));
+      if (el.id === "gl-session-limit") this.actions.setSessionLimit(Number(el.value));
     });
     document.body.appendChild(this.root);
   }
@@ -247,6 +285,7 @@ export class LobbyView {
       right =
         `<span class="gl-net">${esc(m.chainId)} network</span>` +
         (m.locked ? '<span class="gl-locked">Adena locked</span>' : "") +
+        this.sessionPill(m.session) +
         `<div class="gl-account"><button type="button" class="gl-account-btn" data-act="profile" data-id="${esc(m.address)}" title="My profile · ${esc(m.address)}">` +
         `<b>${esc(playerLabel({ addr: m.address, name: m.name }))}</b><span>${esc(m.balance || "…")}</span></button>` +
         `<button type="button" class="gl-icon" data-act="copy" aria-label="Copy my address">${COPY_ICON}</button>` +
@@ -257,6 +296,17 @@ export class LobbyView {
       right = `<span class="gl-error">${esc(m.error)}</span><button type="button" class="gl-retry" data-act="retry">Retry</button>`;
     }
     return `<header class="gl-top"><div class="gl-top-in"><span class="gl-mark">GNOSLINGER</span><div class="gl-right">${right}</div></div></header>`;
+  }
+
+  /** The session's pill in the top bar; it opens the session dialog. */
+  private sessionPill(s: SessionModel): string {
+    const st = s.state;
+    if (st.kind === "active") {
+      const left = st.info.expiresAt ? ` · ${formatLeft(Math.max(0, st.info.expiresAt - Date.now() / 1000))}` : "";
+      return `<button type="button" class="gl-session on" data-act="session" title="Your moves are signed without Adena popups">Auto-sign on${esc(left)}</button>`;
+    }
+    const cls = st.kind === "ended" ? " ended" : "";
+    return `<button type="button" class="gl-session${cls}" data-act="session" title="Sign your moves without Adena popups">Auto-sign off</button>`;
   }
 
   private lists(m: LobbyModel): string {
@@ -392,8 +442,9 @@ export class LobbyView {
   private dialog(m: LobbyModel): string {
     const d = m.dialog;
     if (!d) return "";
-    const title = d.kind === "players" ? "All players" : d.profile?.name || (d.addr === m.address ? "My profile" : "Player");
-    const body = d.kind === "players" ? this.playersBody(d, m.address) : this.profileBody(d, m.address);
+    const title =
+      d.kind === "players" ? "All players" : d.kind === "session" ? "Auto-sign" : d.profile?.name || (d.addr === m.address ? "My profile" : "Player");
+    const body = d.kind === "players" ? this.playersBody(d, m.address) : d.kind === "session" ? this.sessionBody(m.session) : this.profileBody(d, m.address);
     return (
       '<div class="gl-back" data-act="close">' +
       '<section class="gl-dialog" role="dialog" aria-modal="true" aria-labelledby="gl-dialog-title" data-act="none">' +
@@ -402,6 +453,38 @@ export class LobbyView {
       body +
       "</section></div>"
     );
+  }
+
+  private sessionBody(s: SessionModel): string {
+    const st = s.state;
+    const off = s.busy ? " disabled" : "";
+    let body =
+      '<span class="gl-note">A key kept in this browser signs your moves, so Adena asks only once, to create it. ' +
+      "The chain lets it play Gnoslinger and nothing else, until it expires, and spend at most a limit a day from your account " +
+      "(fees and storage deposits: calling a showdown takes about 2.5 GNOT, a turn about 0.3). Past the limit, Adena signs again.</span>";
+    if (st.kind === "active") {
+      const i = st.info;
+      const now = Date.now() / 1000;
+      const left = i.expiresAt ? formatLeft(Math.max(0, i.expiresAt - now)) : "never";
+      body +=
+        '<div class="gl-stats">' +
+        `<div class="gl-stat"><b>${esc(left)}</b><span>Left</span></div>` +
+        `<div class="gl-stat"><b>${esc(formatCoins(`${spentNow(i, now)}ugnot`))}</b><span>Spent of ${esc(formatCoins(`${i.spendLimit}ugnot`))} today</span></div>` +
+        `</div><span class="gl-addr">Key ${esc(i.addr)}</span>` +
+        `<div class="gl-actions"><button type="button" class="gl-open" data-act="session-off"${off}>Revoke</button>` +
+        `<span class="gl-note">${s.busy ? "Waiting for Adena…" : "Revoking takes one Adena signature."}</span></div>`;
+    } else {
+      if (st.kind === "ended") body += `<p class="gl-empty">Your last key stopped working: ${esc(st.reason)}.</p>`;
+      const days = SESSION_DAYS.map((d, i) => `<option value="${i}"${i === s.daysIndex ? " selected" : ""}>${d} day${d > 1 ? "s" : ""}</option>`).join("");
+      const limits = SESSION_LIMITS.map((g, i) => `<option value="${i}"${i === s.limitIndex ? " selected" : ""}>${g} GNOT a day</option>`).join("");
+      body +=
+        `<div class="gl-field"><label for="gl-session-days">For</label><select id="gl-session-days"${off}>${days}</select></div>` +
+        `<div class="gl-field"><label for="gl-session-limit">Spending at most</label><select id="gl-session-limit"${off}>${limits}</select></div>` +
+        `<div class="gl-actions"><button type="button" class="gl-join" data-act="session-on"${off}>Turn on</button>` +
+        `<span class="gl-note">${s.busy ? "Waiting for Adena…" : "One Adena signature."}</span></div>`;
+    }
+    if (s.error) body += `<p class="gl-empty">${esc(s.error)}</p>`;
+    return body;
   }
 
   private profileBody(d: Extract<LobbyDialog, { kind: "profile" }>, me: string): string {

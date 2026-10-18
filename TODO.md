@@ -6,7 +6,6 @@
 ## UI
 - change window size to see how things fit
 - use gnotiff
-- Session keys (`MsgCreateSession`) so Adena signs once per game.
 - add report bug button
 
 ## General

@@ -98,6 +98,23 @@ export class Rpc {
     return data ? (JSON.parse(data) as string) : "";
   }
 
+  /**
+   * Hands a signed transaction (amino binary, base64) to the node's mempool.
+   * A CheckTx failure comes back as `error`: its amino type (e.g.
+   * "/std.SessionExpiredError") and the node's log.
+   */
+  async broadcastTxSync(txB64: string): Promise<{ hash: string; error: { type: string; log: string } | null }> {
+    const r = await this.call<{ hash: string; error: { "@type"?: string } | null; log: string }>("broadcast_tx_sync", { tx: txB64 });
+    return { hash: r.hash, error: r.error ? { type: r.error["@type"] ?? "error", log: r.log ?? "" } : null };
+  }
+
+  /** The chain's minimum gas price: price ugnot for every gas units. */
+  async gasPrice(): Promise<{ gas: number; price: number }> {
+    const r = JSON.parse(await this.abciQuery("auth/gasprice", "")) as { gas: string; price: string };
+    const m = /^(\d+)ugnot$/.exec(r.price);
+    return { gas: Number(r.gas), price: m ? Number(m[1]) : 0 };
+  }
+
   /** Fetches a transaction by its hash (base64, or hex as newer wallets return it); null while it is not indexed yet. */
   async tx(hash: string): Promise<TxResult | null> {
     let r: { height: string; tx_result: { ResponseBase: ResponseBase } };

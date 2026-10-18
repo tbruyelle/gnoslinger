@@ -209,14 +209,16 @@ Client side:
   resolving reveal keeps the fixed `DEFAULT_GAS_WANTED` as today. The
   declared `gas_fee` is charged in full, so size it per call.
 
-**Open point**: Adena's `DoContract` and `SignTx` document four message
-types (`/bank.MsgSend`, `/vm.m_call`, `/vm.m_addpkg`, `/vm.m_run`) and
-nothing says whether `/auth.m_create_session` is accepted or refused.
-Try it on gnodev first. Until it works, the session is created with the
-CLI (`gnokey maketx session create -pubkey <bech32 pubkey> -expires-at
-30d -allow-paths vm/exec:gno.land/r/tbruyelle/gnoslinger/v1 -spend-limit
-5000000ugnot -spend-period 86400 …`), or the client plays with Adena
-popups for the commit and the reveal (two a turn).
+**Resolved** (2026-10-18, built as step 2 ahead of the commit-reveal, see
+`AGENTS.md`, `chain/session.ts`): Adena's `DoContract` accepts
+`/auth.m_create_session` and `/auth.m_revoke_session` since its
+session-account work (onbloc/adena-wallet#853), `session_key` given as an
+Any (`type_url` `/tm.PubKeySecp256k1`, `value` the base64 of the key's
+proto encoding). The browser signs the session's txs itself, checked on
+gnodev; the Adena popup for the creation is still to be tried by hand.
+Found on the way: the spend limit counts storage deposits (a `CreateGame`
+uses about 2.5 GNOT of it), and a deposit over the limit fails at delivery
+with "session not allowed error", after the fee is paid.
 
 ## Realm
 

@@ -5,9 +5,10 @@ import { initChain, resetChain, type Chain } from "../chain";
 import { subscribeAccountChanged, subscribeNetworkChanged, subscribeWalletLocked, walletLocked } from "../chain/adena";
 import { userMessage } from "../chain/errors";
 import { formatCoins } from "../chain/rpc";
+import { subscribeSession } from "../chain/session";
 import type { GamesView, PlayersView } from "../chain/types";
 import { SOUND_FILES, SOUND_VOLUME, soundKey } from "../game/sounds";
-import { LobbyView, PLAYERS_PAGE, type LobbyDialog } from "../ui/lobbyView";
+import { LobbyView, PLAYERS_PAGE, SESSION_DAYS, SESSION_LIMITS, type LobbyDialog } from "../ui/lobbyView";
 import { showToast } from "../ui/toast";
 import { installWalletNotices } from "../ui/walletNotices";
 import { MAX_PLAYERS, MIN_PLAYERS, SETUPS, nextSeat, seatChar } from "../game/setup";
@@ -91,6 +92,10 @@ export class LobbyScene extends Phaser.Scene {
   /** Bumped by each dialog request, so a late answer cannot replace a newer dialog. */
   private dialogSeq = 0;
   private balance: string | null = null;
+  private sessionBusy = false;
+  private sessionError = "";
+  private sessionDays = SESSION_DAYS.indexOf(7);
+  private sessionLimit = SESSION_LIMITS.indexOf(10);
   private seats = DEFAULT_SEATS;
   private turns = DEFAULT_TURNS;
   private timeoutIndex = DEFAULT_TIMEOUT_INDEX;
@@ -145,6 +150,17 @@ export class LobbyScene extends Phaser.Scene {
       setTimeout: (index) => (this.timeoutIndex = index),
       openProfile: (addr, fromPage) => void this.openProfile(addr, fromPage),
       openPlayers: (page) => void this.openPlayers(page),
+      openSession: () => {
+        this.dialogSeq++;
+        this.sessionError = "";
+        this.dialog = { kind: "session" };
+        this.renderView();
+        void this.chain?.wallet.refresh();
+      },
+      enableSession: () => void this.changeSession("enable"),
+      revokeSession: () => void this.changeSession("revoke"),
+      setSessionDays: (index) => (this.sessionDays = index),
+      setSessionLimit: (index) => (this.sessionLimit = index),
       closeDialog: () => {
         this.dialogSeq++;
         this.dialog = null;
@@ -249,6 +265,9 @@ export class LobbyScene extends Phaser.Scene {
           subscribeNetworkChanged(() => {
             if (this.scene.isActive() && this.screen === "lobby") void this.connect();
           }),
+          subscribeSession(() => {
+            if (this.scene.isActive() && this.screen === "lobby") this.renderView();
+          }),
         );
       }
       this.buildAll();
@@ -260,8 +279,31 @@ export class LobbyScene extends Phaser.Scene {
     }
   }
 
+  /** Turns the session on (with the terms picked) or revokes it: one Adena popup either way. */
+  private async changeSession(what: "enable" | "revoke") {
+    if (!this.chain || this.sessionBusy) return;
+    this.sessionBusy = true;
+    this.sessionError = "";
+    this.renderView();
+    try {
+      if (what === "enable") {
+        await this.chain.wallet.enable({ days: SESSION_DAYS[this.sessionDays], dailyLimit: SESSION_LIMITS[this.sessionLimit] * 1_000_000 });
+        showToast(this, "Auto-sign is on: Adena will not ask for your moves", "info", 4000);
+      } else {
+        await this.chain.wallet.revoke();
+        showToast(this, "Auto-sign is off", "info", 3000);
+      }
+    } catch (e) {
+      this.sessionError = userMessage(e);
+    } finally {
+      this.sessionBusy = false;
+    }
+    if (this.scene.isActive() && this.screen === "lobby") this.renderView();
+  }
+
   private async refreshGames() {
     if (!this.chain || !this.scene.isActive()) return;
+    void this.chain.wallet.refresh();
     try {
       const [games, top] = await Promise.all([
         this.chain.realm.listGames(this.chain.wallet.address),
@@ -346,6 +388,13 @@ export class LobbyScene extends Phaser.Scene {
       name: this.games?.name ?? "",
       balance: this.balance ?? "",
       locked: walletLocked(),
+      session: {
+        state: this.chain?.wallet.state ?? { kind: "none" },
+        busy: this.sessionBusy,
+        error: this.sessionError,
+        daysIndex: this.sessionDays,
+        limitIndex: this.sessionLimit,
+      },
       games: this.games,
       creatorChar: CREATOR_CHAR,
       seats: this.seats,

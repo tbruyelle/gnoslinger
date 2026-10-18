@@ -22,8 +22,32 @@ export interface VmCall {
   args: string[];
 }
 
+/** A /auth.m_create_session message: a session key for the creator's account (chain/session.ts). */
+export interface CreateSession {
+  creator: string;
+  /** The key's Any: type_url "/tm.PubKeySecp256k1", value the base64 of its proto encoding. */
+  session_key: { type_url: string; value: string };
+  /** Unix seconds. */
+  expires_at: string;
+  allow_paths: string[];
+  /** e.g. "10000000ugnot", per spend_period seconds. */
+  spend_limit: string;
+  spend_period: string;
+}
+
+/** A /auth.m_revoke_session message. */
+export interface RevokeSession {
+  creator: string;
+  session_key: { type_url: string; value: string };
+}
+
+export type ContractMessage =
+  | { type: "/vm.m_call"; value: VmCall }
+  | { type: "/auth.m_create_session"; value: CreateSession }
+  | { type: "/auth.m_revoke_session"; value: RevokeSession };
+
 export interface ContractParams {
-  messages: { type: "/vm.m_call"; value: VmCall }[];
+  messages: ContractMessage[];
   memo?: string;
   gasFee?: number;
   gasWanted?: number;
@@ -123,14 +147,24 @@ export async function ensureNetwork(adena: AdenaApi, cfg: ChainConfig): Promise<
   }
 }
 
-class AdenaWallet implements Wallet {
+export class AdenaWallet implements Wallet {
   constructor(
     private readonly adena: AdenaApi,
     readonly address: string,
     private readonly cfg: ChainConfig,
   ) {}
 
-  async doContract(call: VmCall): Promise<{ hash: string }> {
+  doContract(call: VmCall): Promise<{ hash: string }> {
+    // Left to itself Adena simulates the call and uses the result as the gas
+    // limit, with no margin. A SubmitPlan that resolves the turn shuffles the
+    // deck from a seed that includes the block height, so the real block can
+    // draw more cards than the simulation and run out of gas. A fixed, ample
+    // limit avoids that (the dev chain allows 10e9 per block).
+    return this.doMessages([{ type: "/vm.m_call", value: call }], this.cfg.gasWanted ?? DEFAULT_GAS_WANTED);
+  }
+
+  /** Signs and broadcasts (sync) messages of this account through Adena's popup. */
+  async doMessages(messages: ContractMessage[], gasWanted: number): Promise<{ hash: string }> {
     // Adena only opens its approval popup when the *current* account is
     // connected to this site, so check the account and re-establish first;
     // otherwise DoContract answers NOT_CONNECTED without any popup.
@@ -144,13 +178,7 @@ class AdenaWallet implements Wallet {
       if (current !== this.address) {
         throw new ChainError("wrong-account", "Adena is on another account", shortAddr(current));
       }
-      const params: ContractParams = { messages: [{ type: "/vm.m_call", value: call }], memo: "" };
-      // Left to itself Adena simulates the call and uses the result as the gas
-      // limit, with no margin. A SubmitPlan that resolves the turn shuffles the
-      // deck from a seed that includes the block height, so the real block can
-      // draw more cards than the simulation and run out of gas. A fixed, ample
-      // limit avoids that (the dev chain allows 10e9 per block).
-      params.gasWanted = this.cfg.gasWanted ?? DEFAULT_GAS_WANTED;
+      const params: ContractParams = { messages, memo: "", gasWanted };
       if (this.cfg.gasFee) params.gasFee = this.cfg.gasFee;
       // Adena's defaults: it shows its result screen and a notification after
       // broadcasting, and answers the page once the result screen is closed.
@@ -202,7 +230,7 @@ function shortAddr(addr: string): string {
 }
 
 /** Connects the site to Adena, switches it to the configured chain and returns the active account. */
-export async function connectWallet(cfg: ChainConfig): Promise<Wallet> {
+export async function connectWallet(cfg: ChainConfig): Promise<AdenaWallet> {
   const adena = await detectAdena();
   const est = await adena.AddEstablish("Gnoslinger");
   if (est.status === "failure" && est.type !== "ALREADY_CONNECTED") throw adenaError(est, "locked");
