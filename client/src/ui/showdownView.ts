@@ -191,6 +191,11 @@ const CSS = `
 .gv-status.replay{background:#33307F;color:#FBF4E4}
 .gv-status.wait,.gv-status.info{background:transparent;color:#F3E7CE;border-color:#5A4636}
 .gv-status.over{background:#F3E7CE;color:#2A1C14}
+.gv-status.flash{animation:gv-flash 1.4s ease-out}
+@keyframes gv-flash{0%{box-shadow:0 0 0 0 rgba(242,181,68,.9);border-color:#F2B544;transform:scale(1.03)}
+25%{box-shadow:0 0 0 8px rgba(242,181,68,.45);border-color:#F2B544;transform:scale(1)}
+100%{box-shadow:0 0 0 14px rgba(242,181,68,0)}}
+@media (prefers-reduced-motion:reduce){.gv-status.flash{animation:none;border-color:#F2B544}}
 .gv-hright{margin-left:auto;font-size:15px;color:#D9C9A8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .gv-hright.err{color:#F2B544}
 .gv-x{position:absolute;top:4px;right:6px;width:44px;height:44px;display:flex;align-items:center;justify-content:center;background:transparent;border:0;border-radius:8px;color:#F2B544;cursor:pointer}
@@ -388,6 +393,8 @@ export class ShowdownView {
   private root: HTMLDivElement;
   private header: HTMLElement;
   private ribbon: HTMLElement;
+  /** The ribbon's text and tone on screen, so a change flashes it and a refresh does not. */
+  private shownStatus: string | null = null;
   /** The seat whose panel is highlighted (a token hovered), -1 for none. */
   private hlSeat = -1;
   /** The resolution log read wide (a click on it during a replay), and the model it shows. */
@@ -469,7 +476,14 @@ export class ShowdownView {
       display: "grid",
     });
     this.header.innerHTML = this.headerHtml(m);
-    this.ribbon.innerHTML = m.status ? `<span class="gv-status ${m.statusTone}">${esc(m.status)}</span>` : "";
+    // Rewritten only when it changes (the animation would restart on every
+    // refresh), then flashed to draw the eye, except when the screen opens.
+    const status = `${m.statusTone}|${m.status}`;
+    if (status !== this.shownStatus) {
+      const flash = this.shownStatus !== null && m.status ? " flash" : "";
+      this.ribbon.innerHTML = m.status ? `<span class="gv-status ${m.statusTone}${flash}">${esc(m.status)}</span>` : "";
+      this.shownStatus = status;
+    }
     if (m.replay) {
       this.left.innerHTML = m.left.map((c) => this.charHtml(c, true)).join("");
       this.right.innerHTML = this.logHtml(m);
