@@ -1,8 +1,8 @@
-# Hidden plans: commit, reveal, escrow — design
+# Hidden plans: commit, reveal, timelocked plan — design
 
 Status: proposal, 2026-10-17. Nothing built yet. `TODO.md` lists the
 commit-reveal item this replaces ("`PhaseCommit`/`PhaseReveal` reserved",
-"dice seeded from revealed salts").
+"the deck shuffle seeded from the revealed salts").
 
 ## Goal
 
@@ -29,31 +29,33 @@ pieces, each useful alone, built in that order:
    as the player, fees paid by the player's account within a spend limit.
    One Adena popup a month; the reveal, and everything else, goes out by
    itself.
-3. **Escrow to drand**: the commit carries the salt and plan encrypted to
-   the drand round of the turn's deadline (`tlock`). If the committer
+3. **Timelocked plan**: the commit carries the salt and plan encrypted
+   to the drand round of the turn's deadline (`tlock`). If the committer
    vanishes, anyone opens its plan at the deadline and the turn resolves
-   with it. The realm only stores the escrow: no new on-chain crypto.
+   with it. The realm only stores the timelocked plan: no new on-chain
+   crypto.
 
 ## The turn
 
 Two players, both online, both with a session key: no popup at all.
 
 ```
- A's browser               realm                                   B's browser
-   │ plan picked              │                                        │
-   │ salt ← 16 random bytes   │                                        │
-   │ hash ← sha256(…)         │                                        │
-   │ escrow ← tlock(salt‖plan → round R)                               │
-   ├── Commit(id, hash, escrow) ─►│ Commits[0] = {hash, escrow}         │
-   │                          │◄── Commit(id, hash', escrow') ──────────┤ (B saw only A's hash)
-   │                          │ every alive seat committed → revealing  │
-   │ poll: "revealing"        │                                        │ poll: "revealing"
-   ├── Reveal(id, 0, salt, plan) ─►│ sha256 matches; plan validated     │
-   │                          │◄── Reveal(id, 1, salt', plan') ─────────┤
-   │                          │ every seat revealed → resolveTurn       │
-   │                          │ seed ← salts, plans, height, block time │
-   │ poll: lastTurn changed   │ Turn++, phase planning                 │ poll: lastTurn changed
-   │ playback                 │                                        │ playback
+ A's browser                      realm                                  B's browser
+   │ plan picked                    │                                         │
+   │ salt ← 16 random bytes         │                                         │
+   │ hash ← sha256(…)               │                                         │
+   │ locked ← tlock(salt‖plan       │                                         │
+   │          → round R)            │                                         │
+   ├── Commit(id, hash, locked) ───►│ Commits[0] = {hash, locked}             │
+   │                                │◄── Commit(id, hash', locked') ──────────┤ (B saw only A's hash)
+   │                                │ every alive seat committed → revealing  │
+   │ poll: "revealing"              │                                         │ poll: "revealing"
+   ├── Reveal(id, 0, salt, plan) ──►│ sha256 matches; plan validated          │
+   │                                │◄── Reveal(id, 1, salt', plan') ─────────┤
+   │                                │ every seat revealed → resolveTurn       │
+   │                                │ seed ← salts, plans, height, block time │
+   │ poll: lastTurn changed         │ Turn++, phase planning                  │ poll: lastTurn changed
+   │ playback                       │                                         │ playback
 ```
 
 The reveal is sent by the client as soon as the poll shows the phase
@@ -77,15 +79,15 @@ TurnStart                                 D = TurnStart + Timeout          D + R
 │                                         │ ClaimTimeout: uncommitted → Out │ unrevealed → Out, no_reveal −8
 │                                         │ ≤1 alive → finished(timeout)    │ ≤1 alive → finished(timeout)
 │                                         │ else → revealing                │ else resolve with the plans in
-                                          R = first drand round after D + 2 min: the escrows open
+                                          R = first drand round after D + 2 min: the timelocked plans open
 ```
 
 `Timeout` is the game's (5 min to 30 days, default 2 days), unchanged.
 `RevealGrace` is a realm constant (5 min): time for the drand round, the
 block clock's drift and an opener's transaction. A reveal is accepted at
 any time in the `revealing` phase, after the grace too, until someone
-claims the timeout; the honest client opens escrows before it ever offers
-the claim button.
+claims the timeout; the honest client opens the timelocked plans before
+it ever offers the claim button.
 
 ### State machine
 
@@ -113,25 +115,25 @@ with the empty plan at once.
 |---|---|---|---|
 | Before committing | The others' hashes | Nothing | A sha256 of 16 random bytes and the plan is hiding and binding |
 | Committed, others not | Nothing new | Wait | Commits are refused past D; whoever waits past D is Out |
-| Revealing, first to reveal | Nothing new | Refuse to reveal | Its escrow opens at R anyway; with a broken escrow, `no_reveal` −8 and Out (so Captured −4 can follow), never better than its plan |
+| Revealing, first to reveal | Nothing new | Refuse to reveal | Its timelocked plan opens at R anyway; with a broken one, `no_reveal` −8 and Out (so Captured −4 can follow), never better than its plan |
 | Revealing, last to reveal | Every other plan | Compute the outcome, then refuse | The seed includes the resolving block's height and time: the outcome is unknown until the reveal lands. And see the row above |
-| Opener of an escrow | A vanished player's plan | Nothing | It opens after D: that player can no longer change anything, and the opener itself has committed or is Out |
+| Opener of a timelocked plan | A vanished player's plan | Nothing | It opens after D: that player can no longer change anything, and the opener itself has committed or is Out |
 
-The escrow round is chosen by the client; the realm cannot check it. A
+The timelock round is chosen by the client; the realm cannot check it. A
 round earlier than D exposes the chooser's own plan to the others before
 they commit: its loss alone. A round later than D only delays the
 opening of its own plan, until `no_reveal` if nobody opens it.
 
-## The escrow
+## The timelocked plan
 
 ```
  commit (the player's client)                        open (any client, once round R is out)
  salt ← crypto.getRandomValues(16)                   sig_R ← GET api.drand.sh/v2/beacons/quicknet/rounds/R
- plan ← canonical plan string (may be "")             salt‖plan ← timelockDecrypt(escrow, sig_R)   (tlock-js)
+ plan ← canonical plan string (may be "")             salt‖plan ← timelockDecrypt(locked, sig_R)   (tlock-js)
  hash ← sha256("gnoslinger|" id "|" turn "|" seat     check sha256(…) == Commits[seat].Hash
                "|" salt "|" plan), hex                Reveal(id, seat, salt, plan)
- escrow ← timelockEncrypt(R, salt‖plan, quicknet)      realm: same sha256, ParsePlan, Validate, store
- Commit(id, hash, escrow)
+ locked ← timelockEncrypt(R, salt‖plan, quicknet)      realm: same sha256, ParsePlan, Validate, store
+ Commit(id, hash, locked)
 ```
 
 - drand **quicknet**: chain hash `52db9ba7…c84e971`, genesis 1692803367,
@@ -141,14 +143,15 @@ opening of its own plan, until `no_reveal` if nobody opens it.
   the browser (Vite `build.target` es2020). The ciphertext is an `age`
   file with a tlock stanza: about 300 to 500 bytes for a plan.
 - The realm computes the round from the deadline so every client uses the
-  same one, `escrowRound = (D + 2 min − genesis) / 3 + 2`, and shows it
+  same one, `lockRound = (D + 2 min − genesis) / 3 + 2`, and shows it
   in the game JSON; the round is only a number, the realm never verifies
   anything about drand.
-- The realm checks the escrow's size only (≤ 1 KB). Its deposit (about
-  0.05 GNOT a seat) is refunded when the turn resolves and the commits
-  are cleared, to whoever sent the resolving reveal.
-- Without a drand relay reachable (or with the escrow left empty), the
-  design degrades to plain commit-reveal with the `no_reveal` penalty.
+- The realm checks the timelocked plan's size only (≤ 1 KB). Its deposit
+  (about 0.05 GNOT a seat) is refunded when the turn resolves and the
+  commits are cleared, to whoever sent the resolving reveal.
+- Without a drand relay reachable (or with the timelocked plan left
+  empty), the design degrades to plain commit-reveal with the
+  `no_reveal` penalty.
 
 ## Session keys
 
@@ -223,7 +226,7 @@ popups for the commit and the reveal (two a turn).
 // Commit is a seat's sealed plan for the current turn.
 type Commit struct {
     Hash   string // sha256 hex of the domain, salt and plan; "" until committed
-    Escrow string // the tlock ciphertext (≤ 1 KB), "" when the client sent none
+    Locked string // the timelocked plan, a tlock ciphertext (≤ 1 KB), "" when the client sent none
 }
 
 type Game struct {
@@ -245,7 +248,7 @@ events. Replays and the history view do not change.
 
 | Function | Caller | Does |
 |---|---|---|
-| `Commit(cur, id, hash, escrow string) int` | the seat (master or session) | phase `planning`, before D, character alive, not yet committed; `hash` 64 hex chars, `escrow` ≤ 1 KB; stores; when every alive seat has committed, phase `revealing` (event `AllCommitted`). Returns Rev |
+| `Commit(cur, id, hash, locked string) int` | the seat (master or session) | phase `planning`, before D, character alive, not yet committed; `hash` 64 hex chars, `locked` ≤ 1 KB; stores; when every alive seat has committed, phase `revealing` (event `AllCommitted`). Returns Rev |
 | `Reveal(cur, id, seat int, salt, plan string) int` | anyone | phase `revealing` only (a reveal while planning would leak), seat committed and not revealed; sha256 matches; then exactly today's `SubmitPlan` checks (parse, validate, ground ids, targets, `PlayedFoot`/`PlayedRun`); stores plan and salt; when every seat is revealed, `resolveTurn` in the same tx. Returns Rev |
 | `Surrender(cur, id)` | the seat | `planning` only; drops the seat's commit; as today otherwise |
 | `ClaimTimeout(cur, id)` | anyone | see the clock above; a reveal-phase claim gives every unrevealed alive seat `Out` and the award `no_reveal` −8, then resolves with the plans in |
@@ -258,8 +261,8 @@ commits, the block keeps the outcome unknown to the last revealer.
 Events: `PlanCommitted` (id, turn, seat), `AllCommitted`, `PlanRevealed`
 (id, turn, seat, by), `PlanPassed`, `TurnResolved`, `VictoryPoints` with
 reason `no_reveal`. JSON: `phase` gains `revealing`; each player gains
-`committed`, `revealed` and `escrow`; the game gains `commitUntil`,
-`revealUntil` and `escrowRound`; `json/plan/{id}/{addr}` shows the
+`committed`, `revealed` and `locked`; the game gains `commitUntil`,
+`revealUntil` and `lockRound`; `json/plan/{id}/{addr}` shows the
 commit only (the client shows its own plan from `localStorage`).
 
 ### Rules decisions
@@ -276,20 +279,20 @@ commit only (the client shows its own plan from `localStorage`).
 ## Client
 
 - `game/commit.ts`: `sealPlan(game, turn, seat, plan, round)` → `{salt,
-  hash, escrow}` (WebCrypto sha256, tlock-js); `pendingReveals` in
-  `localStorage`; `openEscrow(escrow, round)`.
-- `chain/realm.ts`: `commit(id, hash, escrow)` watching
+  hash, locked}` (WebCrypto sha256, tlock-js); `pendingReveals` in
+  `localStorage`; `openLocked(locked, round)`.
+- `chain/realm.ts`: `commit(id, hash, locked)` watching
   `players[seat].committed`, `reveal(id, seat, salt, plan)` watching
   `players[seat].revealed` or the turn changing; the wallet is the
   session when there is one.
 - `GameScene`: **Send plan** seals and commits; the header says
   "Committed 1 of 2", then "Revealing…"; on every poll, with the phase
-  `revealing`: my pending reveal goes out; past `escrowRound`, every
-  unrevealed seat with an escrow is opened and revealed (one tx at a
+  `revealing`: my pending reveal goes out; past `lockRound`, every
+  unrevealed seat with a timelocked plan is opened and revealed (one tx at a
   time, as the realm client allows one in flight); without a session key
   the same steps show as buttons (an Adena popup each). The planning
   panel shows my plan from `localStorage` while waiting. **Claim** only
-  shows once past `revealUntil` and after the escrows were tried.
+  shows once past `revealUntil` and after the timelocked plans were tried.
 - `ui/lobbyView.ts`: "Your move" from `committed`/`revealed`; the
   session key box in the top bar (create with a limit and a duration,
   the time left, revoke).
@@ -301,7 +304,7 @@ commit only (the client shows its own plan from `localStorage`).
 |---|---|---|
 | Signatures a turn, a player | 1 Adena popup | 0 (session) or 2 (Adena) |
 | Transactions a turn, a player | 1 | 2 |
-| Storage a turn | ~2 KB, the turn's record | the same, plus ~0.5 KB a seat for commit and escrow, refunded at resolution |
+| Storage a turn | ~2 KB, the turn's record | the same, plus ~0.5 KB a seat for the commit and its timelocked plan, refunded at resolution |
 | Turn latency, both online | the last plan | the last reveal, seconds after the last commit |
 | Turn latency, a committer offline | n/a (the turn stalls until the claim) | D + 2 min, the plan still plays |
 
@@ -315,6 +318,99 @@ commit only (the client shows its own plan from `localStorage`).
 2. Client: session keys. Check first whether Adena signs
    `/auth.m_create_session` on gnodev; else the gnokey command in the
    lobby's help. The session signer, the fallback to Adena.
-3. Client: the escrow (tlock-js), the realm's `escrowRound`, the opener
+3. Client: the timelocked plan (tlock-js), the realm's `lockRound`, the opener
    logic, the Claim button gated behind it.
 4. `AGENTS.md`, `bga/doc/ASSUMPTIONS.md`, `TODO.md`.
+
+## Alternative: a shared key with a key server
+
+Status: idea, 2026-10-18, not chosen. It removes the reveal phase: each
+player sends one transaction a turn, its commit, and a plan opens as soon
+as the last commit lands, a vanished player's too. The price is a small
+key server, against the goal of no game server, trusted not to collude
+with a player.
+
+### The key
+
+The same identity-based encryption as tlock (Boneh-Franklin over
+BLS12-381), with several key holders instead of drand. BLS signatures on
+the same message add up, and so do the public keys:
+
+```
+at join      seat i: secret s_i, public P_i = s_i·G2, proof of possession
+server       secret s_k, public P_k (a realm constant)
+identity     Q = H("gnoslinger|" id "|" turn)
+key          P = P_k + Σ P_i over the turn's key seats
+commit i     locked_i ← encrypt(salt_i‖plan_i, Q, P), σ_i = s_i·Q
+opening      σ = σ_k + Σ σ_i = (s_k + Σ s_i)·Q, the identity's private key
+```
+
+The proof of possession (a signature of the seat's own public key) is
+needed: without it a player could register P_i = x·G2 − ΣP_others and
+open everything alone. The **key seats** are the seats alive and not
+passed automatically at the turn's start, known to every client from the
+state, since an auto-passed seat sends no commit and so no share.
+
+### The turn
+
+```
+ A's browser                          realm                              key server
+   │ plan picked                        │                                     │
+   │ salt ← 16 random bytes             │                                     │
+   │ hash ← sha256(…)                   │                                     │
+   │ locked ← encrypt(salt‖plan, Q, P)  │                                     │
+   │ σ_A ← s_A·Q                        │                                     │
+   ├── Commit(id, hash, locked, σ_A) ──►│ Commits[0]                          │
+   │                                    │ B commits the same way              │ (B cannot open A's plan)
+   │                                    │ every key seat committed → opening  │
+   │                                    │                                     │ poll
+   │                                    │                                     │ σ ← σ_k + Σ σ_i
+   │                                    │                                     │ decrypt every locked_i
+   │                                    │◄── Open(id, salts, plans) ──────────┤
+   │                                    │ sha256 matches for each seat        │
+   │                                    │ seed ← salts, plans, block          │
+   │ poll: lastTurn changed             │ Turn++, phase planning              │
+   │ playback                           │                                     │
+```
+
+The realm does no pairing: it checks the hashes as `Reveal` does, so the
+server cannot change a plan, only withhold or leak it. A variant keeps the
+server off the chain: it serves σ_k over HTTP once the chain shows every
+commit, and any client sends `Open` (without a session key, an Adena
+popup for whoever does).
+
+### Who can read a plan early
+
+| Holder | Has | Can open early? |
+|---|---|---|
+| The last player, before committing | Every other σ_i, its own s_i | No: σ_k is missing |
+| The key server | σ_k, the σ_i committed so far | No: the uncommitted seats' σ_i are missing |
+| The key server and one player together | Everything | Yes: the trust assumption. A threshold group of servers makes it harder, at the cost of a network to run |
+
+### What can go wrong
+
+- **The server is down or withholds σ_k**: no plan opens. A drand
+  timelocked copy of each plan in the commit (as in the main design)
+  opens them at D + 2 min, or each player reveals by hand.
+- **A key seat never commits** (surrenders while planning, or runs out
+  of time): its σ_i never comes, so the key stays incomplete. The drand
+  copy opens the committed plans at D + 2 min; the timeout path is slow
+  anyway.
+- **A bogus σ_i** (not s_i·Q): nobody can decrypt. The realm cannot
+  see it without a pairing; the server and the clients check
+  e(σ_i, G2) = e(Q, P_i) off chain, and the seat is treated as never
+  revealed.
+
+### Against the main design
+
+| Item | Main design | Shared key |
+|---|---|---|
+| Transactions a turn, a player | 2 (commit, reveal) | 1 (commit) |
+| Adena popups a turn, without a session key | 2 | 1 |
+| Session keys | needed for no popup | optional |
+| Turn latency, all online | the last reveal | the server's `Open`, seconds after the last commit |
+| Turn latency, a committer offline | D + 2 min | seconds |
+| Trust | drand's threshold | drand's threshold (fallback) and the key server not colluding |
+| To run | nothing | the key server, its gas (or the HTTP variant) |
+| Client crypto | tlock-js | BLS12-381 IBE by hand (`@noble/curves`), plus tlock-js for the fallback |
+| Join | as today | a BLS key and its proof of possession |

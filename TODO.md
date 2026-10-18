@@ -81,9 +81,9 @@
   - walls 
   - doors except saloon
   - windows
-- Commit-reveal for plans (`PhaseCommit`/`PhaseRevaeal` reserved): secret
-  simultaneous selection and dice seeded from revealed salts. Maybe make this
-  optionnal?
+- Commit-reveal for plans (`PhaseCommit`/`PhaseReveal` reserved): secret
+  simultaneous plans, and the deck shuffle seeded from the revealed salts.
+  Maybe make this optional?
 - Sounds
   - Add western music
     
