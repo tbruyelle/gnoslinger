@@ -1,6 +1,8 @@
 # Hidden plans: commit, reveal, timelocked plan — design
 
-Status: proposal, 2026-10-17. Nothing built yet. `TODO.md` lists the
+Status: proposal, 2026-10-17. Not built yet, except the account sessions
+it can use for the popups (built 2026-10-18, `AGENTS.md`,
+`chain/session.ts`). `TODO.md` lists the
 commit-reveal item this replaces ("`PhaseCommit`/`PhaseReveal` reserved",
 "the deck shuffle seeded from the revealed salts").
 
@@ -9,35 +11,36 @@ commit-reveal item this replaces ("`PhaseCommit`/`PhaseReveal` reserved",
 Today the second player to send `SubmitPlan` can read the first player's
 plan from the chain (the tx's arguments, the realm's `json/plan` view).
 The plans must be secret until everyone's is in, and that must not cost
-the player an extra wallet signature per turn, a game server, or the
-ability to play by correspondence (a 2-day turn with an offline opponent).
+a game server or the ability to play by correspondence (a 2-day turn with
+an offline opponent).
 
 What gno.land offers for this, surveyed on 2026-10-17: no encrypted
 mempool, no threshold keys among the validators, nothing like SKALE's
 BITE, Fairblock, Zama or a TEE chain, so **someone has to send the plan
 in clear once everyone has committed**: the reveal transaction cannot go
-away. What can go away is the player's involvement in it, its chance to
-abort after seeing the others, and its wait on an offline player. Three
-pieces, each useful alone, built in that order:
+away. What can go away is the player's chance to abort after seeing the
+others, and its wait on an offline player. Two pieces, each useful alone,
+built in that order:
 
 1. **Commit-reveal in the realm**: `Commit(hash)`, then `Reveal(salt,
    plan)` by anyone who has them; the last reveal resolves the turn as the
    last `SubmitPlan` does today; an unrevealed plan at the deadline scores
    like a death, so aborting never pays.
-2. **Native session keys** (the pinned gno's `auth` module has them,
-   `MsgCreateSession`): a key kept in the browser signs every game call
-   as the player, fees paid by the player's account within a spend limit.
-   One Adena popup a month; the reveal, and everything else, goes out by
-   itself.
-3. **Timelocked plan**: the commit carries the salt and plan encrypted
+2. **Timelocked plan**: the commit carries the salt and plan encrypted
    to the drand round of the turn's deadline (`tlock`). If the committer
    vanishes, anyone opens its plan at the deadline and the turn resolves
    with it. The realm only stores the timelocked plan: no new on-chain
    crypto.
 
+Popups are a matter of comfort, not of the mechanism: with Adena alone a
+turn asks for two signatures instead of today's one, the commit and then
+the reveal once everyone has committed. Auto-sign (account sessions,
+below) takes both away.
+
 ## The turn
 
-Two players, both online, both with a session key: no popup at all.
+Two players, both online, both with auto-sign on: no popup at all.
+Without it, Adena asks for the commit and for the reveal.
 
 ```
  A's browser                      realm                                  B's browser
@@ -153,72 +156,19 @@ opening of its own plan, until `no_reveal` if nobody opens it.
   empty), the design degrades to plain commit-reveal with the
   `no_reveal` penalty.
 
-## Session keys
+## Popups and account sessions
 
-The pinned gno (`tm2/pkg/sdk/auth`, `gno.land/pkg/gnoland/allow_paths.go`)
-has account sessions. The realm needs **no change** for them: a
-session-signed call reaches it with `cur.Previous().Address()` being the
-player's own address.
+Auto-sign (`AGENTS.md`, `chain/session.ts`): a key kept in the browser
+signs the player's calls to the game realm, through the chain's account
+sessions, so the commit and the reveal need no popup. It changes nothing
+in the realm (the caller is the player's address) nor in the mechanism:
 
-```
- Adena (master g1abc…)                                chain, auth module
-   │ one popup: MsgCreateSession{                      /a/<master>/s/<session>:
-   │   session_key: the browser's public key,            pubkey, account number, sequence,
-   │   expires_at: now + 30 days,                        expires_at, allow_paths,
-   │   allow_paths: ["vm/exec:gno.land/r/tbruyelle/gnoslinger/v1"],   spend_limit, spend_used
-   │   spend_limit: 5 GNOT, spend_period: 1 day }
-   ▼
- browser key (secp256k1 in localStorage, one per master address)
-   │ every game call:
-   │   tx{ msgs: [m_call{ caller: master, pkg_path, func, args }], fee,
-   │       signatures: [{ pub_key: session, signature, session_addr: session }] }
-   │   sign bytes: chain_id, the session account's number and sequence
-   │   (abci query auth/accounts/<master>/session/<session>)
-   ▼
- ante: fee taken from the master's balance, counted on the session's limit
- realm: caller == master
-```
-
-Facts from the code: at most 16 sessions an account, 8 allow paths,
-expiry up to 4 years, spend period up to 30 days; a session can never
-sign `auth` messages (no escalation) nor `vm/add_package`; `allow_paths`
-scopes a realm, not a function; the gas fee counts against the spend
-limit, and so does every coin the call moves (a `CreateGame` storage
-deposit included), so the limit also bounds what a stolen key can cost.
-
-What the key may do with the realm scoped: commit, reveal, create and
-join games, surrender, claim. A stolen key could lose the player's games
-and spend the limit on deposits. For a game that is acceptable; the limit
-and the expiry are the player's choice in the lobby ("Play without
-popups: 30 days, up to 5 GNOT a day"), with Revoke next to it.
-
-Client side:
-
-- `chain/session.ts`: make and keep the key; `SessionWallet implements
-  Wallet` (`address` is the master's; `doContract` builds the tx, signs
-  it, broadcasts with `broadcast_tx_sync` through the existing `Rpc`),
-  and falls back to the Adena wallet when the session is missing,
-  expired or over its limit (the chain answers `SessionNotAllowed`).
-- Signing: `@gnolang/tm2-js-client` encodes the tx and signs, but its
-  `signTransaction` hard-codes `session_addr: ""` and queries the signer's
-  own account: the client builds the signature itself (the signer and
-  the Tx encoder of the library, or a hand-rolled amino sign doc with
-  `@noble/curves` secp256k1) and fetches the session account's number and
-  sequence.
-- Gas: a commit or a reveal that does not resolve needs little; the
-  resolving reveal keeps the fixed `DEFAULT_GAS_WANTED` as today. The
-  declared `gas_fee` is charged in full, so size it per call.
-
-**Resolved** (2026-10-18, built as step 2 ahead of the commit-reveal, see
-`AGENTS.md`, `chain/session.ts`): Adena's `DoContract` accepts
-`/auth.m_create_session` and `/auth.m_revoke_session` since its
-session-account work (onbloc/adena-wallet#853), `session_key` given as an
-Any (`type_url` `/tm.PubKeySecp256k1`, `value` the base64 of the key's
-proto encoding). The browser signs the session's txs itself, checked on
-gnodev; the Adena popup for the creation is still to be tried by hand.
-Found on the way: the spend limit counts storage deposits (a `CreateGame`
-uses about 2.5 GNOT of it), and a deposit over the limit fails at delivery
-with "session not allowed error", after the fee is paid.
+- The key lives in the page, so it sends the reveal only while the game
+  is open. A player who commits and closes the tab is covered by its
+  timelocked plan, with or without a session.
+- The session's daily limit counts the storage deposits too: the
+  resolving reveal and the commits' deposits use some of it, and a
+  refund does not give it back.
 
 ## Realm
 
@@ -250,7 +200,7 @@ events. Replays and the history view do not change.
 
 | Function | Caller | Does |
 |---|---|---|
-| `Commit(cur, id, hash, locked string) int` | the seat (master or session) | phase `planning`, before D, character alive, not yet committed; `hash` 64 hex chars, `locked` ≤ 1 KB; stores; when every alive seat has committed, phase `revealing` (event `AllCommitted`). Returns Rev |
+| `Commit(cur, id, hash, locked string) int` | the seat | phase `planning`, before D, character alive, not yet committed; `hash` 64 hex chars, `locked` ≤ 1 KB; stores; when every alive seat has committed, phase `revealing` (event `AllCommitted`). Returns Rev |
 | `Reveal(cur, id, seat int, salt, plan string) int` | anyone | phase `revealing` only (a reveal while planning would leak), seat committed and not revealed; sha256 matches; then exactly today's `SubmitPlan` checks (parse, validate, ground ids, targets, `PlayedFoot`/`PlayedRun`); stores plan and salt; when every seat is revealed, `resolveTurn` in the same tx. Returns Rev |
 | `Surrender(cur, id)` | the seat | `planning` only; drops the seat's commit; as today otherwise |
 | `ClaimTimeout(cur, id)` | anyone | see the clock above; a reveal-phase claim gives every unrevealed alive seat `Out` and the award `no_reveal` −8, then resolves with the plans in |
@@ -285,26 +235,24 @@ commit only (the client shows its own plan from `localStorage`).
   `localStorage`; `openLocked(locked, round)`.
 - `chain/realm.ts`: `commit(id, hash, locked)` watching
   `players[seat].committed`, `reveal(id, seat, salt, plan)` watching
-  `players[seat].revealed` or the turn changing; the wallet is the
-  session when there is one.
+  `players[seat].revealed` or the turn changing; sent through `chain.wallet`
+  (auto-sign, else Adena).
 - `GameScene`: **Send plan** seals and commits; the header says
   "Committed 1 of 2", then "Revealing…"; on every poll, with the phase
   `revealing`: my pending reveal goes out; past `lockRound`, every
   unrevealed seat with a timelocked plan is opened and revealed (one tx at a
-  time, as the realm client allows one in flight); without a session key
+  time, as the realm client allows one in flight); without auto-sign
   the same steps show as buttons (an Adena popup each). The planning
   panel shows my plan from `localStorage` while waiting. **Claim** only
   shows once past `revealUntil` and after the timelocked plans were tried.
-- `ui/lobbyView.ts`: "Your move" from `committed`/`revealed`; the
-  session key box in the top bar (create with a limit and a duration,
-  the time left, revoke).
+- `ui/lobbyView.ts`: "Your move" from `committed`/`revealed`.
 - `game/lobby.ts`, `chain/types.ts`: the new fields.
 
 ## Costs
 
 | Item | Today | With hidden plans |
 |---|---|---|
-| Signatures a turn, a player | 1 Adena popup | 0 (session) or 2 (Adena) |
+| Signatures a turn, a player | 1 Adena popup (0 with auto-sign) | 2 Adena popups (0 with auto-sign) |
 | Transactions a turn, a player | 1 | 2 |
 | Storage a turn | ~2 KB, the turn's record | the same, plus ~0.5 KB a seat for the commit and its timelocked plan, refunded at resolution |
 | Turn latency, both online | the last plan | the last reveal, seconds after the last commit |
@@ -317,12 +265,9 @@ commit only (the client shows its own plan from `localStorage`).
    filetests (a full turn, a reveal while planning refused, a wrong salt,
    a claim in each phase). Client: seal, commit, reveal through Adena.
    Playable with two popups a turn.
-2. Client: session keys. Check first whether Adena signs
-   `/auth.m_create_session` on gnodev; else the gnokey command in the
-   lobby's help. The session signer, the fallback to Adena.
-3. Client: the timelocked plan (tlock-js), the realm's `lockRound`, the opener
+2. Client: the timelocked plan (tlock-js), the realm's `lockRound`, the opener
    logic, the Claim button gated behind it.
-4. `AGENTS.md`, `bga/doc/ASSUMPTIONS.md`, `TODO.md`.
+3. `AGENTS.md`, `bga/doc/ASSUMPTIONS.md`, `TODO.md`.
 
 ## Alternative: a shared key with a key server
 
@@ -409,7 +354,7 @@ popup for whoever does).
 |---|---|---|
 | Transactions a turn, a player | 2 (commit, reveal) | 1 (commit) |
 | Adena popups a turn, without a session key | 2 | 1 |
-| Session keys | needed for no popup | optional |
+| Auto-sign (account sessions) | takes the 2 popups away | takes the 1 popup away |
 | Turn latency, all online | the last reveal | the server's `Open`, seconds after the last commit |
 | Turn latency, a committer offline | D + 2 min | seconds |
 | Trust | drand's threshold | drand's threshold (fallback) and the key server not colluding |
