@@ -101,11 +101,12 @@ type Game struct {
 	State     engine.State
 	Turn      int // 1-based
 	MaxTurns  int
-	Timeout   time.Duration // a turn's inactivity after which ClaimTimeout succeeds
+	Timeout   time.Duration // the time a turn gives, from TurnStart, after which ClaimTimeout succeeds
 	Phase     Phase
 	Plans     []string // current turn, canonical form
 	Submitted []bool
 	Missed    []int         // turns in a row each seat let time out, reset by a plan
+	TurnStart time.Time     // when the turn in progress started: its clock, left alone by the saves within the turn
 	Turns     []*TurnResult // resolved turns, in order (at most MaxTurns)
 	Winner    int           // seat index, -1 for none: the most victory points, -1 on a tie
 	EndReason string
@@ -198,8 +199,12 @@ func (g *Game) lastTurn() *TurnResult {
 }
 
 // timeoutAt is when the turn in progress becomes claimable through
-// ClaimTimeout; a game waiting for players has no timeout.
-func (g *Game) timeoutAt() time.Time { return g.UpdatedAt.Add(g.Timeout) }
+// ClaimTimeout, Timeout after its start whatever happened since (a plan
+// sent does not restart it); a game waiting for players has no timeout.
+func (g *Game) timeoutAt() time.Time { return g.TurnStart.Add(g.Timeout) }
+
+// startTurn starts the turn's clock.
+func (g *Game) startTurn() { g.TurnStart = time.Now() }
 
 // assertInTime refuses a plan once the turn is claimable:
 // past timeoutAt it can only be claimed (ClaimTimeout), so playing late

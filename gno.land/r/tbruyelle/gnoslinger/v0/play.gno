@@ -147,6 +147,7 @@ func resolveTurn(cur realm, g *Game) string {
 		g.finish("max_turns")
 	default:
 		g.Turn++
+		g.startTurn()
 	}
 	return seedHex
 }

@@ -93,6 +93,7 @@ func JoinGame(cur realm, id string, startHex string, facing int) {
 	if g.freeSeat() < 0 {
 		// The game starts: it counts as played for every seat.
 		g.Phase = PhasePlanning
+		g.startTurn()
 		openGames.Remove(id)
 		for _, p := range g.Players {
 			profiles.AddGamePlayed(cross(cur), p.Addr)

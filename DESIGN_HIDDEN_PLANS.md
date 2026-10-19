@@ -2,7 +2,8 @@
 
 Status: proposal, 2026-10-17. Not built yet, except the account sessions
 it can use for the popups (built 2026-10-18, `AGENTS.md`,
-`chain/session.ts`). `TODO.md` lists the
+`chain/session.ts`) and the turn's fixed start, `TurnStart` (built
+2026-10-19, below). `TODO.md` lists the
 commit-reveal item this replaces ("`PhaseCommit`/`PhaseReveal` reserved",
 "the deck shuffle seeded from the revealed salts").
 
@@ -96,9 +97,10 @@ resolution, as the last `SubmitPlan` does today; the others are cheap.
 
 ### The turn's clock
 
-Today the timeout restarts on every save (`UpdatedAt`, bumped by
-`save()`). Here the turn has a fixed start, `TurnStart`, set when the turn
-starts and left alone by later saves, and the deadlines follow from it:
+The turn has a fixed start, `TurnStart`, set when the turn starts and
+left alone by later saves (built ahead of the rest: before it, the
+timeout restarted on every save, `UpdatedAt`), and the deadlines follow
+from it:
 the timelocked plans are locked to a round after D, so every client must
 know D when it commits.
 
@@ -297,7 +299,7 @@ commit only (the client shows its own plan from `localStorage`).
 
 ## Steps
 
-1. Realm: `TurnStart` and the fixed deadlines, `Commit`, `Reveal`,
+1. Realm: the deadlines from `TurnStart` (built), `Commit`, `Reveal`,
    `revealing`, `no_reveal`, the seed with salts; unit tests and
    filetests (a full turn, a reveal while planning refused, a wrong salt,
    a claim in each phase). Client: seal, commit, reveal through Adena.

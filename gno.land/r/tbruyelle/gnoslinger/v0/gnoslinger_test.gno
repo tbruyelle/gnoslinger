@@ -370,6 +370,15 @@ func TestClaimTimeout(cur realm, t *testing.T) {
 	uassert.AbortsWithMessage(t, cur, "gnoslinger: the game has not timed out yet", func() {
 		ClaimTimeout(cross(cur), id)
 	})
+	// The turn's clock is fixed at its start: a plan sent late in the turn
+	// does not give the others more time.
+	testing.SkipHeights(300) // 25 minutes
+	SubmitPlan(cross(cur), id, "")
+	testing.SkipHeights(61) // 30 minutes and 5 seconds after the turn started
+	testing.SetRealm(testing.NewUserRealm(carol))
+	ClaimTimeout(cross(cur), id)
+	uassert.Equal(t, 2, g.Turn)
+	uassert.Equal(t, 1, g.Missed[0])
 
 	// One plan in: the other player misses the turn, passed for them.
 	testing.SetRealm(testing.NewUserRealm(alice))

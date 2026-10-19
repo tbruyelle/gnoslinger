@@ -23,7 +23,7 @@ const listLimit = 50
 //	             "guns":[{"id","type","name","location","cocked","shells","capacity","jammed","exploded"}]}]   (one entry per seat, 2 to 4),
 //	 "ground":[{"id" (ground id, "g<id>" in a plan),"hex","guns":[{..}]}],
 //	 "winner","endReason","vp":[victory points per seat],"awards":[{"p","reason","points"}] (rule 15, once a played game ends),
-//	 "createdAt","updatedAt","timeoutAt" (when the turn in progress can be claimed, 0 unless planning),
+//	 "createdAt","updatedAt","timeoutAt" (when the turn in progress can be claimed, its start plus the timeout, 0 unless planning),
 //	 "lastTurn":null|{"turn","seed","cards":[result card numbers drawn, in order],"plans":[..],
 //	             "events":[{"seg","p","kind","action","from","to","facing","down","n","delay","reason","card","result","endurance","target","hit","range","gun","gunId","step","chart","status"}],
 //	             "start":[{"hex","facing","down","delay","status","aim","aimAt","aimHex","endurance","serious","gunArm","otherArm","leg","guns":[..]},..]}}
@@ -62,11 +62,7 @@ func GameJSON(id string) string {
 	b.WriteString(`,"endReason":` + quote(g.EndReason))
 	b.WriteString(`,"createdAt":` + strconv.FormatInt(g.CreatedAt.Unix(), 10))
 	b.WriteString(`,"updatedAt":` + strconv.FormatInt(g.UpdatedAt.Unix(), 10))
-	timeoutAt := int64(0)
-	if g.Phase == PhasePlanning {
-		timeoutAt = g.timeoutAt().Unix()
-	}
-	b.WriteString(`,"timeoutAt":` + strconv.FormatInt(timeoutAt, 10))
+	writeTimeoutAt(&b, g)
 	b.WriteString(`,"lastTurn":`)
 	writeTurnResult(&b, g.lastTurn())
 	b.WriteByte('}')
@@ -155,6 +151,16 @@ func writeWounds(b *strings.Builder, c engine.Character) {
 	b.WriteString(`,"gunArm":` + strconv.Itoa(c.GunArm))
 	b.WriteString(`,"otherArm":` + strconv.Itoa(c.OtherArm))
 	b.WriteString(`,"leg":` + strconv.Itoa(c.Leg))
+}
+
+// writeTimeoutAt writes the ,"timeoutAt" member: when the turn in progress
+// can be claimed, 0 unless the game is planning.
+func writeTimeoutAt(b *strings.Builder, g *Game) {
+	timeoutAt := int64(0)
+	if g.Phase == PhasePlanning {
+		timeoutAt = g.timeoutAt().Unix()
+	}
+	b.WriteString(`,"timeoutAt":` + strconv.FormatInt(timeoutAt, 10))
 }
 
 // writeGround writes the ,"ground":[...] member: the weapons lying in hexes.
@@ -275,7 +281,7 @@ func writeEvent(b *strings.Builder, e engine.Event) {
 // address's registered name ("" if none):
 //
 //	{"name","open":[summary...],"mine":[summary...]}
-//	summary = {"id","rev","phase","turn","maxTurns","timeout","winner","endReason","vp","createdAt","updatedAt","players":[{"addr","name","char","status","submitted"}]}
+//	summary = {"id","rev","phase","turn","maxTurns","timeout","winner","endReason","vp","createdAt","updatedAt","timeoutAt","players":[{"addr","name","char","status","submitted"}]}
 //
 // players has one entry per seat, "addr" "" for a seat nobody took yet.
 func GamesJSON(addr string) string {
@@ -319,6 +325,7 @@ func writeSummary(b *strings.Builder, g *Game) {
 	b.WriteString(`,"endReason":` + quote(g.EndReason))
 	b.WriteString(`,"createdAt":` + strconv.FormatInt(g.CreatedAt.Unix(), 10))
 	b.WriteString(`,"updatedAt":` + strconv.FormatInt(g.UpdatedAt.Unix(), 10))
+	writeTimeoutAt(b, g)
 	b.WriteString(`,"players":[`)
 	for i, p := range g.Players {
 		if i > 0 {

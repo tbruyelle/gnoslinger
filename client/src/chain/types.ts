@@ -169,7 +169,7 @@ export interface GameView {
   awards?: VPAward[];
   createdAt: number;
   updatedAt: number;
-  /** Unix seconds after which ClaimTimeout succeeds; 0 when finished. */
+  /** Unix seconds after which ClaimTimeout succeeds: the turn's start plus the timeout; 0 unless planning. */
   timeoutAt: number;
   lastTurn: TurnResult | null;
 }
@@ -187,7 +187,7 @@ export interface GameSummary {
   phase: Phase;
   turn: number;
   maxTurns: number;
-  /** Inactivity, in seconds, after which anyone may claim the timeout. */
+  /** The time a turn gives, in seconds, after which anyone may claim it. */
   timeout: number;
   /** Seat index of the winner (the most victory points), -1 for none. */
   winner: number;
@@ -197,6 +197,8 @@ export interface GameSummary {
   vp?: number[];
   createdAt: number;
   updatedAt: number;
+  /** Unix seconds after which ClaimTimeout succeeds: the turn's start plus the timeout; 0 unless planning. */
+  timeoutAt: number;
   /** One entry per seat, addr "" for a seat nobody took yet; submitted: the seat's plan for the turn in progress is in; name: the registered name, "" if none; status: alive, out, killed or passed_out. */
   players: { addr: string; name?: string; char: string; status?: PlayerStatus; submitted?: boolean }[];
 }

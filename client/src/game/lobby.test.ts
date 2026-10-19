@@ -8,7 +8,7 @@ const OTHER = "g1other";
 function game(id: string, p: Partial<GameSummary>): GameSummary {
   return {
     id, rev: 1, phase: "planning", turn: 1, maxTurns: 20, timeout: 7200, winner: -1, endReason: "",
-    createdAt: 0, updatedAt: 0, players: [], ...p,
+    createdAt: 0, updatedAt: 0, timeoutAt: 0, players: [], ...p,
   };
 }
 
@@ -40,8 +40,8 @@ describe("time left", () => {
     expect(pastTimeout(1000, 1000 + CHAIN_CLOCK_MARGIN - 1)).toBe(false);
     expect(pastTimeout(1000, 1000 + CHAIN_CLOCK_MARGIN)).toBe(true);
   });
-  it("counts from the last change", () => {
-    const g = game("1", { updatedAt: 1000, timeout: 3600 });
+  it("counts to the turn's timeout, whatever changed since", () => {
+    const g = game("1", { updatedAt: 1500, timeoutAt: 4600, timeout: 3600 });
     expect(secondsLeft(g, 1600)).toBe(3000 + CHAIN_CLOCK_MARGIN);
     expect(secondsLeft(g, 9000)).toBe(0);
   });
@@ -92,9 +92,9 @@ describe("missOutcome", () => {
 
 describe("claimable", () => {
   it("puts a running game out of time in my move, after the plans I owe", () => {
-    const late = game("7", { updatedAt: 0, timeout: 300, players: [{ addr: ME, char: "marshal", submitted: true }, { addr: OTHER, char: "the_kid", submitted: false }] });
-    const mine = game("8", { updatedAt: 1000, timeout: 7200, players: [{ addr: ME, char: "marshal", submitted: false }, { addr: OTHER, char: "the_kid", submitted: true }] });
-    const open = game("9", { phase: "waiting", updatedAt: 0, timeout: 300, players: [{ addr: ME, char: "marshal" }, { addr: "", char: "" }] });
+    const late = game("7", { timeoutAt: 300, timeout: 300, players: [{ addr: ME, char: "marshal", submitted: true }, { addr: OTHER, char: "the_kid", submitted: false }] });
+    const mine = game("8", { timeoutAt: 8200, timeout: 7200, players: [{ addr: ME, char: "marshal", submitted: false }, { addr: OTHER, char: "the_kid", submitted: true }] });
+    const open = game("9", { phase: "waiting", timeout: 300, players: [{ addr: ME, char: "marshal" }, { addr: "", char: "" }] });
     const due = 300 + CHAIN_CLOCK_MARGIN;
     expect(claimable(late, due)).toBe(true);
     expect(claimable(late, due - 1)).toBe(false);

@@ -74,9 +74,9 @@ export function stillOffered(g: GameSummary, nowSec: number): boolean {
   return nowSec - g.updatedAt < OPEN_MAX_AGE;
 }
 
-/** Seconds left before anyone may claim the game's timeout (0 once it is due, CHAIN_CLOCK_MARGIN included); nowSec in unix seconds. */
+/** Seconds left in a running game's turn before anyone may claim it (0 once it is due, CHAIN_CLOCK_MARGIN included); nowSec in unix seconds. */
 export function secondsLeft(g: GameSummary, nowSec: number): number {
-  return Math.max(0, g.updatedAt + g.timeout + CHAIN_CLOCK_MARGIN - nowSec);
+  return Math.max(0, g.timeoutAt + CHAIN_CLOCK_MARGIN - nowSec);
 }
 
 /** 110000 -> "1 d 6 h", 7500 -> "2 h 5 min", 2280 -> "38 min". */
