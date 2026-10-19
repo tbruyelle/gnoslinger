@@ -16,10 +16,12 @@ ADENA_ADDRS ?=
 # --- Development ---
 
 # Local chain: chain id "dev", RPC 127.0.0.1:26657, gnoweb 127.0.0.1:8888.
-# No -empty-blocks: time.Now() inside a tx is the new block's time, so the
-# realm's lazy timeouts work; only query-time clocks go stale.
+# -empty-blocks (one a second) keeps the chain's clock current: a block's
+# time comes from the votes on the one before, so without them the first
+# tx after an idle spell runs with the time of the previous tx, minutes
+# old, and the realm's lazy timeouts refuse a claim that is due.
 gnodev:
-	go tool gnodev $(foreach a,$(ADENA_ADDRS),-add-account $(a)=1000000000ugnot)
+	go tool gnodev -empty-blocks $(foreach a,$(ADENA_ADDRS),-add-account $(a)=1000000000ugnot)
 
 web:
 	npm run dev -w client

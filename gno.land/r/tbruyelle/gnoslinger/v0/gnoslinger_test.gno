@@ -197,7 +197,7 @@ func TestSubmitAndResolve(cur realm, t *testing.T) {
 	uassert.Equal(t, "1f:ahead,2f:ahead", g.Plans[0])
 	uassert.True(t, g.State.Chars[0].PlayedFoot)
 	uassert.True(t, g.State.Chars[0].PlayedRun)
-	uassert.True(t, strings.Contains(GameJSON(id), `"submitted":true,"playedFoot":true,"playedRun":true`))
+	uassert.True(t, strings.Contains(GameJSON(id), `"submitted":true,"missed":0,"playedFoot":true,"playedRun":true`))
 	uassert.AbortsWithMessage(t, cur, "gnoslinger: plan already submitted for this turn", func() {
 		SubmitPlan(cross(cur), id, "")
 	})
@@ -352,20 +352,26 @@ func TestCancel(cur realm, t *testing.T) {
 }
 
 func TestClaimTimeout(cur realm, t *testing.T) {
-	// A waiting game nobody joined is cancelled.
+	// A game waiting for players has no timeout: it stays open, and the
+	// turn clock starts with the last join.
 	testing.SetRealm(testing.NewUserRealm(alice))
 	id := CreateGame(cross(cur), 2, 10, 30, "A-D5", 3)
+	testing.SkipHeights(361) // 5s per height: past the 30 minute timeout picked above
+	testing.SetRealm(testing.NewUserRealm(carol))
+	uassert.AbortsWithMessage(t, cur, "gnoslinger: the game is waiting for players: it has no timeout", func() {
+		ClaimTimeout(cross(cur), id)
+	})
+	g := getGame(id)
+	uassert.True(t, openGames.Has(id))
+	uassert.True(t, strings.Contains(GameJSON(id), `"timeoutAt":0,`))
+	testing.SetRealm(testing.NewUserRealm(bob))
+	JoinGame(cross(cur), id, "A-H7", 0)
+	uassert.Equal(t, "planning", g.Phase.String())
 	uassert.AbortsWithMessage(t, cur, "gnoslinger: the game has not timed out yet", func() {
 		ClaimTimeout(cross(cur), id)
 	})
-	testing.SkipHeights(361) // 5s per height: past the 30 minute timeout picked above
-	testing.SetRealm(testing.NewUserRealm(carol))
-	ClaimTimeout(cross(cur), id)
-	g := getGame(id)
-	uassert.Equal(t, "expired", g.EndReason)
-	uassert.False(t, openGames.Has(id))
 
-	// One plan in: the other player forfeits.
+	// One plan in: the other player misses the turn, passed for them.
 	testing.SetRealm(testing.NewUserRealm(alice))
 	id = CreateGame(cross(cur), 2, 10, 30, "A-D5", 3)
 	testing.SetRealm(testing.NewUserRealm(bob))
@@ -376,6 +382,28 @@ func TestClaimTimeout(cur realm, t *testing.T) {
 	testing.SetRealm(testing.NewUserRealm(carol))
 	ClaimTimeout(cross(cur), id)
 	g = getGame(id)
+	uassert.Equal(t, "planning", g.Phase.String())
+	uassert.Equal(t, 2, g.Turn)
+	uassert.Equal(t, 1, g.Missed[1])
+	uassert.Equal(t, "", g.lastTurn().Plans[1])
+	uassert.Equal(t, "alive", g.State.Chars[1].Status.String())
+	// A plan resets the count.
+	testing.SetRealm(testing.NewUserRealm(bob))
+	SubmitPlan(cross(cur), id, "")
+	uassert.Equal(t, 0, g.Missed[1])
+	testing.SetRealm(testing.NewUserRealm(alice))
+	SubmitPlan(cross(cur), id, "")
+	uassert.Equal(t, 3, g.Turn)
+	// Three missed turns in a row: out of the fight, the game ends.
+	for i := 0; i < MaxMissed; i++ {
+		testing.SetRealm(testing.NewUserRealm(alice))
+		SubmitPlan(cross(cur), id, "")
+		testing.SkipHeights(361)
+		testing.SetRealm(testing.NewUserRealm(carol))
+		ClaimTimeout(cross(cur), id)
+	}
+	uassert.Equal(t, 5, g.Turn)
+	uassert.Equal(t, 3, g.Missed[1])
 	uassert.Equal(t, "timeout", g.EndReason)
 	// Out of time counts as surrendering.
 	uassert.Equal(t, 4, g.VP[0])
@@ -398,18 +426,10 @@ func TestClaimTimeout(cur realm, t *testing.T) {
 }
 
 func TestLateMoves(cur realm, t *testing.T) {
-	// Past the timeout a waiting game takes no player.
+	// Past the turn's timeout a running game takes no plan: it can only be
+	// claimed.
 	testing.SetRealm(testing.NewUserRealm(alice))
 	id := CreateGame(cross(cur), 2, 10, 30, "A-D5", 3)
-	testing.SkipHeights(361)
-	testing.SetRealm(testing.NewUserRealm(bob))
-	uassert.AbortsWithMessage(t, cur, "gnoslinger: out of time: the game can only be claimed now", func() {
-		JoinGame(cross(cur), id, "A-H7", 0)
-	})
-
-	// Nor a running game a plan: it can only be claimed.
-	testing.SetRealm(testing.NewUserRealm(alice))
-	id = CreateGame(cross(cur), 2, 10, 30, "A-D5", 3)
 	testing.SetRealm(testing.NewUserRealm(bob))
 	JoinGame(cross(cur), id, "A-H7", 0)
 	testing.SkipHeights(361)
@@ -780,8 +800,9 @@ func TestSurrenderGoesOn(cur realm, t *testing.T) {
 }
 
 func TestClaimTimeoutGoesOn(cur realm, t *testing.T) {
-	// Two of three plans in: the late player is out, the turn resolves and
-	// the showdown goes on.
+	// Two of three plans in: the late player misses the turn, which
+	// resolves, and the showdown goes on; at its third miss in a row it is
+	// out of the fight.
 	testing.SetRealm(testing.NewUserRealm(alice))
 	id := CreateGame(cross(cur), 3, 10, 30, "A-D5", 3)
 	testing.SetRealm(testing.NewUserRealm(bob))
@@ -797,18 +818,33 @@ func TestClaimTimeoutGoesOn(cur realm, t *testing.T) {
 	ClaimTimeout(cross(cur), id)
 	uassert.Equal(t, "planning", g.Phase.String())
 	uassert.Equal(t, 2, g.Turn)
-	uassert.Equal(t, "out", g.State.Chars[2].Status.String())
+	uassert.Equal(t, "alive", g.State.Chars[2].Status.String())
+	uassert.Equal(t, 1, g.Missed[2])
 	uassert.Equal(t, "A-D6", g.State.Chars[0].Hex)
 	uassert.Equal(t, 0, len(g.Awards))
 	// The clock restarted with the turn: the game cannot be claimed again at once.
 	uassert.AbortsWithMessage(t, cur, "gnoslinger: the game has not timed out yet", func() {
 		ClaimTimeout(cross(cur), id)
 	})
-	// One plan in of the two left: the other is out as well, the game ends.
-	testing.SetRealm(testing.NewUserRealm(bob))
-	SubmitPlan(cross(cur), id, "")
-	testing.SkipHeights(361)
-	ClaimTimeout(cross(cur), id)
+	for turn := 2; turn <= 3; turn++ {
+		testing.SetRealm(testing.NewUserRealm(alice))
+		SubmitPlan(cross(cur), id, "")
+		testing.SetRealm(testing.NewUserRealm(bob))
+		SubmitPlan(cross(cur), id, "")
+		testing.SkipHeights(361)
+		ClaimTimeout(cross(cur), id)
+	}
+	uassert.Equal(t, "planning", g.Phase.String())
+	uassert.Equal(t, 4, g.Turn)
+	uassert.Equal(t, "out", g.State.Chars[2].Status.String())
+	// The showdown goes on without it: alice misses three turns in a row
+	// too, and the game ends.
+	for turn := 4; turn <= 6; turn++ {
+		testing.SetRealm(testing.NewUserRealm(bob))
+		SubmitPlan(cross(cur), id, "")
+		testing.SkipHeights(361)
+		ClaimTimeout(cross(cur), id)
+	}
 	uassert.Equal(t, "finished", g.Phase.String())
 	uassert.Equal(t, "timeout", g.EndReason)
 	uassert.Equal(t, 1, g.Winner)

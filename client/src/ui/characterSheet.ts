@@ -1,5 +1,6 @@
 import type { GroundGunView, GunView } from "../chain/types";
 import { uprightTokenAngle } from "../rules";
+import { MAX_MISSED } from "../game/lobby";
 import template from "./characterSheet.html?raw";
 import { seatColor } from "./seats";
 
@@ -17,6 +18,8 @@ export interface SheetData {
   delay: number;
   status: string;
   submitted: boolean;
+  /** Turns in a row the player let time out (MAX_MISSED puts the character out of the fight). */
+  missed: number;
   phase: string;
   isMe: boolean;
   guns: GunView[];
@@ -202,6 +205,7 @@ function statusRow(d: SheetData, accent: string): string {
     chip("END", String(d.endurance), d.endurance < 10),
     chip("PLAN", plan),
   ];
+  if (d.missed > 0) chips.push(chip("MISSED", `${d.missed} of ${MAX_MISSED}`, true));
   if (d.aimedBy.length > 0) chips.push(chip("AIMED BY", escapeHtml(d.aimedBy.join(", ")), true));
   if (d.isMe) chips.push(`<div style="margin-left: auto; font-family: Rye, Georgia, serif; font-size: 22px; color: ${accent}; letter-spacing: 1px">YOUR CHARACTER</div>`);
   const row = `<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px">${chips.join("")}</div>`;

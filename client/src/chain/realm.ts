@@ -110,8 +110,13 @@ export class RealmClient {
     await this.send("Surrender", [id], () => this.finished(id));
   }
 
+  /** Claims a timed-out turn: the turn moves on (the late players passed, or out) or the game ends. */
   async claimTimeout(id: string): Promise<void> {
-    await this.send("ClaimTimeout", [id], () => this.finished(id));
+    const before = await this.getGame(id);
+    await this.send("ClaimTimeout", [id], async () => {
+      const g = await this.getGame(id);
+      return g.turn !== before.turn || g.phase === "finished" ? true : null;
+    });
   }
 
   private async gone(id: string): Promise<true | null> {

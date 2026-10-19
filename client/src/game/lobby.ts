@@ -12,7 +12,7 @@ export function charName(key: string | undefined): string {
 
 /** The lobby's sections, each newest first as the realm lists them. */
 export interface LobbySections {
-  /** Running games waiting for my plan. */
+  /** Running games waiting for my plan, then those out of time I may claim. */
   yourMove: GameSummary[];
   /** My games waiting on someone else: a second player, or the others' plans. */
   waiting: GameSummary[];
@@ -21,23 +21,62 @@ export interface LobbySections {
   open: GameSummary[];
 }
 
-/** Sorts the games of a player (address me) into the lobby's sections: a plan is mine to send while my character is in the fight and its plan is not in. */
-export function lobbySections(games: GamesView, me: string): LobbySections {
-  const myMove = (g: GameSummary) => {
+/**
+ * Sorts the games of a player (address me) into the lobby's sections at
+ * nowSec (unix seconds): a plan is mine to send while my character is in the
+ * fight and its plan is not in, and a running game out of time is mine to
+ * claim.
+ */
+export function lobbySections(games: GamesView, me: string, nowSec: number): LobbySections {
+  const myPlan = (g: GameSummary) => {
     const s = g.players.find((p) => p.addr === me);
     return !!s && !s.submitted && (s.status ?? "alive") === "alive";
   };
+  const myMove = (g: GameSummary) => myPlan(g) || claimable(g, nowSec);
   return {
-    yourMove: games.mine.filter((g) => g.phase === "planning" && myMove(g)),
+    yourMove: [...games.mine.filter((g) => g.phase === "planning" && myPlan(g)), ...games.mine.filter((g) => g.phase === "planning" && !myPlan(g) && claimable(g, nowSec))],
     waiting: games.mine.filter((g) => g.phase === "waiting" || (g.phase === "planning" && !myMove(g))),
     finished: games.mine.filter((g) => g.phase === "finished"),
     open: games.open.filter((g) => !g.players.some((p) => p.addr === me)),
   };
 }
 
-/** Seconds left before anyone may claim the game's timeout (0 once it is due); nowSec in unix seconds. */
+/** Turns in a row a player may let time out (the realm's MaxMissed): each claimed one is passed for them, the last puts them out of the fight. */
+export const MAX_MISSED = 3;
+
+/** What claiming the timeout does to a seat without a plan: passes its turn, or puts it out at its MAX_MISSED-th miss in a row. */
+export function missOutcome(p: { missed?: number }): "pass" | "out" {
+  return (p.missed ?? 0) + 1 >= MAX_MISSED ? "out" : "pass";
+}
+
+/**
+ * Seconds a timeout is given past the wall clock: the chain's clock (the
+ * block time) trails it by about a block, and the JSON's times are rounded
+ * down to the second, so a claim sent right at the timeout would be refused.
+ */
+export const CHAIN_CLOCK_MARGIN = 3;
+
+/** Whether the turn ending at timeoutAt (unix seconds, 0 for none) is out of time at nowSec, with the chain's clock margin. */
+export function pastTimeout(timeoutAt: number, nowSec: number): boolean {
+  return timeoutAt > 0 && nowSec >= timeoutAt + CHAIN_CLOCK_MARGIN;
+}
+
+/** A running game whose turn is out of time: it takes no more plans, anyone may claim it. */
+export function claimable(g: GameSummary, nowSec: number): boolean {
+  return g.phase === "planning" && secondsLeft(g, nowSec) === 0;
+}
+
+/** How long an open showdown is offered without anyone joining: the realm keeps it open, the lobby stops listing it. */
+export const OPEN_MAX_AGE = 7 * 86400;
+
+/** Whether an open showdown is still offered at nowSec: someone joined, or it was called, within OPEN_MAX_AGE. */
+export function stillOffered(g: GameSummary, nowSec: number): boolean {
+  return nowSec - g.updatedAt < OPEN_MAX_AGE;
+}
+
+/** Seconds left before anyone may claim the game's timeout (0 once it is due, CHAIN_CLOCK_MARGIN included); nowSec in unix seconds. */
 export function secondsLeft(g: GameSummary, nowSec: number): number {
-  return Math.max(0, g.updatedAt + g.timeout - nowSec);
+  return Math.max(0, g.updatedAt + g.timeout + CHAIN_CLOCK_MARGIN - nowSec);
 }
 
 /** 110000 -> "1 d 6 h", 7500 -> "2 h 5 min", 2280 -> "38 min". */

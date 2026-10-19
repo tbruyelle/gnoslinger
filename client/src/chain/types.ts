@@ -26,6 +26,8 @@ export interface PlayerView {
   delay: number;
   status: PlayerStatus;
   submitted: boolean;
+  /** Turns in a row the player let time out, each passed for them (MAX_MISSED puts them out); a plan resets it. */
+  missed?: number;
   playedFoot: boolean;
   playedRun: boolean;
   /** A Run was played on the previous turn: required to Sprint (rule 9.23). */
@@ -189,7 +191,7 @@ export interface GameSummary {
   timeout: number;
   /** Seat index of the winner (the most victory points), -1 for none. */
   winner: number;
-  /** "" while running; expired, surrender, timeout, abandoned, all_down, max_turns, last_standing. */
+  /** "" while running; expired (games from before the join phase lost its timeout), surrender, timeout, abandoned, all_down, max_turns, last_standing. */
   endReason: string;
   /** Victory points per seat, once a played game ended. */
   vp?: number[];

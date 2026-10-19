@@ -2,7 +2,7 @@ import { formatCoins } from "../chain/rpc";
 import { spentNow, type SessionState } from "../chain/session";
 import { playerLabel, type GameSummary, type GamesView, type PlayersView, type Profile } from "../chain/types";
 import { uprightTokenAngle } from "../rules";
-import { charName, formatDuration, formatLeft, lobbySections, outcomeLine, runningOut, seatsTaken, secondsLeft } from "../game/lobby";
+import { charName, claimable, formatDuration, formatLeft, lobbySections, outcomeLine, runningOut, seatsTaken, secondsLeft, stillOffered } from "../game/lobby";
 import { nextSeat, seatChar } from "../game/setup";
 import { seatColor } from "./seats";
 
@@ -135,6 +135,8 @@ const CSS = `
 .gl-detail{font-size:16px;color:#5A4636}
 .gl-pill{font-size:16px;font-weight:700;color:#2A1C14;border:2px solid #2A1C14;border-radius:999px;padding:3px 12px;white-space:nowrap}
 .gl-pill.late{color:#8E2F1A;border-color:#8E2F1A}
+.gl-pill.over{color:#FBF4E4;background:#B5482A;border-color:#8E2F1A;font-family:Rye,Georgia,serif;font-weight:400;letter-spacing:1px}
+.gl-card.over{border-color:#B5482A;box-shadow:inset 0 0 0 2px #B5482A;background:#F9E6D6}
 .gl-play{min-height:46px;padding:0 22px;background:#B5482A;color:#FBF4E4;border:3px solid #2A1C14;border-radius:10px;box-shadow:0 4px 0 #2A1C14;font-family:Rye,Georgia,serif;font-size:18px;letter-spacing:1px;cursor:pointer}
 .gl-play:hover:not(:disabled){background:#C65634}
 .gl-open{min-height:44px;padding:0 18px;background:#FBF4E4;color:#2A1C14;border:2px solid #2A1C14;border-radius:10px;font-size:17px;font-weight:700;cursor:pointer}
@@ -314,8 +316,8 @@ export class LobbyView {
       const msg = m.status === "error" ? "Connect Adena to see your showdowns." : "Loading your showdowns…";
       return `<div class="gl-col"><section class="gl-panel"><p class="gl-empty">${msg}</p></section></div>`;
     }
-    const s = lobbySections(m.games, m.address);
     const now = Date.now() / 1000;
+    const s = lobbySections(m.games, m.address, now);
     const others = (g: GameSummary) => g.players.filter((p) => p.addr && p.addr !== m.address);
     // The creator holds seat 0.
     const gameLabel = (g: GameSummary) => `Game ${g.id} · created by ${g.players[0]?.addr === m.address ? "you" : charName(g.players[0]?.char)}`;
@@ -333,32 +335,43 @@ export class LobbyView {
     const yourMove = s.yourMove
       .map((g) => {
         const left = secondsLeft(g, now);
-        const late = runningOut(left, g.timeout);
-        const pill = `<span class="gl-pill${late ? " late" : ""}">${left > 0 ? esc(formatLeft(left)) + " left" : "out of time"}</span>`;
-        return row("gl-card", g, versus(g), `${gameLabel(g)} · Turn ${g.turn} of ${g.maxTurns}`, pill + `<button type="button" class="gl-play" data-act="open" data-id="${esc(g.id)}">${left > 0 ? "PLAY" : "OPEN"}</button>`);
+        const turn = `${gameLabel(g)} · Turn ${g.turn} of ${g.maxTurns}`;
+        const btn = (label: string) => `<button type="button" class="gl-play" data-act="open" data-id="${esc(g.id)}">${label}</button>`;
+        if (claimable(g, now)) {
+          const mine = g.players.find((p) => p.addr === m.address);
+          const why = mine && !mine.submitted && (mine.status ?? "alive") === "alive" ? "your plan did not come in time" : "the others did not play in time";
+          return row("gl-card over", g, versus(g), `${turn} · ${why}: claim the turn to go on`, '<span class="gl-pill over">OUT OF TIME</span>' + btn("CLAIM"));
+        }
+        const pill = `<span class="gl-pill${runningOut(left, g.timeout) ? " late" : ""}">${esc(formatLeft(left))} left</span>`;
+        return row("gl-card", g, versus(g), turn, pill + btn("PLAY"));
       })
       .join("");
     const count = s.yourMove.length;
+    const claims = s.yourMove.filter((g) => claimable(g, now)).length;
+    const countLine = [
+      count - claims ? `${count - claims} showdown${count - claims > 1 ? "s wait" : " waits"} for your plan` : "",
+      claims ? `${claims} out of time` : "",
+    ]
+      .filter(Boolean)
+      .join(" · ");
     const yourMovePanel =
       `<section class="gl-panel hot" aria-labelledby="gl-your-move"><div class="gl-head"><h2 id="gl-your-move" class="gl-h2 big">Your move</h2>` +
-      (count ? `<span class="gl-count">${count} showdown${count > 1 ? "s wait" : " waits"} for your plan</span>` : "") +
+      (countLine ? `<span class="gl-count">${countLine}</span>` : "") +
       `</div>${yourMove || '<p class="gl-empty">No showdown waits for your plan.</p>'}</section>`;
 
     const openBtn = (g: GameSummary, label = "Open") => `<button type="button" class="gl-open" data-act="open" data-id="${esc(g.id)}">${label}</button>`;
     const waiting = s.waiting
       .map((g) => {
         if (g.phase === "waiting") return row("gl-line", g, versus(g), `${gameLabel(g)} · ${g.maxTurns} turns · ${formatDuration(g.timeout)} per turn`, openBtn(g));
-        const left = secondsLeft(g, now);
-        const time = left > 0 ? `${formatLeft(left)} left to play` : "out of time: you may claim the game";
-        return row("gl-line", g, versus(g), `${gameLabel(g)} · Turn ${g.turn} of ${g.maxTurns} · your plan is in · ${time}`, openBtn(g));
+        return row("gl-line", g, versus(g), `${gameLabel(g)} · Turn ${g.turn} of ${g.maxTurns} · your plan is in · ${formatLeft(secondsLeft(g, now))} left to play`, openBtn(g));
       })
       .join("");
     const panel = (id: string, title: string, body: string) =>
       `<section class="gl-panel" aria-labelledby="${id}"><div class="gl-head"><h2 id="${id}" class="gl-h2">${title}</h2></div>${body}</section>`;
 
-    // A showdown whose seats did not fill up in time can only be claimed: not offered.
+    // A showdown nobody joined for a week is no longer offered (the realm keeps it open).
     const open = s.open
-      .filter((g) => secondsLeft(g, now) > 0 && nextSeat(g.players) >= 0)
+      .filter((g) => stillOffered(g, now) && nextSeat(g.players) >= 0)
       .map((g) => {
         const c = g.players[0];
         const seated = g.players.filter((p) => p.addr);
@@ -401,7 +414,7 @@ export class LobbyView {
       `<span class="gl-note">Each on their own, in the order they join: ${lineUp}.</span></div>` +
       `<div class="gl-field"><label for="gl-turns">Turns</label><select id="gl-turns">${turns}</select></div>` +
       `<div class="gl-field"><label for="gl-timeout">Time to play each turn</label><select id="gl-timeout">${timeouts}</select>` +
-      '<span class="gl-note">Past it, anyone may claim the game: the player who did not play forfeits.</span></div>' +
+      '<span class="gl-note">Past it, anyone may claim the turn: a player who did not play passes it, and is out of the fight at the third in a row.</span></div>' +
       `<button type="button" class="gl-create" data-act="create"${disabled}>CALL A SHOWDOWN</button>` +
       '<span class="gl-note">Next you take position on the board, then sign the call.</span>' +
       "</form>" +

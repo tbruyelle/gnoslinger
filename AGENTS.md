@@ -46,7 +46,7 @@ yet); throwing, brawling and multi-board layouts come later.
 ## Key Commands
 
 ```bash
-make gnodev        # local chain: chain id "dev", RPC 127.0.0.1:26657, gnoweb :8888
+make gnodev        # local chain: chain id "dev", RPC 127.0.0.1:26657, gnoweb :8888; -empty-blocks keeps the block time current (else a tx after an idle spell runs with the previous tx's time and a due ClaimTimeout is refused)
                    # ADENA_ADDRS="g1... g1..." make gnodev  premines Adena accounts
 make web           # vite dev server for the client
 make dev           # both, with concurrently
@@ -96,9 +96,9 @@ assets/                     served as the Vite public dir (boards, tokens, cards
 
 ### Data
 `Game{ID, Players[]{Addr, Char}, State engine.State, Turn, MaxTurns, Phase,
-Plans[], Submitted[], LastTurn *TurnResult, Winner, EndReason, Awards
+Plans[], Submitted[], Missed[], LastTurn *TurnResult, Winner, EndReason, Awards
 []engine.Award, VP[], Rev, CreatedAt, UpdatedAt}` stored in an `avl.Tree` by zero-padded `seqid`;
-`Players`, `Plans`, `Submitted` and `VP` have one entry per seat (2 to 4,
+`Players`, `Plans`, `Submitted`, `Missed` and `VP` have one entry per seat (2 to 4,
 `engine.MinPlayers`..`MaxPlayers`), the seats filling up in the order the
 players join (`Addr` "" while free; `seats`, `freeSeat`, `seated`,
 `allIn`); `State.Chars` is a slice of the same length.
@@ -195,16 +195,16 @@ v0 once its running games are over.
 ### Crossing functions (called with MsgCall, args are strings)
 | Function | Notes |
 |---|---|
-| `CreateGame(cur, seats, maxTurns, timeoutMinutes, startHex, facing) string` | 2 to 4 seats; the caller in seat 0 as the showdown's first character (the marshal), standing in one of its hexes (`startHex`) facing 0 N … 5 NW; 10 to 30 turns (the client sends 20); 0 timeout = 2 days (5 min to 30 days); phase `waiting` |
-| `JoinGame(cur, id, startHex, facing)` | the first free seat and its character (the kid, then el jefe, then axe), in one of its hexes; the last seat taken starts the game (phase `planning`, `GamesPlayed` for every seat); refused once the game's timeout has passed, and to a player already seated |
+| `CreateGame(cur, seats, maxTurns, timeoutMinutes, startHex, facing) string` | 2 to 4 seats; the caller in seat 0 as the showdown's first character (the marshal), standing in one of its hexes (`startHex`) facing 0 N … 5 NW; 10 to 30 turns (the client sends 20); the timeout is per turn, 0 = 2 days (5 min to 30 days); phase `waiting`, which has no timeout: the game stays open until its seats fill up or its creator cancels it |
+| `JoinGame(cur, id, startHex, facing)` | the first free seat and its character (the kid, then el jefe, then axe), in one of its hexes; the last seat taken starts the game (phase `planning`, `GamesPlayed` for every seat; the turn clock starts there); refused to a player already seated |
 | `CancelGame(cur, id)` | creator, while a seat is free (players may have joined); deletes the game (and every seated player's `byPlayer` entry) so the creator gets the CreateGame storage deposit back; the client returns to the lobby once the game view answers "game not found" |
 | `SubmitPlan(cur, id, plan) int` | refused once the turn's timeout has passed (`assertInTime`: the game can only be claimed then, so a late plan cannot win it by claiming right after), and from a character out of the fight; validates (a target must be a seat of the game, not one's own), stores; the plan that completes the turn (one from each character still in the fight, `allIn`) resolves it in the same tx; returns Rev. A player with 5 or more delay cannot play anything and is passed automatically (`autoPass`, event `PlanPassed`); with everyone passed, turns resolve by themselves until someone can act |
 | `Surrender(cur, id)` | rule 15.4, while the plans are collected (the start of a turn): the character is `Out` (nobody can shoot it, it plays no more). With one character left in the fight the game ends and is scored (`surrender`); with more, the showdown goes on without it and the turn resolves if the others' plans are in |
-| `ClaimTimeout(cur, id)` | anyone, after the game's timeout without progress (`time.Now()`, lazy: no timers on chain); waiting → `expired`; no plan in → `abandoned` (not scored); otherwise the alive seats without a plan are `Out` (out of time counts as surrendering): one character left → `timeout`, scored; more → the turn resolves with the plans in and the showdown goes on (the clock restarts) |
+| `ClaimTimeout(cur, id)` | anyone, after the turn's timeout without progress (`time.Now()`, lazy: no timers on chain); refused while waiting for players (no timeout then; older games may show `expired`); no plan in → `abandoned` (not scored); otherwise each alive seat without a plan **misses** the turn (`Missed[seat]`++, event `PlanMissed`): the turn is passed for it (empty plan), unless that is its `MaxMissed` (3rd) miss in a row, which makes it `Out` (out of time counts as surrendering); a plan sent resets the count, an automatic pass (5+ delay) leaves it as it is. One character left → `timeout`, scored, the turn not played; more → the turn resolves with the plans in and the showdown goes on (the clock restarts) |
 
 Errors are panics prefixed `gnoslinger: `; the client extracts them from the
 tx result log. Events: `GameCreated`, `PlayerJoined`, `PlanSubmitted`,
-`PlanPassed`, `PlayerSurrendered`, `TurnResolved`, `VictoryPoints` (`id seat player reason
+`PlanPassed`, `PlanMissed` (`id turn seat missed`), `PlayerSurrendered`, `TurnResolved`, `VictoryPoints` (`id seat player reason
 points`, one per award, points < 0 for a loss), `GameEnded` (informational; there is no event subscription on
 the RPC, clients poll).
 
@@ -223,7 +223,7 @@ registers them, resolved when the JSON is built, "" if none; every player of
 `json/games/{addr}` the listed address's own: the client and the gnoweb pages
 show a player by name, else by address, `playerLabel`; every seat's `aimAt`
 says which seat its AIM markers follow, -1 for a hex or no aim, and the
-summaries' players carry their `status`) return raw JSON through `vm/qrender`
+summaries' players carry their `status`; each seat of `json/game` carries `missed`, the turns in a row it let time out) return raw JSON through `vm/qrender`
 (`vm/qeval` would Go-quote the string). `Render("")`, `game/{id}`, `help` are
 gnoweb pages, and so is the profiles realm's `Render("")` (the top 50, the
 games scored). `GameJSON`, `GamesJSON`, `HistoryJSON`, `GameRev` are plain
@@ -537,8 +537,10 @@ calls; `testing.SkipHeights(n)` advances block time 5 s per height.
   HTML overlay (`ui/lobbyView.ts`, after the Design canvas's lobby mockup)
   rendered from the scene's state on every change, with the account (copy,
   Quit), **Your move** (running games without my plan, the time left before
-  a timeout can be claimed, red when running out), **Waiting on others**,
-  **Open showdowns** to join, **Finished** (Replay) and the **New showdown**
+  a timeout can be claimed, red when running out; then the running games
+  out of time, mine to claim, `claimable`, as brick OUT OF TIME cards with
+  a CLAIM button that opens the game), **Waiting on others**,
+  **Open showdowns** to join (those with a join or the call within a week, `stillOffered`), **Finished** (Replay) and the **New showdown**
   form (turns 10 to 30, time per turn). Under the form, **Top guns** lists the first 5 of the ranking (refreshed
 with the games every 5 s; a player shows as its registered name, else its
 short address, `playerLabel`); a click anywhere on it opens the whole
@@ -683,7 +685,8 @@ Clicking a token opens the **character
   aim, cocking and shells; AIM markers are drawn on the aimed hex, or on the target's token when
   they follow it (`refreshAimMarkers`, `aimOnToken` from `aimAt`); tokens grey out for a killed or
   passed-out character; the sheet
-  shows AIM (and on whom), who aims at the character (AIMED BY), endurance
+  shows AIM (and on whom), who aims at the character (AIMED BY), the
+  turns in a row its player let time out (MISSED n of 3, when any), endurance
   (boxes above the ones left are crossed off) and the
   permanent wounds. During playback a bullet flies from the shooter's gun
   icon for each shot (`flashShots`), shaking the view, the guns of a step

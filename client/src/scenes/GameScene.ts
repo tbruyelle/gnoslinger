@@ -29,7 +29,7 @@ import { SHOOT_OPTIONS, isShooting, type ShootOption } from "../game/plan";
 import { closeCharacterSheet, openCharacterSheet, type GunPick } from "../ui/characterSheet";
 import { ShowdownView, showdownLayout, type BoardRect, type CharPanel, type HandSide, type ShowdownLayout, type ShowdownModel, type TimelineRow } from "../ui/showdownView";
 import { showToast } from "../ui/toast";
-import { charName, formatDuration, seatsTaken } from "../game/lobby";
+import { CHAIN_CLOCK_MARGIN, charName, formatDuration, formatLeft, MAX_MISSED, missOutcome, pastTimeout, seatsTaken } from "../game/lobby";
 import { defaultFacing, nextSeat, seatChar, setupZone, startingChar } from "../game/setup";
 import { vpRecap, vpResult } from "../game/vp";
 import { seatColor, seatColorNum } from "../ui/seats";
@@ -1547,14 +1547,18 @@ export class GameScene extends Phaser.Scene {
     switch (this.mode) {
       case "sync":
         return "Loading…";
-      case "select":
-        return "Your move: pick your action cards";
+      case "select": {
+        if (!this.outOfTime()) return "Your move: pick your action cards";
+        const sent = view.players.some((p, i) => i !== this.myIndex && p.addr && p.submitted);
+        return sent ? "Out of time: your plan did not come in, close the turn" : "Out of time: nobody played, close the showdown";
+      }
       case "submitting":
         return "Signing your plan…";
       case "waiting": {
         if (view.phase === "waiting") return `Waiting for players (${seatsTaken(view)})…`;
         const me = this.myIndex >= 0 ? view.players[this.myIndex] : null;
         const pending = this.pendingNames();
+        if (this.outOfTime()) return `Out of time for ${pending}: claim the turn`;
         if (me && me.delay >= MAX_ACTION_POINTS) return `Too much delay to act this turn (${me.delay}): you pass, waiting for ${pending}…`;
         return `Plan sent, waiting for ${pending}…`;
       }
@@ -1665,8 +1669,7 @@ export class GameScene extends Phaser.Scene {
 
   /** The turn's time is up: the game takes no more plans, it can only be claimed (the realm's assertInTime). */
   private outOfTime(): boolean {
-    const at = this.view?.timeoutAt ?? 0;
-    return at > 0 && Date.now() / 1000 >= at;
+    return pastTimeout(this.view?.timeoutAt ?? 0, Date.now() / 1000);
   }
 
   /** Everything the overlay shows, from the scene's state. */
@@ -1675,7 +1678,9 @@ export class GameScene extends Phaser.Scene {
     const players = view?.players ?? [];
     const names = players.map((p) => charName(p.char));
     const tone: ShowdownModel["statusTone"] =
-      this.mode === "select" || this.mode === "submitting" || this.mode === "setup" ? "move" : this.mode === "playback" ? "replay" : this.mode === "ended" ? "over" : this.mode === "waiting" ? "wait" : "info";
+      this.mode === "select" || this.mode === "submitting" || this.mode === "setup" || (this.mode === "waiting" && view?.phase === "planning" && this.outOfTime())
+        ? "move"
+        : this.mode === "playback" ? "replay" : this.mode === "ended" ? "over" : this.mode === "waiting" ? "wait" : "info";
     const calling = this.setup?.req.kind === "create" ? this.setup.req : null;
     const base = {
       title: view
@@ -1816,16 +1821,24 @@ export class GameScene extends Phaser.Scene {
 
     if (this.mode === "select" && this.outOfTime()) {
       const sentBy = view.players.filter((p, i) => i !== this.myIndex && p.addr && p.submitted).map((p) => charName(p.char));
+      const out = !!me && missOutcome(me) === "out";
+      const missed = (me?.missed ?? 0) + 1;
       return {
         title: "Out of time",
         points: "",
         lines: [],
         empty: "Your plan did not come in time: the turn takes no more plans.",
-        note: sentBy.length
-          ? `${sentBy.join(", ")} sent a plan: closing the showdown puts you out of the fight${view.players.length > 2 ? "; the others fight on" : ""}.`
-          : "Nobody sent a plan: the showdown ends without a winner once closed.",
+        note: !sentBy.length
+          ? "Nobody sent a plan: the showdown ends without a winner once closed."
+          : out
+            ? `${sentBy.join(", ")} sent a plan: closing the turn puts you out of the fight, ${MAX_MISSED} missed turns in a row${view.players.length > 2 ? "; the others fight on" : ""}.`
+            : `${sentBy.join(", ")} sent a plan: closing the turn passes it for you, missed turn ${missed} of ${MAX_MISSED} in a row (at ${MAX_MISSED}, you are out of the fight).`,
         warn: true,
-        buttons: [{ id: "claim", label: "Close the showdown", tone: sentBy.length ? "danger" : "primary" }, replay, lobby],
+        buttons: [
+          { id: "claim", label: sentBy.length ? "Close the turn" : "Close the showdown", tone: sentBy.length && out ? "danger" : "primary" },
+          replay,
+          lobby,
+        ],
       };
     }
     if (this.mode === "select" || this.mode === "submitting") {
@@ -1839,7 +1852,12 @@ export class GameScene extends Phaser.Scene {
           : this.aimMode
             ? `Click the hex to ${this.pendingOpts.get(this.aimMode.card) === "shoot" ? "shoot at (chance of hitting, bullseye in red)" : "aim at"}.`
             : "";
-      const carried = me && me.delay > 0 ? `${me.delay} delay carried from last turn: ${budget} of your ${MAX_ACTION_POINTS} points are left to plan.` : "";
+      const carried = [
+        me && me.delay > 0 ? `${me.delay} delay carried from last turn: ${budget} of your ${MAX_ACTION_POINTS} points are left to plan.` : "",
+        me?.missed ? `You let ${me.missed} turn${me.missed > 1 ? "s" : ""} in a row time out: at ${MAX_MISSED}, you are out of the fight.` : "",
+      ]
+        .filter(Boolean)
+        .join(" ");
       const submitting = this.mode === "submitting";
       return {
         title: "Your plan",
@@ -1865,7 +1883,7 @@ export class GameScene extends Phaser.Scene {
         empty: `The showdown is open: it starts once ${left > 1 ? `${left} more players join` : "one more player joins"}.`,
         note: this.myIndex === 0 ? "" : "Only the player who called the showdown can cancel it.",
         warn: false,
-        buttons: [...(this.myIndex === 0 ? [{ id: "cancel", label: "Cancel the showdown", tone: "danger" as const }] : []), lobby],
+        buttons: this.myIndex === 0 ? [{ id: "cancel", label: "Cancel the showdown", tone: "danger" as const }] : [],
       };
     }
     if (this.mode === "waiting") {
@@ -1876,11 +1894,19 @@ export class GameScene extends Phaser.Scene {
       } catch {
         plan = [];
       }
-      const due = view.timeoutAt > 0 && Date.now() / 1000 > view.timeoutAt;
+      const due = pastTimeout(view.timeoutAt, Date.now() / 1000);
       const passed = me && me.delay >= MAX_ACTION_POINTS;
+      const late = view.players.filter((p, i) => i !== this.myIndex && p.addr && p.status === "alive" && !p.submitted);
+      const lateNames = (outcome: "pass" | "out") => late.filter((p) => missOutcome(p) === outcome).map((p) => charName(p.char)).join(", ");
+      const claimed = [
+        lateNames("pass") && `passes the turn for ${lateNames("pass")}`,
+        lateNames("out") && `puts ${lateNames("out")} out of the fight (${MAX_MISSED} missed turns in a row)`,
+      ]
+        .filter(Boolean)
+        .join(" and ");
       const note = due
-        ? `Out of time for ${pending}: you may claim the showdown.`
-        : `Waiting for ${pending}. ${view.timeoutAt > 0 ? `After ${new Date(view.timeoutAt * 1000).toLocaleString()}, you may claim the showdown.` : ""}`;
+        ? `Out of time for ${pending}: claiming the turn ${claimed || "moves the showdown on"}.`
+        : `Waiting for ${pending}. ${view.timeoutAt > 0 ? `You may claim the turn in ${formatLeft(Math.max(0, view.timeoutAt + CHAIN_CLOCK_MARGIN - Date.now() / 1000))}.` : ""}`;
       return {
         title: "Your plan",
         points: "sent",
@@ -1889,7 +1915,7 @@ export class GameScene extends Phaser.Scene {
         note,
         warn: due,
         buttons: [
-          ...(due ? [{ id: "claim", label: "CLAIM THE SHOWDOWN", tone: "primary" as const }] : []),
+          ...(due ? [{ id: "claim", label: "CLAIM THE TURN", tone: "primary" as const }] : []),
           replay,
           { id: "surrender", label: "Surrender", tone: "danger" },
         ],
@@ -2025,6 +2051,7 @@ export class GameScene extends Phaser.Scene {
       delay: c.delay,
       status: c.status,
       submitted: p.submitted,
+      missed: p.missed ?? 0,
       phase: view.phase,
       isMe: seat === this.myIndex,
       guns: c.guns,

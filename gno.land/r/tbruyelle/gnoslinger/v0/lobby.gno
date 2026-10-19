@@ -16,9 +16,10 @@ import (
 // of the hexes assigned to that character, facing f (0=N 1=NE 2=SE 3=S
 // 4=SW 5=NW); it returns the game id. The other seats take the next
 // characters in the order the players join. maxTurns is the game length,
-// from MinMaxTurns to MaxMaxTurns; timeoutMinutes is the inactivity after
-// which anyone may end the game with ClaimTimeout, 0 meaning
-// DefaultTimeout (2 days).
+// from MinMaxTurns to MaxMaxTurns; timeoutMinutes is the time each turn
+// gives the players, past which anyone may claim it with ClaimTimeout, 0
+// meaning DefaultTimeout (2 days). The game stays open until its seats fill
+// up or its creator cancels it: the turn clock starts with the last join.
 func CreateGame(cur realm, seats int, maxTurns int, timeoutMinutes int, startHex string, facing int) string {
 	caller := cur.Previous().Address()
 	if seats < engine.MinPlayers || seats > engine.MaxPlayers {
@@ -47,6 +48,7 @@ func CreateGame(cur realm, seats int, maxTurns int, timeoutMinutes int, startHex
 		Phase:     PhaseWaiting,
 		Plans:     make([]string, seats),
 		Submitted: make([]bool, seats),
+		Missed:    make([]int, seats),
 		Winner:    -1,
 		VP:        make([]int, seats),
 		CreatedAt: time.Now(),
@@ -72,7 +74,6 @@ func JoinGame(cur realm, id string, startHex string, facing int) {
 	if g.Phase != PhaseWaiting {
 		panic("gnoslinger: game is not open")
 	}
-	g.assertInTime()
 	switch g.seat(caller) {
 	case 0:
 		panic("gnoslinger: you cannot join your own game")

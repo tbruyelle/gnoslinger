@@ -18,12 +18,12 @@ const listLimit = 50
 // GameJSON is the full view of a game:
 //
 //	{"id","rev","phase","turn","maxTurns","timeout" (seconds),"board",
-//	 "players":[{"addr" ("" for a seat nobody took yet),"name","char","hex" ("" until the seat set up),"facing","down","delay","status","submitted","playedFoot","playedRun","ranLastTurn",
+//	 "players":[{"addr" ("" for a seat nobody took yet),"name","char","hex" ("" until the seat set up),"facing","down","delay","status","submitted","missed" (turns in a row it let time out),"playedFoot","playedRun","ranLastTurn",
 //	             "aim","aimAt" (the seat the AIM markers follow, -1 when they sit on a hex or there is no aim),"aimHex" (the hex they sit on, "" when they follow a seat),"endurance","serious","gunArm","otherArm","leg",
 //	             "guns":[{"id","type","name","location","cocked","shells","capacity","jammed","exploded"}]}]   (one entry per seat, 2 to 4),
 //	 "ground":[{"id" (ground id, "g<id>" in a plan),"hex","guns":[{..}]}],
 //	 "winner","endReason","vp":[victory points per seat],"awards":[{"p","reason","points"}] (rule 15, once a played game ends),
-//	 "createdAt","updatedAt","timeoutAt",
+//	 "createdAt","updatedAt","timeoutAt" (when the turn in progress can be claimed, 0 unless planning),
 //	 "lastTurn":null|{"turn","seed","cards":[result card numbers drawn, in order],"plans":[..],
 //	             "events":[{"seg","p","kind","action","from","to","facing","down","n","delay","reason","card","result","endurance","target","hit","range","gun","gunId","step","chart","status"}],
 //	             "start":[{"hex","facing","down","delay","status","aim","aimAt","aimHex","endurance","serious","gunArm","otherArm","leg","guns":[..]},..]}}
@@ -63,7 +63,7 @@ func GameJSON(id string) string {
 	b.WriteString(`,"createdAt":` + strconv.FormatInt(g.CreatedAt.Unix(), 10))
 	b.WriteString(`,"updatedAt":` + strconv.FormatInt(g.UpdatedAt.Unix(), 10))
 	timeoutAt := int64(0)
-	if g.Phase != PhaseFinished {
+	if g.Phase == PhasePlanning {
 		timeoutAt = g.timeoutAt().Unix()
 	}
 	b.WriteString(`,"timeoutAt":` + strconv.FormatInt(timeoutAt, 10))
@@ -132,6 +132,7 @@ func writePlayer(b *strings.Builder, g *Game, i int) {
 	b.WriteString(`,"delay":` + strconv.Itoa(c.Delay))
 	b.WriteString(`,"status":` + quote(c.Status.String()))
 	b.WriteString(`,"submitted":` + strconv.FormatBool(g.Submitted[i]))
+	b.WriteString(`,"missed":` + strconv.Itoa(g.Missed[i]))
 	b.WriteString(`,"playedFoot":` + strconv.FormatBool(c.PlayedFoot))
 	b.WriteString(`,"playedRun":` + strconv.FormatBool(c.PlayedRun))
 	b.WriteString(`,"ranLastTurn":` + strconv.FormatBool(c.RanLastTurn))

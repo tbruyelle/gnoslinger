@@ -13,11 +13,6 @@
 - Replace the tbruyelle realm to sthing else
 - upgrade architecture
   - DESIGN_SHOWDOWN
-- Missed turns: a player without a plan at the timeout passes the turn
-  (empty plan) instead of being Out at once; Out (scored as a surrender)
-  at the 3rd missed turn in a row, a plan resetting the count. Nobody
-  played: abandoned, as today. An automatic pass (5+ delay) is not a miss.
-  Before the hidden plans (DESIGN_HIDDEN_PLANS.md), which then build on it
 
 ## Player profile
 - Add profile page with specific token and linked reputation (check RPG rules)
@@ -40,6 +35,7 @@
 - Advanced tutorial
 
 ## Lobby
+- change showdown line representation, especially the icon of it
 - add last turn replay when player goes back to a game
 - allow winner to remove replay to be refunded for the deposit
 - Create game options
@@ -55,6 +51,7 @@
     - poker game with money
 
 ## Showdown
+- some screen size hides the run away hexes
 - add winning/losing burst
 - show tips (or highlight a card with some text)
   - when no gun: show need to draw and cock

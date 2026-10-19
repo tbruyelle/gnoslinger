@@ -12,6 +12,7 @@ import { LobbyView, PLAYERS_PAGE, SESSION_DAYS, SESSION_LIMITS, type LobbyDialog
 import { showToast } from "../ui/toast";
 import { installWalletNotices } from "../ui/walletNotices";
 import { MAX_PLAYERS, MIN_PLAYERS, SETUPS, nextSeat, seatChar } from "../game/setup";
+import { claimable } from "../game/lobby";
 import type { SetupRequest } from "./GameScene";
 
 /** All character tokens, for the picker that will come back later. */
@@ -19,13 +20,14 @@ export const CHARACTERS = Object.keys(CHAR_ARROW_DIR);
 
 /** Timeout choices for a new game, in minutes; the realm's default is 2 days. */
 export const TIMEOUT_OPTIONS: { minutes: number; label: string }[] = [
+  { minutes: 5, label: "5 min" },
   { minutes: 30, label: "30 min" },
   { minutes: 120, label: "2 hours" },
   { minutes: 12 * 60, label: "12 hours" },
   { minutes: 2 * 24 * 60, label: "2 days" },
   { minutes: 7 * 24 * 60, label: "7 days" },
 ];
-const DEFAULT_TIMEOUT_INDEX = 3;
+const DEFAULT_TIMEOUT_INDEX = 4;
 /** Game lengths offered for a new game (the realm takes 10 to 30). */
 const TURN_OPTIONS = [10, 15, 20, 25, 30];
 const DEFAULT_TURNS = 20;
@@ -309,7 +311,9 @@ export class LobbyScene extends Phaser.Scene {
         this.chain.realm.listGames(this.chain.wallet.address),
         this.chain.realm.listPlayers(0, TOP_PLAYERS),
       ]);
-      const key = JSON.stringify(games);
+      // A game running out of time moves to Your move with no change on chain.
+      const now = Date.now() / 1000;
+      const key = JSON.stringify(games) + games.mine.filter((g) => claimable(g, now)).map((g) => g.id).join(",");
       const topKey = JSON.stringify(top);
       if (key !== this.gamesKey || topKey !== this.topKey) {
         this.gamesKey = key;

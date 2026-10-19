@@ -18,7 +18,7 @@ import (
 const (
 	realmPath = "gno.land/r/tbruyelle/gnoslinger/v0"
 
-	// DefaultTimeout is how long a game may sit without progress before
+	// DefaultTimeout is how long a turn may sit without progress before
 	// anyone can call ClaimTimeout on it, when CreateGame gets 0.
 	DefaultTimeout = 48 * time.Hour
 	// MinTimeout and MaxTimeout bound the timeout a creator may pick.
@@ -27,6 +27,9 @@ const (
 	// MinMaxTurns and MaxMaxTurns bound the game length.
 	MinMaxTurns = 10
 	MaxMaxTurns = 30
+	// MaxMissed is the turns in a row a player may let time out: each is
+	// passed for it, the last puts its character out of the fight.
+	MaxMissed = 3
 )
 
 // Phase is where a game stands.
@@ -90,7 +93,7 @@ func (r *TurnResult) Cards() []int { return engine.DecodeInts(r.CardsEnc) }
 // Events is what happened during the turn, in order.
 func (r *TurnResult) Events() []engine.Event { return engine.DecodeEvents(r.EventsEnc) }
 
-// Game is one showdown. Players, Plans, Submitted and VP have one entry
+// Game is one showdown. Players, Plans, Submitted, Missed and VP have one entry
 // per seat, the seats filling up in the order the players join.
 type Game struct {
 	ID        string
@@ -98,10 +101,11 @@ type Game struct {
 	State     engine.State
 	Turn      int // 1-based
 	MaxTurns  int
-	Timeout   time.Duration // inactivity after which ClaimTimeout succeeds
+	Timeout   time.Duration // a turn's inactivity after which ClaimTimeout succeeds
 	Phase     Phase
 	Plans     []string // current turn, canonical form
 	Submitted []bool
+	Missed    []int         // turns in a row each seat let time out, reset by a plan
 	Turns     []*TurnResult // resolved turns, in order (at most MaxTurns)
 	Winner    int           // seat index, -1 for none: the most victory points, -1 on a tie
 	EndReason string
@@ -193,10 +197,11 @@ func (g *Game) lastTurn() *TurnResult {
 	return g.Turns[len(g.Turns)-1]
 }
 
-// timeoutAt is when the game becomes claimable through ClaimTimeout.
+// timeoutAt is when the turn in progress becomes claimable through
+// ClaimTimeout; a game waiting for players has no timeout.
 func (g *Game) timeoutAt() time.Time { return g.UpdatedAt.Add(g.Timeout) }
 
-// assertInTime refuses a move (a plan, a join) once the game is claimable:
+// assertInTime refuses a plan once the turn is claimable:
 // past timeoutAt it can only be claimed (ClaimTimeout), so playing late
 // cannot turn a lost game around, nor win it by claiming right after.
 func (g *Game) assertInTime() {

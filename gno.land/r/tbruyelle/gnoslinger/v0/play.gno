@@ -54,6 +54,7 @@ func SubmitPlan(cur realm, id string, plan string) int {
 	g.State.Chars[p].PlayedRun = pl.Has(cards.Run)
 	g.Plans[p] = pl.String()
 	g.Submitted[p] = true
+	g.Missed[p] = 0
 
 	turn := g.Turn
 	resolved := g.allIn()
@@ -191,32 +192,43 @@ func Surrender(cur realm, id string) {
 	save(g)
 }
 
-// ClaimTimeout ends the wait of a game that saw no progress for its
-// Timeout. Anyone may call it. A waiting game expires; when nobody sent a
-// plan, the game is abandoned; otherwise the players who did not are out
-// of the fight (out of time counts as surrendering): with one character
-// left the game ends and is scored, with more the turn resolves with the
-// plans in and the showdown goes on.
+// ClaimTimeout ends the wait of a turn that saw no progress for the game's
+// Timeout. Anyone may call it. A game waiting for players has no timeout
+// (its creator may cancel it); when nobody sent a plan, the game is
+// abandoned; otherwise each player who did not misses
+// the turn: it is passed for them, unless that makes MaxMissed in a row,
+// which puts the character out of the fight (out of time counts as
+// surrendering). With one character left the game ends and is scored,
+// with more the turn resolves with the plans in and the showdown goes on.
 func ClaimTimeout(cur realm, id string) {
 	g := getGame(id)
-	if g.Phase == PhaseFinished {
+	switch g.Phase {
+	case PhaseFinished:
 		panic("gnoslinger: game is finished")
+	case PhaseWaiting:
+		panic("gnoslinger: the game is waiting for players: it has no timeout")
 	}
 	if time.Now().Before(g.timeoutAt()) {
 		panic("gnoslinger: the game has not timed out yet")
 	}
-	switch {
-	case g.Phase == PhaseWaiting:
-		openGames.Remove(id)
-		g.finish("expired")
-	case !anySubmitted(g):
+	if !anySubmitted(g) {
 		g.finish("abandoned")
-	default:
+	} else {
 		for p := range g.Players {
 			c := &g.State.Chars[p]
-			if c.Status == engine.Alive && !g.Submitted[p] {
-				c.Status = engine.Out
+			if c.Status != engine.Alive || g.Submitted[p] {
+				continue
 			}
+			g.Missed[p]++
+			emit("PlanMissed", "id", id, "turn", strconv.Itoa(g.Turn), "seat", strconv.Itoa(p), "missed", strconv.Itoa(g.Missed[p]))
+			if g.Missed[p] >= MaxMissed {
+				c.Status = engine.Out
+				continue
+			}
+			c.PlayedFoot = false
+			c.PlayedRun = false
+			g.Plans[p] = ""
+			g.Submitted[p] = true
 		}
 		if engine.AliveCount(g.State) <= 1 {
 			g.award(cur, engine.EndVictoryPoints(g.State))

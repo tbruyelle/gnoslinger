@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { GameSummary } from "../chain/types";
-import { formatLeft, lobbySections, outcomeLine, runningOut, secondsLeft } from "./lobby";
+import { CHAIN_CLOCK_MARGIN, claimable, formatLeft, OPEN_MAX_AGE, stillOffered, pastTimeout, lobbySections, MAX_MISSED, missOutcome, outcomeLine, runningOut, secondsLeft } from "./lobby";
 
 const ME = "g1me";
 const OTHER = "g1other";
@@ -21,7 +21,7 @@ describe("lobbySections", () => {
       game("4", { phase: "finished", players: [{ addr: ME, char: "marshal" }, { addr: OTHER, char: "the_kid" }] }),
     ];
     const open = [mine[2], game("5", { phase: "waiting", players: [{ addr: OTHER, char: "marshal" }, { addr: "", char: "" }] })];
-    const s = lobbySections({ mine, open }, ME);
+    const s = lobbySections({ mine, open }, ME, 0);
     expect(s.yourMove.map((g) => g.id)).toEqual(["1"]);
     expect(s.waiting.map((g) => g.id)).toEqual(["2", "3"]);
     expect(s.finished.map((g) => g.id)).toEqual(["4"]);
@@ -30,9 +30,19 @@ describe("lobbySections", () => {
 });
 
 describe("time left", () => {
+  it("offers an open showdown for a week after its last join, whatever its turn timeout", () => {
+    const g = game("1", { phase: "waiting", updatedAt: 1000, timeout: 300 });
+    expect(stillOffered(g, 1000 + 3600)).toBe(true);
+    expect(stillOffered(g, 1000 + OPEN_MAX_AGE)).toBe(false);
+  });
+  it("gives the chain's clock a margin past the timeout", () => {
+    expect(pastTimeout(0, 9999)).toBe(false);
+    expect(pastTimeout(1000, 1000 + CHAIN_CLOCK_MARGIN - 1)).toBe(false);
+    expect(pastTimeout(1000, 1000 + CHAIN_CLOCK_MARGIN)).toBe(true);
+  });
   it("counts from the last change", () => {
     const g = game("1", { updatedAt: 1000, timeout: 3600 });
-    expect(secondsLeft(g, 1600)).toBe(3000);
+    expect(secondsLeft(g, 1600)).toBe(3000 + CHAIN_CLOCK_MARGIN);
     expect(secondsLeft(g, 9000)).toBe(0);
   });
 
@@ -66,8 +76,31 @@ describe("outcomeLine", () => {
 
   it("does not wait for the plan of a character out of the fight", () => {
     const out = game("6", { players: [{ addr: ME, char: "marshal", status: "killed", submitted: false }, { addr: OTHER, char: "the_kid", status: "alive", submitted: false }, { addr: "g1c", char: "el_jefe", status: "alive", submitted: true }] });
-    const s = lobbySections({ mine: [out], open: [] }, ME);
+    const s = lobbySections({ mine: [out], open: [] }, ME, 0);
     expect(s.yourMove).toEqual([]);
     expect(s.waiting.map((g) => g.id)).toEqual(["6"]);
+  });
+});
+
+describe("missOutcome", () => {
+  it("passes the turn until the MAX_MISSED-th miss in a row", () => {
+    expect(missOutcome({})).toBe("pass");
+    expect(missOutcome({ missed: MAX_MISSED - 2 })).toBe("pass");
+    expect(missOutcome({ missed: MAX_MISSED - 1 })).toBe("out");
+  });
+});
+
+describe("claimable", () => {
+  it("puts a running game out of time in my move, after the plans I owe", () => {
+    const late = game("7", { updatedAt: 0, timeout: 300, players: [{ addr: ME, char: "marshal", submitted: true }, { addr: OTHER, char: "the_kid", submitted: false }] });
+    const mine = game("8", { updatedAt: 1000, timeout: 7200, players: [{ addr: ME, char: "marshal", submitted: false }, { addr: OTHER, char: "the_kid", submitted: true }] });
+    const open = game("9", { phase: "waiting", updatedAt: 0, timeout: 300, players: [{ addr: ME, char: "marshal" }, { addr: "", char: "" }] });
+    const due = 300 + CHAIN_CLOCK_MARGIN;
+    expect(claimable(late, due)).toBe(true);
+    expect(claimable(late, due - 1)).toBe(false);
+    expect(claimable(open, due)).toBe(false);
+    const s = lobbySections({ mine: [late, mine, open], open: [] }, ME, due);
+    expect(s.yourMove.map((g) => g.id)).toEqual(["8", "7"]);
+    expect(s.waiting.map((g) => g.id)).toEqual(["9"]);
   });
 });
