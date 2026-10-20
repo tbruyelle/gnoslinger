@@ -650,7 +650,8 @@ played, victory points, since). `game/lobby.ts` sorts the games into
   saved when a live playback starts, so leaving it for the lobby does not replay it again) opens on that turn's playback: it may
   have resolved while the player was in the lobby, whose auto-sign reveals
   by themselves, or on another account. A finished game opens straight on its whole
-  replay, from the final turn when the game ends while watched, and that
+  replay, from the final turn when the game ends while watched or when this
+  browser has not played that turn back yet (it ended from the lobby, say), and that
   replay has no cross (`finalReplay`); Lobby leaves it. Only the last selected card can be deselected (choices are
   relative to the state before it). Tokens sharing a hex are fanned out
   in a star around its centre (`stackOffset`, the first up-left, two make

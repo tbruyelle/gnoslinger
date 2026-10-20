@@ -999,7 +999,8 @@ export class GameScene extends Phaser.Scene {
     if (first) {
       this.shownResultTurn = view.lastTurn?.turn ?? 0;
       this.applyState(true);
-      if (view.phase === "finished") void this.showFinalReplay(false);
+      // A game over: its whole replay, from the final turn when this browser has not played it back yet.
+      if (view.phase === "finished") void this.showFinalReplay(!!view.lastTurn && view.lastTurn.turn > loadSeenTurn(this.revealScope(), this.gameID));
       // A turn that resolved while this browser was elsewhere (in the lobby,
       // which reveals by itself with auto-sign, or on another account): play it back.
       else if (view.lastTurn && !this.setup && view.lastTurn.turn > loadSeenTurn(this.revealScope(), this.gameID)) this.startPlayback([view.lastTurn], true);
@@ -3109,6 +3110,7 @@ export class GameScene extends Phaser.Scene {
       if (!this.scene.isActive() || history.turns.length === 0) return;
       const last = history.turns.length - 1;
       this.shownResultTurn = history.turns[last].turn;
+      if (atLast) saveSeenTurn(this.revealScope(), this.gameID, this.shownResultTurn);
       this.startPlayback(history.turns, false, atLast ? last : 0);
     } catch (e) {
       // Let a later poll try again.
