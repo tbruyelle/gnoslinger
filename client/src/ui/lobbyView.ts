@@ -68,6 +68,8 @@ export interface LobbyModel {
   topPlayers: PlayersView | null;
   /** Games whose plans are being revealed and where mine, held by this browser, waits for a click (auto-sign off). */
   revealIds: string[];
+  /** Games with timelocked plans to open, their round out, waiting for a click (auto-sign off). */
+  openIds: string[];
   dialog: LobbyDialog | null;
 }
 
@@ -319,7 +321,13 @@ export class LobbyView {
       return `<div class="gl-col"><section class="gl-panel"><p class="gl-empty">${msg}</p></section></div>`;
     }
     const now = Date.now() / 1000;
-    const s = lobbySections(m.games, m.address, now, (g) => m.revealIds.includes(g.id));
+    const s = lobbySections(
+      m.games,
+      m.address,
+      now,
+      (g) => m.revealIds.includes(g.id),
+      (g) => m.openIds.includes(g.id),
+    );
     const others = (g: GameSummary) => g.players.filter((p) => p.addr && p.addr !== m.address);
     // The creator holds seat 0.
     const gameLabel = (g: GameSummary) => `Game ${g.id} · created by ${g.players[0]?.addr === m.address ? "you" : charName(g.players[0]?.char)}`;
@@ -339,6 +347,10 @@ export class LobbyView {
         const left = secondsLeft(g, now);
         const turn = `${gameLabel(g)} · Turn ${g.turn} of ${g.maxTurns}`;
         const btn = (label: string) => `<button type="button" class="gl-play" data-act="open" data-id="${esc(g.id)}">${label}</button>`;
+        if (g.phase === "revealing" && m.openIds.includes(g.id) && !m.revealIds.includes(g.id)) {
+          return row("gl-card", g, versus(g), `${turn} · plans left unrevealed: open them from their timelocked copies`, btn("OPEN"));
+        }
+        if (g.phase === "revealing" && m.revealIds.includes(g.id)) return row("gl-card", g, versus(g), `${turn} · every plan is in: reveal yours`, btn("REVEAL"));
         if (claimable(g, now)) {
           const mine = g.players.find((p) => p.addr === m.address);
           // As the game screen puts it: nobody committed ends the showdown, else the turn goes on without the late ones.
@@ -353,18 +365,18 @@ export class LobbyView {
                 : "the others did not play in time";
           return row("gl-card over", g, versus(g), `${turn} · ${why}: close the turn to go on`, '<span class="gl-pill over">OUT OF TIME</span>' + btn("CLOSE"));
         }
-        if (g.phase === "revealing") return row("gl-card", g, versus(g), `${turn} · every plan is in: reveal yours`, btn("REVEAL"));
         const pill = `<span class="gl-pill${runningOut(left, g.timeout) ? " late" : ""}">${esc(formatLeft(left))} left</span>`;
         return row("gl-card", g, versus(g), turn, pill + btn("PLAY"));
       })
       .join("");
     const count = s.yourMove.length;
-    const claims = s.yourMove.filter((g) => claimable(g, now)).length;
-    const reveals = s.yourMove.filter((g) => g.phase === "revealing" && !claimable(g, now)).length;
+    const toReveal = (g: GameSummary) => g.phase === "revealing" && (m.revealIds.includes(g.id) || m.openIds.includes(g.id));
+    const reveals = s.yourMove.filter(toReveal).length;
+    const claims = s.yourMove.filter((g) => claimable(g, now) && !toReveal(g)).length;
     const plans = count - claims - reveals;
     const countLine = [
       plans ? `${plans} showdown${plans > 1 ? "s wait" : " waits"} for your plan` : "",
-      reveals ? `${reveals} for your reveal` : "",
+      reveals ? `${reveals} to reveal` : "",
       claims ? `${claims} out of time` : "",
     ]
       .filter(Boolean)

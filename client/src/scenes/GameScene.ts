@@ -32,8 +32,9 @@ import { showToast } from "../ui/toast";
 import { CHAIN_CLOCK_MARGIN, charName, formatDuration, formatLeft, MAX_MISSED, missOutcome, pastTimeout, seatsTaken } from "../game/lobby";
 import { defaultFacing, nextSeat, seatChar, setupZone, startingChar } from "../game/setup";
 import { vpRecap, vpResult } from "../game/vp";
-import { loadPending, loadSeenTurn, saveSeenTurn, lockSealed, newSalt, openLocked, planHash, prunePending, roundTime, savePending, type RevealScope, type Sealed } from "../game/commit";
-import { lastToCommit, openableSeats, ownRevealDue } from "../game/reveals";
+import { loadPending, loadSeenTurn, saveSeenTurn, lockSealed, newSalt, planHash, prunePending, roundTime, savePending, type RevealScope, type Sealed } from "../game/commit";
+import { DRAND_MARGIN, lastToCommit, openableSeats, ownRevealDue } from "../game/reveals";
+import { openAndReveal } from "../game/opener";
 import { seatColor, seatColorNum } from "../ui/seats";
 
 // ── Layout constants ────────────────────────────────────────────────────────
@@ -114,8 +115,10 @@ const MY_ZONE_COLOR = 0x4f7a3a;
 const RUN_AWAY_COLOR = 0xf2b544;
 /** How long a second click on Send plan confirms passing with an empty plan. */
 const PASS_CONFIRM_MS = 5000;
-/** A reveal or an opening that failed is not tried again by itself before this (auto-sign). */
+/** A reveal or an opening whose transaction failed is not tried again by itself before this (auto-sign). */
 const REVEAL_RETRY_MS = 20_000;
+/** An opening that could not decrypt anything (drand's round not served yet) is tried again after this, quietly. */
+const OPEN_RETRY_MS = 5_000;
 /** The tracer a bullet leaves behind it. */
 const SHOT_LINE_COLOR = 0xffffff;
 
@@ -825,7 +828,9 @@ export class GameScene extends Phaser.Scene {
   private passWarnedAt = 0;
   /** A reveal or an opening in flight, and when each kind last failed (it is not retried at once). */
   private revealing = false;
-  private revealFailedAt = { own: 0, open: 0 };
+  private revealFailedAt = { own: 0 };
+  /** When the screen may try opening again: soon after drand did not answer, later after a refused transaction. */
+  private openRetryAt = 0;
   /** The seats whose timelocked plan this screen tried to open this turn: past the reveals' grace they are left to the claim. */
   private openTried: { turn: number; seats: Set<number> } = { turn: 0, seats: new Set() };
   /** The screen around the board: header, side columns, hand or replay controls (an HTML overlay). */
@@ -937,9 +942,10 @@ export class GameScene extends Phaser.Scene {
       delay: 3_000,
       loop: true,
       callback: () => {
-        if (this.mode !== "waiting" || this.view?.phase !== "revealing") return;
+        // A playback of the last turn does not hold the reveals back.
+        if ((this.mode !== "waiting" && this.mode !== "playback") || this.view?.phase !== "revealing") return;
         this.revealDue();
-        this.renderView();
+        if (this.mode === "waiting") this.renderView();
       },
     });
 
@@ -3084,6 +3090,8 @@ export class GameScene extends Phaser.Scene {
     this.stopAuto();
     this.clearSelection();
     this.playback = { turns, index, seg: 0, cut: null, anim: 0, live, auto: null };
+    // Seen from the moment it starts: leaving for the lobby during or after it does not replay it again.
+    if (live) saveSeenTurn(this.revealScope(), this.gameID, turns[turns.length - 1].turn);
     this.hideAimZone();
     this.mode = "playback";
     this.refreshTokens(true);
@@ -3486,7 +3494,7 @@ export class GameScene extends Phaser.Scene {
     if (view.phase === "planning" || view.phase === "revealing") prunePending(this.revealScope(), this.gameID, view.turn);
     const now = Date.now();
     if (this.ownRevealWaits() && now - this.revealFailedAt.own > REVEAL_RETRY_MS) void this.revealOwn();
-    else if (this.openWaits() && now - this.revealFailedAt.open > REVEAL_RETRY_MS) void this.openPlans();
+    else if (this.openWaits() && now >= this.openRetryAt) void this.openPlans();
   }
 
   /** Reveals my committed plan from this browser's copy, with any timelocked plan already open. */
@@ -3524,28 +3532,21 @@ export class GameScene extends Phaser.Scene {
     this.revealing = true;
     this.renderView();
     try {
-      const reveals: { seat: number; salt: string; plan: string }[] = [];
-      const mine = this.myIndex >= 0 && ownRevealDue(view, this.myIndex) ? loadPending(this.revealScope(), this.gameID, view.turn, this.myIndex) : null;
-      if (mine) reveals.push({ seat: this.myIndex, ...mine });
-      for (const seat of seats) {
-        if (seat === this.myIndex && mine) continue;
-        try {
-          const s = await openLocked(view.players[seat].locked);
-          // A ";" would break RevealMany's lists; a plan that does not match its commit is skipped by the realm.
-          if (!s.plan.includes(";")) reveals.push({ seat, ...s });
-        } catch {
-          // not openable (yet, or broken): left to the claim
-        }
+      const pending = this.myIndex >= 0 && ownRevealDue(view, this.myIndex) ? loadPending(this.revealScope(), this.gameID, view.turn, this.myIndex) : null;
+      const revealed = await openAndReveal(this.chain.realm, view, seats, pending ? { seat: this.myIndex, ...pending } : null);
+      if (revealed.length === 0) {
+        // drand's round is not served yet (or the copies are broken): try
+        // again shortly, quietly, until the reveals' grace is over.
+        this.openRetryAt = Date.now() + OPEN_RETRY_MS;
+        if (this.scene.isActive() && pastTimeout(view.revealUntil, Date.now() / 1000)) showToast(this, "No timelocked plan could be opened", "error");
+        return;
       }
-      if (reveals.length === 0) throw new Error("No timelocked plan could be opened");
-      if (reveals.length === 1 && reveals[0].seat === this.myIndex) await this.chain.realm.reveal(this.gameID, view.turn, this.myIndex, reveals[0].salt, reveals[0].plan);
-      else await this.chain.realm.revealMany(this.gameID, view.turn, reveals);
       if (this.scene.isActive()) {
-        const names = reveals.filter((r) => r.seat !== this.myIndex).map((r) => charName(view.players[r.seat].char));
+        const names = revealed.filter((seat) => seat !== this.myIndex).map((seat) => charName(view.players[seat].char));
         if (names.length) showToast(this, `${names.join(", ")}: plan opened at the deadline`, "info");
       }
     } catch (e) {
-      this.revealFailedAt.open = Date.now();
+      this.openRetryAt = Date.now() + REVEAL_RETRY_MS;
       if (this.scene.isActive()) showToast(this, userMessage(e), "error");
     } finally {
       this.revealing = false;
@@ -3560,7 +3561,7 @@ export class GameScene extends Phaser.Scene {
     const own = this.ownRevealWaits();
     const open = this.openWaits();
     const auto = this.autoSign();
-    const lockAt = view.lockRound ? roundTime(view.lockRound) : 0;
+    const lockAt = view.lockRound ? roundTime(view.lockRound) + DRAND_MARGIN : 0;
     const left = (t: number) => formatLeft(Math.max(0, t + CHAIN_CLOCK_MARGIN - Date.now() / 1000));
     let note: string;
     if (due && !open) note = `${pending}: no plan came in, nor opened from its timelocked copy. Closing the turn passes it for them, a missed turn (out of the fight at ${MAX_MISSED} in a row).`;
@@ -3657,10 +3658,7 @@ export class GameScene extends Phaser.Scene {
     const pb = this.playback;
     if (!pb) return;
     this.stopAuto();
-    if (pb.live) {
-      this.shownResultTurn = pb.turns[pb.turns.length - 1].turn;
-      saveSeenTurn(this.revealScope(), this.gameID, this.shownResultTurn);
-    }
+    if (pb.live) this.shownResultTurn = pb.turns[pb.turns.length - 1].turn;
     // The end of turn halves the delay: the re-synced board shows it.
     const delays = this.displayChars().map((c) => c?.delay ?? 0);
     this.playback = null;

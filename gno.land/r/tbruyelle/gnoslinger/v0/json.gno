@@ -293,7 +293,10 @@ func writeEvent(b *strings.Builder, e engine.Event) {
 // address's registered name ("" if none):
 //
 //	{"name","open":[summary...],"mine":[summary...]}
-//	summary = {"id","rev","phase","turn","maxTurns","timeout","winner","endReason","vp","createdAt","updatedAt","timeoutAt","players":[{"addr","name","char","status","committed","revealed"}]}
+//	summary = {"id","rev","phase","turn","maxTurns","timeout","winner","endReason","vp","createdAt","updatedAt","timeoutAt","lockRound","players":[{"addr","name","char","status","committed","revealed"}]}
+//
+// lockRound (0 unless planning or revealing) tells the lobby when the
+// timelocked plans of a seat committed and not revealed can be opened.
 //
 // players has one entry per seat, "addr" "" for a seat nobody took yet.
 func GamesJSON(addr string) string {
@@ -338,6 +341,11 @@ func writeSummary(b *strings.Builder, g *Game) {
 	b.WriteString(`,"createdAt":` + strconv.FormatInt(g.CreatedAt.Unix(), 10))
 	b.WriteString(`,"updatedAt":` + strconv.FormatInt(g.UpdatedAt.Unix(), 10))
 	writeTimeoutAt(b, g)
+	lockRound := int64(0)
+	if g.Phase == PhasePlanning || g.Phase == PhaseRevealing {
+		lockRound = g.lockRound()
+	}
+	b.WriteString(`,"lockRound":` + strconv.FormatInt(lockRound, 10))
 	b.WriteString(`,"players":[`)
 	for i, p := range g.Players {
 		if i > 0 {

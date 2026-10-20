@@ -31,18 +31,28 @@ export function running(g: { phase: string }): boolean {
  * nowSec (unix seconds): a plan is mine to send while my character is in the
  * fight and its plan is not committed, my reveal is mine to send when
  * revealWaits says this browser holds it and nothing sends it by itself,
- * and a running game out of time is mine to claim.
+ * the timelocked plans are mine to open when openWaits says so (their
+ * round is out and nothing opens them by itself), and a running game out
+ * of time, with nothing left to reveal or open, is mine to claim.
  */
-export function lobbySections(games: GamesView, me: string, nowSec: number, revealWaits: (g: GameSummary) => boolean = () => false): LobbySections {
+export function lobbySections(
+  games: GamesView,
+  me: string,
+  nowSec: number,
+  revealWaits: (g: GameSummary) => boolean = () => false,
+  openWaits: (g: GameSummary) => boolean = () => false,
+): LobbySections {
+  // A plan to reveal or to open comes before a claim: the turn may resolve with every plan.
+  const revealOrOpen = (g: GameSummary) => g.phase === "revealing" && (revealWaits(g) || openWaits(g));
   const myPlan = (g: GameSummary) => {
     const s = g.players.find((p) => p.addr === me);
     return g.phase === "planning" && !!s && !s.committed && (s.status ?? "alive") === "alive";
   };
-  const myMove = (g: GameSummary) => myPlan(g) || (g.phase === "revealing" && revealWaits(g)) || claimable(g, nowSec);
+  const myMove = (g: GameSummary) => myPlan(g) || revealOrOpen(g) || claimable(g, nowSec);
   return {
     yourMove: [
-      ...games.mine.filter((g) => myPlan(g) || (g.phase === "revealing" && revealWaits(g) && !claimable(g, nowSec))),
-      ...games.mine.filter((g) => running(g) && !myPlan(g) && claimable(g, nowSec)),
+      ...games.mine.filter((g) => myPlan(g) || revealOrOpen(g)),
+      ...games.mine.filter((g) => running(g) && !myPlan(g) && !revealOrOpen(g) && claimable(g, nowSec)),
     ],
     waiting: games.mine.filter((g) => g.phase === "waiting" || (running(g) && !myMove(g))),
     finished: games.mine.filter((g) => g.phase === "finished"),

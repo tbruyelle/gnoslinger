@@ -210,6 +210,8 @@ export interface GameSummary {
   updatedAt: number;
   /** Unix seconds after which ClaimTimeout succeeds: the deadline while planning, its grace while revealing; 0 otherwise. */
   timeoutAt: number;
+  /** The drand round the turn's plans are timelocked to (0 unless planning or revealing): the lobby opens them from then. */
+  lockRound?: number;
   /** One entry per seat, addr "" for a seat nobody took yet; committed/revealed: the seat's plan for the turn in progress; name: the registered name, "" if none; status: alive, out, killed or passed_out. */
   players: { addr: string; name?: string; char: string; status?: PlayerStatus; committed?: boolean; revealed?: boolean }[];
 }

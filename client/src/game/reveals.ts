@@ -16,6 +16,13 @@ interface Seat {
   locked?: string;
 }
 
+/**
+ * Seconds past a drand round's scheduled time before trying to open with
+ * it: the relays serve a round a moment after its time, and the browser's
+ * clock may run ahead.
+ */
+export const DRAND_MARGIN = 5;
+
 const inFight = (p: Seat | undefined) => !!p?.addr && (p.status ?? "alive") === "alive";
 
 /** Whether every other character in the fight committed: my plan, the last, can then be revealed at once, in clear. */
@@ -30,13 +37,23 @@ export function ownRevealDue(view: { phase: string; players: Seat[] }, seat: num
   return view.phase === "revealing" && inFight(p) && !p?.revealed;
 }
 
-/** The seats whose timelocked plan can be opened now: in the fight, not revealed, a timelocked plan, its drand round out. */
+/** The seats whose timelocked plan can be opened now: in the fight, not revealed, a timelocked plan, its drand round out (DRAND_MARGIN included). */
 export function openableSeats(view: { phase: string; players: Seat[]; lockRound: number }, nowSec: number): number[] {
-  if (view.phase !== "revealing" || !view.lockRound || nowSec < roundTime(view.lockRound)) return [];
+  if (view.phase !== "revealing" || !view.lockRound || nowSec < roundTime(view.lockRound) + DRAND_MARGIN) return [];
   return view.players.flatMap((p, i) => (inFight(p) && !p.revealed && p.locked ? [i] : []));
 }
 
-/** In the lobby: my reveal is due in that game (the summary has no timelocked plans, the game screen opens those). */
+/**
+ * In the lobby: the game has a plan to open (in the fight, committed, not
+ * revealed: every commit carries its timelocked copy) and its drand round
+ * is out. The summary has no copies: opening reads the game's full view.
+ */
+export function summaryOpenable(g: GameSummary, nowSec: number): boolean {
+  if (g.phase !== "revealing" || !g.lockRound || nowSec < roundTime(g.lockRound) + DRAND_MARGIN) return false;
+  return g.players.some((p) => inFight(p) && p.committed && !p.revealed);
+}
+
+/** In the lobby: my reveal is due in that game. */
 export function summaryRevealDue(g: GameSummary, seat: number): boolean {
   return seat >= 0 && ownRevealDue(g, seat);
 }

@@ -34,8 +34,11 @@ describe("lobbySections", () => {
     const s = lobbySections({ mine: [revealing], open: [] }, ME, 0, (g) => g.id === "10");
     expect(s.yourMove.map((g) => g.id)).toEqual(["10"]);
     expect(s.waiting).toEqual([]);
-    // Past the reveals' grace, it is a claim.
+    // Past the reveals' grace, it is a claim, unless a plan is still to reveal or to open.
     expect(claimable(revealing, 1000 + CHAIN_CLOCK_MARGIN)).toBe(true);
+    const late = lobbySections({ mine: [revealing], open: [] }, ME, 1000 + CHAIN_CLOCK_MARGIN, () => false, (g) => g.id === "10");
+    expect(late.yourMove.map((g) => g.id)).toEqual(["10"]);
+    expect(late.waiting).toEqual([]);
   });
 });
 

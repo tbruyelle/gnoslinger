@@ -230,7 +230,8 @@ seat of `json/game` carries `committed`, `revealed` and `locked` (its
 timelocked plan, "" once revealed), the game `commitUntil`, `revealUntil`
 and `lockRound` (the drand quicknet round of the turn's timelocked plans,
 `(commitUntil + LockDelay − genesis) / 3 + 2`; the realm never checks
-anything about drand), the summaries' players `committed` and `revealed`,
+anything about drand), the summaries' players `committed` and `revealed`
+and the summaries `lockRound` (for the lobby to open the timelocked plans),
 and `timeoutAt` is `commitUntil` while planning, `revealUntil` while
 revealing; `PlanHash(id, turn, seat, salt, plan)` is a plain function (for
 gnokey); in the profiles
@@ -635,7 +636,7 @@ played, victory points, since). `game/lobby.ts` sorts the games into
   `GameScene.hexHighlight` over `BoardMap.outline`: a regular hexagon of
   `hexRadius`, measured from the grid, or the traced outline of a half-hex,
   `shapes` in `board_A.json`; turn choices use a regular hexagon that way); sides the realm does not play yet (`isEnabled`) are hatched
-  (cards with none, brawling, are left out), sides that cannot be picked right now are greyed out; **Send plan** → the hidden plan (`sendHidden`, `game/commit.ts`): when the poll shows every other character in the fight committed, `Reveal` in clear; else a 16-byte salt, `Commit` of `planHash` with the salt and plan timelocked to `lockRound` (`lockSealed`, tlock-js loaded on first use, encrypting offline with its built-in quicknet info, `defaultChainInfo`: only opening needs a drand node), the salt and plan kept in `localStorage` (`savePending`, `gnoslinger.reveal.<chainId>.<realm>.<game>.<turn>.<seat>`, pruned once past). While revealing (`game/reveals.ts`): my reveal is due (`ownRevealDue`) and goes out by itself with auto-sign on, from the game screen or the lobby (`revealFromLobby`); with it off the ribbon says "reveal your plan" with a **REVEAL** button and the lobby lists it under Your move. Past the drand round (`roundTime(lockRound)`, a 3 s timer watching for it), the plans left unrevealed are opened (`openLocked`, one round for all) and revealed in one `RevealMany`, mine too if still pending (`openPlans`; auto-sign off: **OPEN THE PLANS**); the panels show PLAN SENT/PLANNING then REVEALED/REVEALING, and Claim comes once past `revealUntil`; when `lastTurn.turn` changes, the
+  (cards with none, brawling, are left out), sides that cannot be picked right now are greyed out; **Send plan** → the hidden plan (`sendHidden`, `game/commit.ts`): when the poll shows every other character in the fight committed, `Reveal` in clear; else a 16-byte salt, `Commit` of `planHash` with the salt and plan timelocked to `lockRound` (`lockSealed`, tlock-js loaded on first use, encrypting offline with its built-in quicknet info, `defaultChainInfo`: only opening needs a drand node), the salt and plan kept in `localStorage` (`savePending`, `gnoslinger.reveal.<chainId>.<realm>.<game>.<turn>.<seat>`, pruned once past). While revealing (`game/reveals.ts`): my reveal is due (`ownRevealDue`) and goes out by itself with auto-sign on, from the game screen or the lobby (`revealFromLobby`); with it off the ribbon says "reveal your plan" with a **REVEAL** button and the lobby lists it under Your move. Past the drand round (`roundTime(lockRound)` plus `DRAND_MARGIN`, 5 s, since the relays serve a round a moment late; a 3 s timer watching for it, during a playback too; an opening that decrypts nothing is retried quietly every 5 s until the reveals' grace is over), the plans left unrevealed are opened (`openLocked`, one round for all) and revealed in one `RevealMany`, mine too if still pending (`openPlans`, `game/opener.ts` `openAndReveal`; auto-sign off: **OPEN THE PLANS**). The lobby does the same from the summaries (`summaryOpenable`: a seat committed and not revealed, every commit carrying its copy, its `lockRound` out): with auto-sign it reads that game's view and opens them itself (`dueOpenings`, `revealFromLobby`, retried every 10 s until the grace is over), without it lists the game under Your move with OPEN; a game with a plan to reveal or open is never shown as a claim; the panels show PLAN SENT/PLANNING then REVEALED/REVEALING, and Claim comes once past `revealUntil`; when `lastTurn.turn` changes, the
   resolution log is played back segment by segment (`playback.ts`) from the
   turn's stored starting state, then the state re-syncs. Moving forward, a
   segment plays its steps one after the other (`splitSteps`; the playback's
@@ -646,7 +647,7 @@ played, victory points, since). `game/lobby.ts` sorts the games into
   play/pause; a cross at the replay panel's top right closes it (or ends a
   live turn's playback). A running game opened with a resolved turn this
   browser has not played back yet (`loadSeenTurn`, `gnoslinger.seen.<chainId>.<realm>.<game>`,
-  saved when a live playback ends) opens on that turn's playback: it may
+  saved when a live playback starts, so leaving it for the lobby does not replay it again) opens on that turn's playback: it may
   have resolved while the player was in the lobby, whose auto-sign reveals
   by themselves, or on another account. A finished game opens straight on its whole
   replay, from the final turn when the game ends while watched, and that

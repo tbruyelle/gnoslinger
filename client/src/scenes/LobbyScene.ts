@@ -12,9 +12,10 @@ import { LobbyView, PLAYERS_PAGE, SESSION_DAYS, SESSION_LIMITS, type LobbyDialog
 import { showToast } from "../ui/toast";
 import { installWalletNotices } from "../ui/walletNotices";
 import { MAX_PLAYERS, MIN_PLAYERS, SETUPS, nextSeat, seatChar } from "../game/setup";
-import { claimable } from "../game/lobby";
+import { claimable, pastTimeout } from "../game/lobby";
 import { loadPending } from "../game/commit";
-import { summaryRevealDue } from "../game/reveals";
+import { openableSeats, summaryOpenable, summaryRevealDue } from "../game/reveals";
+import { openAndReveal } from "../game/opener";
 import type { GamesView as GamesList } from "../chain/types";
 import type { SetupRequest } from "./GameScene";
 
@@ -31,6 +32,8 @@ export const TIMEOUT_OPTIONS: { minutes: number; label: string }[] = [
   { minutes: 7 * 24 * 60, label: "7 days" },
 ];
 const DEFAULT_TIMEOUT_INDEX = 4;
+/** The lobby tries a game's timelocked plans again after this, until the reveals' grace is over (drand may not serve the round yet). */
+const LOBBY_OPEN_RETRY_MS = 10_000;
 /** Game lengths offered for a new game (the realm takes 10 to 30). */
 const TURN_OPTIONS = [10, 15, 20, 25, 30];
 const DEFAULT_TURNS = 20;
@@ -100,7 +103,10 @@ export class LobbyScene extends Phaser.Scene {
   private sessionBusy = false;
   /** Games where my reveal, held by this browser, waits for a click; and a reveal sent from the lobby (auto-sign), in flight. */
   private revealIds: string[] = [];
+  private openIds: string[] = [];
   private lobbyRevealing = false;
+  /** Openings the lobby tried, per game: the turn, and when it may try again (drand may not serve the round yet). */
+  private openTried = new Map<string, { turn: number; retryAt: number }>();
   private sessionError = "";
   private sessionDays = SESSION_DAYS.indexOf(7);
   private sessionLimit = SESSION_LIMITS.indexOf(10);
@@ -320,13 +326,17 @@ export class LobbyScene extends Phaser.Scene {
       // A game running out of time moves to Your move with no change on chain.
       const now = Date.now() / 1000;
       const due = this.dueReveals(games);
+      const toOpen = this.dueOpenings(games, now);
       if (this.chain.wallet.state.kind === "active") {
         this.revealIds = [];
-        void this.revealFromLobby(due);
+        this.openIds = [];
+        void this.revealFromLobby(due, toOpen);
       } else {
         this.revealIds = due.map((d) => d.id);
+        this.openIds = toOpen.map((g) => g.id);
       }
-      const key = JSON.stringify(games) + games.mine.filter((g) => claimable(g, now)).map((g) => g.id).join(",") + this.revealIds.join(",");
+      // The time passing changes the sections with no change on chain: a claim coming due, a drand round coming out.
+      const key = JSON.stringify(games) + games.mine.filter((g) => claimable(g, now)).map((g) => g.id).join(",") + this.revealIds.join(",") + "|" + this.openIds.join(",");
       const topKey = JSON.stringify(top);
       if (key !== this.gamesKey || topKey !== this.topKey) {
         this.gamesKey = key;
@@ -352,13 +362,41 @@ export class LobbyScene extends Phaser.Scene {
     });
   }
 
-  /** With auto-sign on, the lobby reveals my plans itself, one at a time (one transaction in flight). */
-  private async revealFromLobby(due: { id: string; turn: number; seat: number; salt: string; plan: string }[]) {
-    if (!this.chain || this.lobbyRevealing || due.length === 0) return;
+  /**
+   * Games with timelocked plans to open (their round out), that the lobby
+   * did not try yet this turn, or may try again: before the reveals' grace
+   * is over it retries (drand may not have served the round yet), after it
+   * a game it tried is left to the claim.
+   */
+  private dueOpenings(games: GamesList, nowSec: number): GamesList["mine"] {
+    return games.mine.filter((g) => {
+      if (!summaryOpenable(g, nowSec)) return false;
+      const tried = this.openTried.get(g.id);
+      if (!tried || tried.turn !== g.turn) return true;
+      return !pastTimeout(g.timeoutAt, nowSec) && Date.now() >= tried.retryAt;
+    });
+  }
+
+  /**
+   * With auto-sign on, the lobby reveals my plans itself and opens the
+   * timelocked plans left unrevealed, one transaction at a time.
+   */
+  private async revealFromLobby(due: { id: string; turn: number; seat: number; salt: string; plan: string }[], toOpen: GamesList["mine"]) {
+    if (!this.chain || this.lobbyRevealing || (due.length === 0 && toOpen.length === 0)) return;
     this.lobbyRevealing = true;
     try {
-      const r = due[0];
-      await this.chain.realm.reveal(r.id, r.turn, r.seat, r.salt, r.plan);
+      if (due.length > 0) {
+        const r = due[0];
+        await this.chain.realm.reveal(r.id, r.turn, r.seat, r.salt, r.plan);
+        return;
+      }
+      const g = toOpen[0];
+      this.openTried.set(g.id, { turn: g.turn, retryAt: Date.now() + LOBBY_OPEN_RETRY_MS });
+      const view = await this.chain.realm.getGame(g.id);
+      const seats = openableSeats(view, Date.now() / 1000);
+      if (seats.length > 0 && (await openAndReveal(this.chain.realm, view, seats, null)).length > 0 && this.scene.isActive()) {
+        showToast(this, `Game ${g.id}: plans opened from their timelocked copies`, "info");
+      }
     } catch (e) {
       if (this.scene.isActive()) showToast(this, `Reveal: ${userMessage(e)}`, "error");
     } finally {
@@ -448,6 +486,7 @@ export class LobbyScene extends Phaser.Scene {
       timeoutOptions: TIMEOUT_OPTIONS,
       topPlayers: this.topPlayers,
       revealIds: this.revealIds,
+      openIds: this.openIds,
       dialog: this.dialog,
     });
   }
