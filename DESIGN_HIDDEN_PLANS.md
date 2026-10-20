@@ -49,7 +49,10 @@ Words used below:
 - **Own reveal**: the player's browser reveals from the salt and plan it
   kept at commit time. The usual path, seconds after the last commit.
 - **Opened reveal**: a client opens a vanished player's timelocked plan
-  and reveals it, after the deadline.
+  and reveals it, after the deadline. Every timelocked plan of a turn
+  opens with the same drand round, so a client opens all the unrevealed
+  ones at once and reveals them in one `RevealMany` transaction: with 3
+  or 4 seats, several players vanishing in one turn is no rare case.
 
 The realm handles both the same way; the `by` of the `PlanRevealed` event
 tells them apart. Players never pick one: the client does both by itself
@@ -162,7 +165,7 @@ opening of its own plan, until `no_reveal` if nobody opens it.
  salt ← crypto.getRandomValues(16)                   sig_R ← GET api.drand.sh/v2/beacons/quicknet/rounds/R
  plan ← canonical plan string (may be "")             salt‖plan ← timelockDecrypt(locked, sig_R)   (tlock-js)
  hash ← sha256("gnoslinger|" id "|" turn "|" seat     check sha256(…) == Commits[seat].Hash
-               "|" salt "|" plan), hex                Reveal(id, seat, salt, plan)
+               "|" salt "|" plan), hex                RevealMany(id, seats, salts, plans), every seat opened
  locked ← timelockEncrypt(R, salt‖plan, quicknet)      realm: same sha256, ParsePlan, Validate, store
  Commit(id, hash, locked)
 ```
@@ -233,6 +236,7 @@ events. Replays and the history view do not change.
 |---|---|---|
 | `Commit(cur, id, hash, locked string) int` | the seat | phase `planning`, before D, character alive, not yet committed; `hash` 64 hex chars, `locked` ≤ 1 KB; stores; when every alive seat has committed, phase `revealing` (event `AllCommitted`). Returns Rev |
 | `Reveal(cur, id, seat int, salt, plan string) int` | anyone | phase `revealing` only (a reveal while planning would leak), seat committed and not revealed; sha256 matches; then exactly today's `SubmitPlan` checks (parse, validate, ground ids, targets, `PlayedFoot`/`PlayedRun`); stores plan and salt and clears the seat's commit (its deposit refunded to the caller); when every seat is revealed, `resolveTurn` in the same tx. Returns Rev |
+| `RevealMany(cur, id, seats, salts, plans string) int` | anyone | the opened reveals of a turn in one transaction: `seats`, `salts` and `plans` are lists separated by `;` (a plan string never holds one; an empty plan is an empty field), the same length. Each seat as `Reveal`, in the order given; a seat already revealed is skipped (its player's own reveal landed first), any other failure aborts the whole call, so the opener's client checks each hash and plan before sending and leaves out a seat whose plan does not pass (it never reveals: `no_reveal` at the grace). Each cleared commit is refunded to the caller; when the call completes the turn, `resolveTurn` in the same tx. Returns Rev |
 | `Surrender(cur, id)` | the seat | `planning` only; drops the seat's commit; as today otherwise |
 | `ClaimTimeout(cur, id)` | anyone | see the clock above; a reveal-phase claim gives every unrevealed alive seat `Out` and the award `no_reveal` −8, then resolves with the plans in |
 | `SubmitPlan` | | removed. A game created "open" (plans in clear, no secrecy, a lobby checkbox) could keep it: `Commit` of the empty hash plus an immediate reveal. Optional, not in the first cut |
@@ -242,7 +246,7 @@ height, time)`: the salts make it unpredictable to every player when it
 commits, the block keeps the outcome unknown to the last revealer.
 
 Events: `PlanCommitted` (id, turn, seat), `AllCommitted`, `PlanRevealed`
-(id, turn, seat, by), `PlanPassed`, `TurnResolved`, `VictoryPoints` with
+(id, turn, seat, by; one per seat of a `RevealMany`), `PlanPassed`, `TurnResolved`, `VictoryPoints` with
 reason `no_reveal`. JSON: `phase` gains `revealing`; each player gains
 `committed`, `revealed` and `locked`; the game gains `commitUntil`,
 `revealUntil` and `lockRound`; `json/plan/{id}/{addr}` shows the
@@ -266,18 +270,20 @@ commit only (the client shows its own plan from `localStorage`).
   `localStorage`; `openLocked(locked, round)`.
 - `chain/realm.ts`: `commit(id, hash, locked)` watching
   `players[seat].committed`, `reveal(id, seat, salt, plan)` watching
-  `players[seat].revealed` or the turn changing; sent through `chain.wallet`
-  (auto-sign, else Adena).
+  `players[seat].revealed` or the turn changing, `revealMany(id, reveals)`
+  watching every seat given revealed or the turn changing; sent through
+  `chain.wallet` (auto-sign, else Adena).
 - `GameScene`: **Send plan** seals and commits; the header says
   "Committed 1 of 2", then "Revealing…"; on every poll, with the phase
   `revealing`: my pending reveal goes out; past `lockRound`, every
-  unrevealed seat with a timelocked plan is opened and revealed (one tx at a
-  time, as the realm client allows one in flight). Without auto-sign
+  unrevealed seat with a timelocked plan is opened (one drand round for
+  all) and they are revealed together in one `RevealMany`, mine too if it
+  is still pending. Without auto-sign
   the same steps wait for a click, an Adena popup each, rather than
   opening Adena unasked (a popup the player did not expect is easily
   dismissed): the status ribbon says "Reveal your plan" (flashing, as on
-  every change) with a **REVEAL** button, and **OPEN THE PLAN** for a
-  vanished player's timelocked plan. The planning
+  every change) with a **REVEAL** button, and **OPEN THE PLANS** for the
+  vanished players' timelocked plans, one popup for all. The planning
   panel shows my plan from `localStorage` while waiting. **Claim** only
   shows once past `revealUntil` and after the timelocked plans were tried.
 - `LobbyScene`, `ui/lobbyView.ts`: "Your move" from `committed`/`revealed`.
@@ -304,8 +310,10 @@ commit only (the client shows its own plan from `localStorage`).
    filetests (a full turn, a reveal while planning refused, a wrong salt,
    a claim in each phase). Client: seal, commit, reveal through Adena.
    Playable with two popups a turn.
-2. Client: the timelocked plan (tlock-js), the realm's `lockRound`, the opener
-   logic, the Claim button gated behind it.
+2. Realm: `RevealMany` (filetests: several seats in one call, a seat
+   already revealed skipped, a wrong hash aborting it). Client: the
+   timelocked plan (tlock-js), the realm's `lockRound`, the opener logic,
+   the Claim button gated behind it.
 3. `AGENTS.md`, `bga/doc/ASSUMPTIONS.md`, `TODO.md`.
 
 ## Alternative: a shared key with a key server
