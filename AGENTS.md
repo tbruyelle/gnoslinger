@@ -95,8 +95,8 @@ assets/                     served as the Vite public dir (boards, tokens, cards
 ## Realm
 
 ### Data
-`Game{ID, Players[]{Addr, Char}, State engine.State, Turn, MaxTurns, Phase,
-Plans[], Submitted[], Missed[], TurnStart, LastTurn *TurnResult, Winner, EndReason, Awards
+`Game{ID, Players[]{Addr, Char}, State engine.State, Turn, MaxTurns, Timeout, Phase,
+Plans[], Submitted[], Missed[], TurnStart, Turns []*TurnResult, Winner, EndReason, Awards
 []engine.Award, VP[], Rev, CreatedAt, UpdatedAt}` stored in an `avl.Tree` by zero-padded `seqid`;
 `Players`, `Plans`, `Submitted`, `Missed` and `VP` have one entry per seat (2 to 4,
 `engine.MinPlayers`..`MaxPlayers`), the seats filling up in the order the
@@ -107,7 +107,8 @@ change and is what clients poll. `TurnStart` is the turn's clock, set when
 a turn starts (the last join, each resolution) and left alone by the saves
 within it, so a plan sent does not give the others more time; the turn
 can be claimed `Timeout` after it (`timeoutAt`, `"timeoutAt"` in the game
-JSON and the summaries, 0 unless planning). Every resolved turn is kept in `Turns`
+JSON and the summaries, 0 unless planning). `Plans` holds only the turn in progress;
+every resolved turn is kept in `Turns`, `LastTurn()` being the last one
 (`TurnResult{Turn, Plans[], Seed, StartEnc, CardsEnc, EventsEnc}`, at most
 MaxTurns; the start snapshot, the cards drawn and the events are stored in
 the engine's compact text encodings, `engine/v0/encode.gno`, read back
