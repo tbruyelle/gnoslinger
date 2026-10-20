@@ -21,21 +21,30 @@ export interface LobbySections {
   open: GameSummary[];
 }
 
+/** A running game: its plans are committed or revealed. */
+export function running(g: { phase: string }): boolean {
+  return g.phase === "planning" || g.phase === "revealing";
+}
+
 /**
  * Sorts the games of a player (address me) into the lobby's sections at
  * nowSec (unix seconds): a plan is mine to send while my character is in the
- * fight and its plan is not in, and a running game out of time is mine to
- * claim.
+ * fight and its plan is not committed, my reveal is mine to send when
+ * revealWaits says this browser holds it and nothing sends it by itself,
+ * and a running game out of time is mine to claim.
  */
-export function lobbySections(games: GamesView, me: string, nowSec: number): LobbySections {
+export function lobbySections(games: GamesView, me: string, nowSec: number, revealWaits: (g: GameSummary) => boolean = () => false): LobbySections {
   const myPlan = (g: GameSummary) => {
     const s = g.players.find((p) => p.addr === me);
-    return !!s && !s.submitted && (s.status ?? "alive") === "alive";
+    return g.phase === "planning" && !!s && !s.committed && (s.status ?? "alive") === "alive";
   };
-  const myMove = (g: GameSummary) => myPlan(g) || claimable(g, nowSec);
+  const myMove = (g: GameSummary) => myPlan(g) || (g.phase === "revealing" && revealWaits(g)) || claimable(g, nowSec);
   return {
-    yourMove: [...games.mine.filter((g) => g.phase === "planning" && myPlan(g)), ...games.mine.filter((g) => g.phase === "planning" && !myPlan(g) && claimable(g, nowSec))],
-    waiting: games.mine.filter((g) => g.phase === "waiting" || (g.phase === "planning" && !myMove(g))),
+    yourMove: [
+      ...games.mine.filter((g) => myPlan(g) || (g.phase === "revealing" && revealWaits(g) && !claimable(g, nowSec))),
+      ...games.mine.filter((g) => running(g) && !myPlan(g) && claimable(g, nowSec)),
+    ],
+    waiting: games.mine.filter((g) => g.phase === "waiting" || (running(g) && !myMove(g))),
     finished: games.mine.filter((g) => g.phase === "finished"),
     open: games.open.filter((g) => !g.players.some((p) => p.addr === me)),
   };
@@ -61,9 +70,9 @@ export function pastTimeout(timeoutAt: number, nowSec: number): boolean {
   return timeoutAt > 0 && nowSec >= timeoutAt + CHAIN_CLOCK_MARGIN;
 }
 
-/** A running game whose turn is out of time: it takes no more plans, anyone may claim it. */
+/** A running game whose turn is out of time: it takes no more plans (or, revealing, its reveals' grace is over), anyone may claim it. */
 export function claimable(g: GameSummary, nowSec: number): boolean {
-  return g.phase === "planning" && secondsLeft(g, nowSec) === 0;
+  return running(g) && secondsLeft(g, nowSec) === 0;
 }
 
 /** How long an open showdown is offered without anyone joining: the realm keeps it open, the lobby stops listing it. */

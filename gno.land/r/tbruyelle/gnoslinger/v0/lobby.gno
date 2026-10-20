@@ -46,13 +46,12 @@ func CreateGame(cur realm, seats int, maxTurns int, timeoutMinutes int, startHex
 		MaxTurns:  maxTurns,
 		Timeout:   timeout,
 		Phase:     PhaseWaiting,
-		Plans:     make([]string, seats),
-		Submitted: make([]bool, seats),
 		Missed:    make([]int, seats),
 		Winner:    -1,
 		VP:        make([]int, seats),
 		CreatedAt: time.Now(),
 	}
+	g.clearTurn()
 	g.Players[0] = Player{Addr: caller, Char: charKey}
 	g.State.SetUp(0, startHex, hex.Dir(facing))
 	openGames.Set(id, g)
@@ -67,7 +66,7 @@ func CreateGame(cur realm, seats int, maxTurns int, timeoutMinutes int, startHex
 // JoinGame seats the caller in the first free seat of a waiting game,
 // playing that seat's character (the kid, then el jefe, then axe),
 // standing in startHex, one of that character's hexes, facing f; the game
-// starts collecting the plans of turn 1 once its last seat is taken.
+// starts collecting the commits of turn 1 once its last seat is taken.
 func JoinGame(cur realm, id string, startHex string, facing int) {
 	caller := cur.Previous().Address()
 	g := getGame(id)

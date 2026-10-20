@@ -36,7 +36,6 @@
 
 ## Lobby
 - change showdown line representation, especially the icon of it
-- add last turn replay when player goes back to a game
 - allow winner to remove replay to be refunded for the deposit
 - Create game options
   - Allow create game with pot
@@ -82,9 +81,8 @@
   - walls 
   - doors except saloon
   - windows
-- Commit-reveal for plans (`PhaseCommit`/`PhaseReveal` reserved): secret
-  simultaneous plans, and the deck shuffle seeded from the revealed salts.
-  Maybe make this optional?
+- Games "open" (plans in clear, one transaction a turn), a lobby option
+  next to the hidden plans (DESIGN_HIDDEN_PLANS.md)?
 - Sounds
   - Add western music
     

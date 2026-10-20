@@ -18,18 +18,20 @@ const listLimit = 50
 // GameJSON is the full view of a game:
 //
 //	{"id","rev","phase","turn","maxTurns","timeout" (seconds),"board",
-//	 "players":[{"addr" ("" for a seat nobody took yet),"name","char","hex" ("" until the seat set up),"facing","down","delay","status","submitted","missed" (turns in a row it let time out),"playedFoot","playedRun","ranLastTurn",
+//	 "players":[{"addr" ("" for a seat nobody took yet),"name","char","hex" ("" until the seat set up),"facing","down","delay","status","committed","revealed","locked" (its timelocked plan, "" once revealed),"missed" (turns in a row it let time out),"playedFoot","playedRun","ranLastTurn",
 //	             "aim","aimAt" (the seat the AIM markers follow, -1 when they sit on a hex or there is no aim),"aimHex" (the hex they sit on, "" when they follow a seat),"endurance","serious","gunArm","otherArm","leg",
 //	             "guns":[{"id","type","name","location","cocked","shells","capacity","jammed","exploded"}]}]   (one entry per seat, 2 to 4),
 //	 "ground":[{"id" (ground id, "g<id>" in a plan),"hex","guns":[{..}]}],
 //	 "winner","endReason","vp":[victory points per seat],"awards":[{"p","reason","points"}] (rule 15, once a played game ends),
-//	 "createdAt","updatedAt","timeoutAt" (when the turn in progress can be claimed, its start plus the timeout, 0 unless planning),
+//	 "createdAt","updatedAt","timeoutAt" (when the turn in progress can be claimed, 0 unless planning or revealing),
+//	 "commitUntil" (the turn's deadline),"revealUntil" (when unrevealed seats can be claimed out),"lockRound" (the drand round the plans are timelocked to) (0 unless planning or revealing),
 //	 "lastTurn":null|{"turn","seed","cards":[result card numbers drawn, in order],"plans":[..],
 //	             "events":[{"seg","p","kind","action","from","to","facing","down","n","delay","reason","card","result","endurance","target","hit","range","gun","gunId","step","chart","status"}],
 //	             "start":[{"hex","facing","down","delay","status","aim","aimAt","aimHex","endurance","serious","gunArm","otherArm","leg","guns":[..]},..]}}
 //
 // Times are unix seconds; winner, events[].p and events[].target are seat indexes, -1 for none.
-// The plans of the turn in progress are not exposed, only the submitted flags.
+// The plans of the turn in progress are hidden until revealed: only their
+// commits show, as flags and timelocked plans.
 func GameJSON(id string) string {
 	g := getGame(id)
 	var b strings.Builder
@@ -63,16 +65,23 @@ func GameJSON(id string) string {
 	b.WriteString(`,"createdAt":` + strconv.FormatInt(g.CreatedAt.Unix(), 10))
 	b.WriteString(`,"updatedAt":` + strconv.FormatInt(g.UpdatedAt.Unix(), 10))
 	writeTimeoutAt(&b, g)
+	commitUntil, revealUntil, lockRound := int64(0), int64(0), int64(0)
+	if g.Phase == PhasePlanning || g.Phase == PhaseRevealing {
+		commitUntil, revealUntil, lockRound = g.commitUntil().Unix(), g.revealUntil().Unix(), g.lockRound()
+	}
+	b.WriteString(`,"commitUntil":` + strconv.FormatInt(commitUntil, 10))
+	b.WriteString(`,"revealUntil":` + strconv.FormatInt(revealUntil, 10))
+	b.WriteString(`,"lockRound":` + strconv.FormatInt(lockRound, 10))
 	b.WriteString(`,"lastTurn":`)
 	writeTurnResult(&b, g.lastTurn())
 	b.WriteByte('}')
 	return b.String()
 }
 
-// PlanJSON is the plan an address submitted for the turn in progress (plans
-// are plain on chain, see the Plan string):
+// PlanJSON is where an address's plan for the turn in progress stands; the
+// plan itself shows once revealed:
 //
-//	{"id","turn","seat" (-1 when addr is not a player),"submitted","plan"}
+//	{"id","turn","seat" (-1 when addr is not a player),"committed","revealed","plan" ("" until revealed)}
 func PlanJSON(id, addr string) string {
 	g := getGame(id)
 	seat := g.seat(address(addr))
@@ -80,11 +89,12 @@ func PlanJSON(id, addr string) string {
 	b.WriteString(`{"id":` + quote(g.ID))
 	b.WriteString(`,"turn":` + strconv.Itoa(g.Turn))
 	b.WriteString(`,"seat":` + strconv.Itoa(seat))
-	submitted, plan := false, ""
+	committed, revealed, plan := false, false, ""
 	if seat >= 0 {
-		submitted, plan = g.Submitted[seat], g.Plans[seat]
+		committed, revealed, plan = g.committed(seat), g.Revealed[seat], g.Plans[seat]
 	}
-	b.WriteString(`,"submitted":` + strconv.FormatBool(submitted))
+	b.WriteString(`,"committed":` + strconv.FormatBool(committed))
+	b.WriteString(`,"revealed":` + strconv.FormatBool(revealed))
 	b.WriteString(`,"plan":` + quote(plan))
 	b.WriteByte('}')
 	return b.String()
@@ -127,7 +137,9 @@ func writePlayer(b *strings.Builder, g *Game, i int) {
 	b.WriteString(`,"down":` + strconv.FormatBool(c.Down))
 	b.WriteString(`,"delay":` + strconv.Itoa(c.Delay))
 	b.WriteString(`,"status":` + quote(c.Status.String()))
-	b.WriteString(`,"submitted":` + strconv.FormatBool(g.Submitted[i]))
+	b.WriteString(`,"committed":` + strconv.FormatBool(g.committed(i)))
+	b.WriteString(`,"revealed":` + strconv.FormatBool(g.Revealed[i]))
+	b.WriteString(`,"locked":` + quote(g.Commits[i].Locked))
 	b.WriteString(`,"missed":` + strconv.Itoa(g.Missed[i]))
 	b.WriteString(`,"playedFoot":` + strconv.FormatBool(c.PlayedFoot))
 	b.WriteString(`,"playedRun":` + strconv.FormatBool(c.PlayedRun))
@@ -154,10 +166,10 @@ func writeWounds(b *strings.Builder, c engine.Character) {
 }
 
 // writeTimeoutAt writes the ,"timeoutAt" member: when the turn in progress
-// can be claimed, 0 unless the game is planning.
+// can be claimed, 0 unless the game is planning or revealing.
 func writeTimeoutAt(b *strings.Builder, g *Game) {
 	timeoutAt := int64(0)
-	if g.Phase == PhasePlanning {
+	if g.Phase == PhasePlanning || g.Phase == PhaseRevealing {
 		timeoutAt = g.timeoutAt().Unix()
 	}
 	b.WriteString(`,"timeoutAt":` + strconv.FormatInt(timeoutAt, 10))
@@ -281,7 +293,7 @@ func writeEvent(b *strings.Builder, e engine.Event) {
 // address's registered name ("" if none):
 //
 //	{"name","open":[summary...],"mine":[summary...]}
-//	summary = {"id","rev","phase","turn","maxTurns","timeout","winner","endReason","vp","createdAt","updatedAt","timeoutAt","players":[{"addr","name","char","status","submitted"}]}
+//	summary = {"id","rev","phase","turn","maxTurns","timeout","winner","endReason","vp","createdAt","updatedAt","timeoutAt","players":[{"addr","name","char","status","committed","revealed"}]}
 //
 // players has one entry per seat, "addr" "" for a seat nobody took yet.
 func GamesJSON(addr string) string {
@@ -332,7 +344,7 @@ func writeSummary(b *strings.Builder, g *Game) {
 			b.WriteByte(',')
 		}
 		b.WriteString(`{"addr":` + quote(p.Addr.String()) + `,"name":` + quote(profiles.Name(p.Addr)) + `,"char":` + quote(p.Char) +
-			`,"status":` + quote(g.State.Chars[i].Status.String()) + `,"submitted":` + strconv.FormatBool(g.Submitted[i]) + `}`)
+			`,"status":` + quote(g.State.Chars[i].Status.String()) + `,"committed":` + strconv.FormatBool(g.committed(i)) + `,"revealed":` + strconv.FormatBool(g.Revealed[i]) + `}`)
 	}
 	b.WriteString("]}")
 }

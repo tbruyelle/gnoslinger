@@ -1,11 +1,14 @@
 # Hidden plans: commit, reveal, timelocked plan — design
 
-Status: proposal, 2026-10-17. Not built yet, except the account sessions
-it can use for the popups (built 2026-10-18, `AGENTS.md`,
-`chain/session.ts`) and the turn's fixed start, `TurnStart` (built
-2026-10-19, below). `TODO.md` lists the
-commit-reveal item this replaces ("`PhaseCommit`/`PhaseReveal` reserved",
-"the deck shuffle seeded from the revealed salts").
+Status: built 2026-10-20, with the account sessions it uses for the
+popups (2026-10-18, `chain/session.ts`) and the turn's fixed start,
+`TurnStart` (2026-10-19); this document is kept to the build, and
+`AGENTS.md` has the details. Changed from the first proposal while
+building: a claim passes the turn of a seat whose plan is not in, in
+both phases, instead of putting it out (`no_reveal` −8 is gone);
+`RevealMany` skips a seat it cannot reveal instead of aborting; every
+commit carries its timelocked plan, encrypted offline; `Sealed` is the
+commit's type (`Commit` being the function).
 
 ## Goal
 
@@ -130,7 +133,7 @@ know D when it commits.
 ```
 TurnStart                                 D = TurnStart + Timeout          D + RevealGrace
 │◄────────── Commit accepted ────────────►│◄─────── Reveal only ──────────►│ Reveal or ClaimTimeout
-│                                         │ ClaimTimeout: uncommitted → Out │ unrevealed → Out, no_reveal −8
+│                                         │ ClaimTimeout: uncommitted miss  │ unrevealed miss the turn
 │                                         │ ≤1 alive → finished(timeout)    │ ≤1 alive → finished(timeout)
 │                                         │ else → revealing                │ else resolve with the plans in
                                           R = first drand round after D + 2 min: the timelocked plans open
@@ -142,6 +145,18 @@ block clock's drift and an opener's transaction. A reveal is accepted at
 any time in the `revealing` phase, after the grace too, until someone
 claims the timeout; the honest client opens the timelocked plans before
 it ever offers the claim button.
+
+A claim, in either phase, treats every seat whose plan is not in the same
+way: it **misses the turn**, which is passed for it, and at the third
+missed turn in a row it is out of the fight, scored as a surrender. Only
+a revealed plan resets the count, so committing and never revealing
+counts as missing. A claim in the reveal phase is a backstop: a vanished
+player's plan is opened from its timelocked copy, with no claim. It only
+catches a copy that cannot be opened, deliberately broken or drand out of
+reach, or one nobody opened. It does not punish harder, because the realm
+cannot tell a copy nobody could open from one a claimer chose not to
+open: in a 2-player game the claimer is the only one around to open it,
+and a death's points would reward skipping the opening.
 
 ### State machine
 
@@ -169,15 +184,16 @@ with the empty plan at once.
 |---|---|---|---|
 | Before committing | The others' hashes | Nothing | A sha256 of 16 random bytes and the plan is hiding and binding |
 | Last to commit | Every other hash | Send its plan in clear | The others' plans are fixed; they can only refuse to reveal, see two rows down |
-| Committed, others not | Nothing new | Wait | Commits are refused past D; whoever waits past D is Out |
-| Revealing, first to reveal | Nothing new | Refuse to reveal | Its timelocked plan opens at R anyway; with a broken one, `no_reveal` −8 and Out (so Captured −4 can follow), never better than its plan |
+| Committed, others not | Nothing new | Wait | Commits are refused past D; whoever waits past D misses the turn, without having learnt anything |
+| Revealing, first to reveal | Nothing new | Refuse to reveal | Its timelocked plan opens at R anyway and plays. Only a copy broken on purpose at commit time keeps it hidden: that buys the choice, after seeing the others, between its plan and a pass, each use a missed turn (out at the third) |
+| Claimer, 2 players | A vanished player's timelocked plan, unopened | Claim instead of opening | That player only misses the turn, as with no commit: skipping the opening gains little |
 | Revealing, last to reveal | Every other plan | Compute the outcome, then refuse | The seed includes the resolving block's height and time: the outcome is unknown until the reveal lands. And see the row above |
 | Opener of a timelocked plan | A vanished player's plan | Nothing | It opens after D: that player can no longer change anything, and the opener itself has committed or is Out |
 
 The timelock round is chosen by the client; the realm cannot check it. A
 round earlier than D exposes the chooser's own plan to the others before
 they commit: its loss alone. A round later than D only delays the
-opening of its own plan, until `no_reveal` if nobody opens it.
+opening of its own plan, until a missed turn if nobody opens it.
 
 ## The timelocked plan
 
@@ -207,9 +223,14 @@ opening of its own plan, until `no_reveal` if nobody opens it.
   timelocked plan are cleared, refunded to whoever sent the reveal. That is
   the player itself on an own reveal, and the opener of a vanished
   player's plan otherwise: a small bounty for opening it.
-- Without a drand relay reachable (or with the timelocked plan left
-  empty), the design degrades to plain commit-reveal with the
-  `no_reveal` penalty.
+- Encrypting needs no drand node: the network's public key and scheme
+  are constants (`tlock-js`'s `defaultChainInfo` for quicknet) and the
+  realm gives the round, so the client always locks and `Commit` refuses
+  an empty timelocked plan. Only opening fetches the round's signature;
+  with drand unreachable then, the plan waits, and past the grace the
+  claim passes the seat's turn (a missed one). That claim is a backstop:
+  it only ever hits a copy that cannot be opened, a deliberately broken
+  one, a long drand outage, or a copy nobody opened.
 
 ## Popups and account sessions
 
@@ -234,8 +255,7 @@ in the realm (the caller is the player's address) nor in the mechanism:
 type Commit struct {
     // sha256 hex of the domain, salt and plan; "" until committed
     Hash string
-    // the timelocked plan, a tlock ciphertext (≤ 1 KB); "" when the
-    // client sent none
+    // the timelocked plan, a tlock ciphertext (≤ 1 KB), required
     Locked string
 }
 
@@ -265,9 +285,9 @@ events. Replays and the history view do not change.
 |---|---|---|
 | `Commit(cur, id, hash, locked string) int` | the seat | phase `planning`, before D, character alive, not yet committed; `hash` 64 hex chars, `locked` ≤ 1 KB; stores; when every alive seat has committed, phase `revealing` (event `AllCommitted`). Returns Rev |
 | `Reveal(cur, id string, turn, seat int, salt, plan string) int` | anyone | `turn` the current one; phase `revealing`, seat committed and not revealed, sha256 matches; or phase `planning` (the last commit in clear), before D, by the seat itself, not committed, every other alive seat committed, no hash to check (any other reveal while planning would leak); then exactly today's `SubmitPlan` checks (parse, validate, ground ids, targets, `PlayedFoot`/`PlayedRun`); stores plan and salt and clears the seat's commit (its deposit refunded to the caller); when every seat is revealed, `resolveTurn` in the same tx. Returns Rev |
-| `RevealMany(cur, id, seats, salts, plans string) int` | anyone | the opened reveals of a turn in one transaction: `seats`, `salts` and `plans` are lists separated by `;` (a plan string never holds one; an empty plan is an empty field), the same length. Each seat as `Reveal`, in the order given; a seat already revealed is skipped (its player's own reveal landed first), any other failure aborts the whole call, so the opener's client checks each hash and plan before sending and leaves out a seat whose plan does not pass (it never reveals: `no_reveal` at the grace). Each cleared commit is refunded to the caller; when the call completes the turn, `resolveTurn` in the same tx. Returns Rev |
+| `RevealMany(cur, id, seats, salts, plans string) int` | anyone | the opened reveals of a turn in one transaction: `seats`, `salts` and `plans` are lists separated by `;` (a plan string never holds one; an empty plan is an empty field), the same length. Each seat as `Reveal`, in the order given; a seat already revealed is skipped (its player's own reveal landed first), and so is one whose salt and plan do not match its hash or whose plan is not valid (event `PlanUnopened`; the opener cannot check that before opening, and one bad copy must not hold the others back): that seat stays unrevealed, for the claim. Bad lists, an unknown seat, the wrong turn or phase abort. Each cleared commit is refunded to the caller; when the call completes the turn, `resolveTurn` in the same tx. Returns Rev |
 | `Surrender(cur, id)` | the seat | `planning` only; drops the seat's commit; as today otherwise |
-| `ClaimTimeout(cur, id)` | anyone | see the clock above; a reveal-phase claim gives every unrevealed alive seat `Out` and the award `no_reveal` −8, then resolves with the plans in |
+| `ClaimTimeout(cur, id)` | anyone | see the clock above: past D while planning (no commit at all: abandoned), past `D + RevealGrace` while revealing; every alive seat whose plan is not in misses the turn, then the turn moves on with the plans in |
 | `SubmitPlan` | | removed. A game created "open" (plans in clear, no secrecy, a lobby checkbox) could keep it: `Commit` of the empty hash plus an immediate reveal. Optional, not in the first cut |
 
 The seed becomes `engine.Seed(realmPath, id, turn, salts…, plans…,
@@ -276,18 +296,18 @@ commits, the block keeps the outcome unknown to the last revealer.
 
 Events: `PlanCommitted` (id, turn, seat), `AllCommitted`, `PlanRevealed` (id,
 turn, seat, by; one per seat of a `RevealMany`), `PlanPassed`, `TurnResolved`,
-`VictoryPoints` with reason `no_reveal`. JSON: `phase` gains `revealing`; each
+`PlanUnopened`, `PlanMissed` (no commit, or no plan revealed, at the claim).
+JSON: `phase` gains `revealing`; each
 player gains `committed`, `revealed` and `locked`; the game gains `commitUntil`,
 `revealUntil` and `lockRound`; `json/plan/{id}/{addr}` shows the commit only
 (the client shows its own plan from `localStorage`).
 
 ### Rules decisions
 
-- **[Hn] An unrevealed plan**: at `D + RevealGrace` the seat is `Out`
-  and scores `no_reveal` −8, the points of a death (15.1), and may be
-  captured at the end like any character out of the fight (15.63). No
-  enemy gets the Kill points. Out of time without a commit stays what it
-  is today, a surrender.
+- **[Hn] A plan not in at the claim**, no commit by D or not revealed
+  by `D + RevealGrace`: the seat misses the turn (passed), and is out of
+  the fight at the third missed turn in a row, scored as a surrender; a
+  revealed plan resets the count.
 - **[Hn+1] The turn's clock** runs from the turn's start, not from the
   last move: a 3-player game no longer gets a longer turn when its
   commits trickle in.
@@ -337,7 +357,7 @@ player gains `committed`, `revealed` and `locked`; the game gains `commitUntil`,
 ## Steps
 
 1. Realm: the deadlines from `TurnStart` (built), `Commit`, `Reveal`,
-   `revealing`, `no_reveal`, the seed with salts; unit tests and
+   `revealing`, the missed turns at the claim, the seed with salts; unit tests and
    filetests (a full turn, the last commit in clear, a reveal while
    planning refused while another seat has not committed, a wrong salt, a
    claim in each phase). Client: seal, commit, reveal through Adena.

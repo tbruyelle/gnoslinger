@@ -1,6 +1,7 @@
 /** Mirrors of the realm's JSON views (see gno.land/r/tbruyelle/gnoslinger/v0/json.gno). */
 
-export type Phase = "waiting" | "planning" | "finished";
+/** planning: the plans are committed (hidden); revealing: every plan is committed, the reveals come in. */
+export type Phase = "waiting" | "planning" | "revealing" | "finished";
 export type PlayerStatus = "alive" | "out" | "killed" | "passed_out" | "ran_away";
 export type EventKind =
   | "move" | "turn" | "flip" | "delay" | "cancel" | "draw" | "wild_shot"
@@ -25,8 +26,12 @@ export interface PlayerView {
   down: boolean;
   delay: number;
   status: PlayerStatus;
-  submitted: boolean;
-  /** Turns in a row the player let time out, each passed for them (MAX_MISSED puts them out); a plan resets it. */
+  /** The seat's plan for the turn in progress is in: committed (hidden), and revealed once its salt and plan are on chain (or passed). */
+  committed: boolean;
+  revealed: boolean;
+  /** The seat's plan timelocked to the game's lockRound (tlock), "" once revealed or when its client sent none. */
+  locked: string;
+  /** Turns in a row the player let time out, each passed for them (MAX_MISSED puts them out); a commit resets it. */
   missed?: number;
   playedFoot: boolean;
   playedRun: boolean;
@@ -169,8 +174,14 @@ export interface GameView {
   awards?: VPAward[];
   createdAt: number;
   updatedAt: number;
-  /** Unix seconds after which ClaimTimeout succeeds: the turn's start plus the timeout; 0 unless planning. */
+  /** Unix seconds after which ClaimTimeout succeeds: commitUntil while planning, revealUntil while revealing; 0 otherwise. */
   timeoutAt: number;
+  /** The turn's deadline: commits are refused from then (unix seconds; 0 unless planning or revealing). */
+  commitUntil: number;
+  /** When a claim can pass the turn of the seats whose plan is not revealed (a missed turn). */
+  revealUntil: number;
+  /** The drand quicknet round the turn's plans are timelocked to. */
+  lockRound: number;
   lastTurn: TurnResult | null;
 }
 
@@ -197,10 +208,10 @@ export interface GameSummary {
   vp?: number[];
   createdAt: number;
   updatedAt: number;
-  /** Unix seconds after which ClaimTimeout succeeds: the turn's start plus the timeout; 0 unless planning. */
+  /** Unix seconds after which ClaimTimeout succeeds: the deadline while planning, its grace while revealing; 0 otherwise. */
   timeoutAt: number;
-  /** One entry per seat, addr "" for a seat nobody took yet; submitted: the seat's plan for the turn in progress is in; name: the registered name, "" if none; status: alive, out, killed or passed_out. */
-  players: { addr: string; name?: string; char: string; status?: PlayerStatus; submitted?: boolean }[];
+  /** One entry per seat, addr "" for a seat nobody took yet; committed/revealed: the seat's plan for the turn in progress; name: the registered name, "" if none; status: alive, out, killed or passed_out. */
+  players: { addr: string; name?: string; char: string; status?: PlayerStatus; committed?: boolean; revealed?: boolean }[];
 }
 
 export interface GamesView {
@@ -236,7 +247,7 @@ export function parseGameView(json: string): GameView {
   const v: unknown = JSON.parse(json);
   if (!isRecord(v)) bad("not an object");
   if (typeof v.id !== "string" || typeof v.rev !== "number" || typeof v.turn !== "number") bad("header");
-  if (v.phase !== "waiting" && v.phase !== "planning" && v.phase !== "finished") bad("phase");
+  if (v.phase !== "waiting" && v.phase !== "planning" && v.phase !== "revealing" && v.phase !== "finished") bad("phase");
   if (!Array.isArray(v.players) || v.players.length < MIN_SEATS || v.players.length > MAX_SEATS) bad("players");
   v.players.forEach(checkPlayer);
   if (v.lastTurn !== null) {
@@ -245,19 +256,21 @@ export function parseGameView(json: string): GameView {
   return v as unknown as GameView;
 }
 
-/** The plan an address submitted for the turn in progress (json/plan/{id}/{addr}). */
+/** Where an address's plan for the turn in progress stands (json/plan/{id}/{addr}); the plan shows once revealed. */
 export interface PlanView {
   id: string;
   turn: number;
   /** Seat of the address, -1 when it is not a player. */
   seat: number;
-  submitted: boolean;
+  committed: boolean;
+  revealed: boolean;
+  /** "" until revealed. */
   plan: string;
 }
 
 export function parsePlanView(json: string): PlanView {
   const v: unknown = JSON.parse(json);
-  if (!isRecord(v) || typeof v.id !== "string" || typeof v.turn !== "number" || typeof v.submitted !== "boolean" || typeof v.plan !== "string") bad("plan");
+  if (!isRecord(v) || typeof v.id !== "string" || typeof v.turn !== "number" || typeof v.committed !== "boolean" || typeof v.plan !== "string") bad("plan");
   return v as unknown as PlanView;
 }
 

@@ -108,10 +108,14 @@ func renderGame(res *mux.ResponseWriter, req *mux.Request) {
 	for i, p := range g.Players {
 		c := g.State.Chars[i]
 		plan := "-"
-		if g.Phase == PhasePlanning {
-			plan = "pending"
-			if g.Submitted[i] {
-				plan = "submitted"
+		if g.Phase == PhasePlanning || g.Phase == PhaseRevealing {
+			switch {
+			case g.Revealed[i]:
+				plan = "revealed"
+			case g.committed(i):
+				plan = "committed"
+			default:
+				plan = "pending"
 			}
 		}
 		b.WriteString("| " + strconv.Itoa(i) +
@@ -155,8 +159,14 @@ func renderGame(res *mux.ResponseWriter, req *mux.Request) {
 	case PhaseWaiting:
 		res.Write(md.Paragraph(joinLink(g) + " · " + md.Link("Cancel", txlink.Call("CancelGame", "id", g.ID))))
 	case PhasePlanning:
-		res.Write(md.Paragraph(md.Link("Submit a plan", txlink.Call("SubmitPlan", "id", g.ID, "plan", "")) +
+		res.Write(md.Paragraph("Plans are hidden: commit " + md.InlineCode("PlanHash(id, turn, seat, salt, plan)") +
+			", reveal once every plan is committed. " +
+			md.Link("Commit a plan", txlink.Call("Commit", "id", g.ID, "hash", "", "locked", "")) +
 			" · " + md.Link("Surrender", txlink.Call("Surrender", "id", g.ID)) +
+			" · " + md.Link("Claim timeout", txlink.Call("ClaimTimeout", "id", g.ID)) +
+			" (after " + when(g.timeoutAt()) + ")"))
+	case PhaseRevealing:
+		res.Write(md.Paragraph(md.Link("Reveal a plan", txlink.Call("Reveal", "id", g.ID, "turn", strconv.Itoa(g.Turn), "seat", "", "salt", "", "plan", "")) +
 			" · " + md.Link("Claim timeout", txlink.Call("ClaimTimeout", "id", g.ID)) +
 			" (after " + when(g.timeoutAt()) + ")"))
 	}

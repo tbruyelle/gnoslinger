@@ -15,8 +15,8 @@ function game(id: string, p: Partial<GameSummary>): GameSummary {
 describe("lobbySections", () => {
   it("sorts my games by whose move it is, and keeps others' open games", () => {
     const mine = [
-      game("1", { players: [{ addr: ME, char: "marshal", submitted: false }, { addr: OTHER, char: "the_kid", submitted: true }] }),
-      game("2", { players: [{ addr: ME, char: "marshal", submitted: true }, { addr: OTHER, char: "the_kid", submitted: false }] }),
+      game("1", { players: [{ addr: ME, char: "marshal", committed: false }, { addr: OTHER, char: "the_kid", committed: true }] }),
+      game("2", { players: [{ addr: ME, char: "marshal", committed: true }, { addr: OTHER, char: "the_kid", committed: false }] }),
       game("3", { phase: "waiting", players: [{ addr: ME, char: "marshal" }, { addr: "", char: "" }] }),
       game("4", { phase: "finished", players: [{ addr: ME, char: "marshal" }, { addr: OTHER, char: "the_kid" }] }),
     ];
@@ -26,6 +26,16 @@ describe("lobbySections", () => {
     expect(s.waiting.map((g) => g.id)).toEqual(["2", "3"]);
     expect(s.finished.map((g) => g.id)).toEqual(["4"]);
     expect(s.open.map((g) => g.id)).toEqual(["5"]);
+  });
+
+  it("puts my reveal in my move when this browser holds it and nothing sends it by itself", () => {
+    const revealing = game("10", { phase: "revealing", timeoutAt: 1000, players: [{ addr: ME, char: "marshal", committed: true, revealed: false }, { addr: OTHER, char: "the_kid", committed: true, revealed: true }] });
+    expect(lobbySections({ mine: [revealing], open: [] }, ME, 0).waiting.map((g) => g.id)).toEqual(["10"]);
+    const s = lobbySections({ mine: [revealing], open: [] }, ME, 0, (g) => g.id === "10");
+    expect(s.yourMove.map((g) => g.id)).toEqual(["10"]);
+    expect(s.waiting).toEqual([]);
+    // Past the reveals' grace, it is a claim.
+    expect(claimable(revealing, 1000 + CHAIN_CLOCK_MARGIN)).toBe(true);
   });
 });
 
@@ -75,7 +85,7 @@ describe("outcomeLine", () => {
   });
 
   it("does not wait for the plan of a character out of the fight", () => {
-    const out = game("6", { players: [{ addr: ME, char: "marshal", status: "killed", submitted: false }, { addr: OTHER, char: "the_kid", status: "alive", submitted: false }, { addr: "g1c", char: "el_jefe", status: "alive", submitted: true }] });
+    const out = game("6", { players: [{ addr: ME, char: "marshal", status: "killed", committed: false }, { addr: OTHER, char: "the_kid", status: "alive", committed: false }, { addr: "g1c", char: "el_jefe", status: "alive", committed: true }] });
     const s = lobbySections({ mine: [out], open: [] }, ME, 0);
     expect(s.yourMove).toEqual([]);
     expect(s.waiting.map((g) => g.id)).toEqual(["6"]);
@@ -92,8 +102,8 @@ describe("missOutcome", () => {
 
 describe("claimable", () => {
   it("puts a running game out of time in my move, after the plans I owe", () => {
-    const late = game("7", { timeoutAt: 300, timeout: 300, players: [{ addr: ME, char: "marshal", submitted: true }, { addr: OTHER, char: "the_kid", submitted: false }] });
-    const mine = game("8", { timeoutAt: 8200, timeout: 7200, players: [{ addr: ME, char: "marshal", submitted: false }, { addr: OTHER, char: "the_kid", submitted: true }] });
+    const late = game("7", { timeoutAt: 300, timeout: 300, players: [{ addr: ME, char: "marshal", committed: true }, { addr: OTHER, char: "the_kid", committed: false }] });
+    const mine = game("8", { timeoutAt: 8200, timeout: 7200, players: [{ addr: ME, char: "marshal", committed: false }, { addr: OTHER, char: "the_kid", committed: true }] });
     const open = game("9", { phase: "waiting", timeout: 300, players: [{ addr: ME, char: "marshal" }, { addr: "", char: "" }] });
     const due = 300 + CHAIN_CLOCK_MARGIN;
     expect(claimable(late, due)).toBe(true);

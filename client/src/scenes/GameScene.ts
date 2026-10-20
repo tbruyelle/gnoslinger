@@ -32,6 +32,8 @@ import { showToast } from "../ui/toast";
 import { CHAIN_CLOCK_MARGIN, charName, formatDuration, formatLeft, MAX_MISSED, missOutcome, pastTimeout, seatsTaken } from "../game/lobby";
 import { defaultFacing, nextSeat, seatChar, setupZone, startingChar } from "../game/setup";
 import { vpRecap, vpResult } from "../game/vp";
+import { loadPending, loadSeenTurn, saveSeenTurn, lockSealed, newSalt, openLocked, planHash, prunePending, roundTime, savePending, type RevealScope, type Sealed } from "../game/commit";
+import { lastToCommit, openableSeats, ownRevealDue } from "../game/reveals";
 import { seatColor, seatColorNum } from "../ui/seats";
 
 // ── Layout constants ────────────────────────────────────────────────────────
@@ -112,6 +114,8 @@ const MY_ZONE_COLOR = 0x4f7a3a;
 const RUN_AWAY_COLOR = 0xf2b544;
 /** How long a second click on Send plan confirms passing with an empty plan. */
 const PASS_CONFIRM_MS = 5000;
+/** A reveal or an opening that failed is not tried again by itself before this (auto-sign). */
+const REVEAL_RETRY_MS = 20_000;
 /** The tracer a bullet leaves behind it. */
 const SHOT_LINE_COLOR = 0xffffff;
 
@@ -819,6 +823,11 @@ export class GameScene extends Phaser.Scene {
   private arrMaskGfx!: Phaser.GameObjects.Graphics;
   /** When Send plan last warned about an empty plan: a second click within PASS_CONFIRM_MS passes. */
   private passWarnedAt = 0;
+  /** A reveal or an opening in flight, and when each kind last failed (it is not retried at once). */
+  private revealing = false;
+  private revealFailedAt = { own: 0, open: 0 };
+  /** The seats whose timelocked plan this screen tried to open this turn: past the reveals' grace they are left to the claim. */
+  private openTried: { turn: number; seats: Set<number> } = { turn: 0, seats: new Set() };
   /** The screen around the board: header, side columns, hand or replay controls (an HTML overlay). */
   private showdown: ShowdownView | null = null;
 
@@ -923,6 +932,16 @@ export class GameScene extends Phaser.Scene {
     this.scale.on("resize", onResize);
     // The turn's deadline can pass while the screen is open: look again now and then.
     this.time.addEvent({ delay: 15_000, loop: true, callback: () => this.mode !== "playback" && this.renderView() });
+    // The timelocked plans become openable at their drand round with no change on chain to poll: look for it.
+    this.time.addEvent({
+      delay: 3_000,
+      loop: true,
+      callback: () => {
+        if (this.mode !== "waiting" || this.view?.phase !== "revealing") return;
+        this.revealDue();
+        this.renderView();
+      },
+    });
 
     if (this.gameID) {
       this.poller = new GamePoller(
@@ -975,6 +994,9 @@ export class GameScene extends Phaser.Scene {
       this.shownResultTurn = view.lastTurn?.turn ?? 0;
       this.applyState(true);
       if (view.phase === "finished") void this.showFinalReplay(false);
+      // A turn that resolved while this browser was elsewhere (in the lobby,
+      // which reveals by itself with auto-sign, or on another account): play it back.
+      else if (view.lastTurn && !this.setup && view.lastTurn.turn > loadSeenTurn(this.revealScope(), this.gameID)) this.startPlayback([view.lastTurn], true);
       return;
     }
     // The game just ended: its whole history replaces the board, from the
@@ -1046,7 +1068,7 @@ export class GameScene extends Phaser.Scene {
     else if (view.phase === "finished") this.mode = "ended";
     else if (!me) this.mode = "spectate";
     else if (view.phase === "waiting") this.mode = "waiting";
-    else if (me.submitted) this.mode = "waiting";
+    else if (me.committed || view.phase === "revealing") this.mode = "waiting";
     else if (this.mode !== "submitting") this.mode = "select";
     if (this.mode !== "select") this.clearSelection();
 
@@ -1054,7 +1076,8 @@ export class GameScene extends Phaser.Scene {
     this.refreshTokens(!reset);
     this.showSetupZone();
     this.renderView();
-    if (this.mode === "waiting" && view.phase === "planning") void this.loadSentPlan();
+    if (this.mode === "waiting" && (view.phase === "planning" || view.phase === "revealing")) void this.loadSentPlan();
+    this.revealDue();
   }
 
   /**
@@ -1549,7 +1572,7 @@ export class GameScene extends Phaser.Scene {
         return "Loading…";
       case "select": {
         if (!this.outOfTime()) return "Your move: pick your action cards";
-        const sent = view.players.some((p, i) => i !== this.myIndex && p.addr && p.submitted);
+        const sent = view.players.some((p, i) => i !== this.myIndex && p.addr && p.committed);
         return sent ? "Out of time: your plan did not come in, close the turn" : "Out of time: nobody played, close the showdown";
       }
       case "submitting":
@@ -1558,7 +1581,13 @@ export class GameScene extends Phaser.Scene {
         if (view.phase === "waiting") return `Waiting for players (${seatsTaken(view)})…`;
         const me = this.myIndex >= 0 ? view.players[this.myIndex] : null;
         const pending = this.pendingNames();
-        if (this.outOfTime()) return `Out of time for ${pending}: claim the turn`;
+        if (view.phase === "revealing") {
+          if (this.outOfTime() && !this.openWaits()) return `No plan from ${pending}: close the turn`;
+          if (this.ownRevealWaits()) return "Every plan is in: reveal your plan";
+          if (this.openWaits()) return "Plans left unrevealed: open them";
+          return `Revealing the plans: waiting for ${pending}…`;
+        }
+        if (this.outOfTime()) return `Out of time for ${pending}: close the turn`;
         if (me && me.delay >= MAX_ACTION_POINTS) return `Too much delay to act this turn (${me.delay}): you pass, waiting for ${pending}…`;
         return `Plan sent, waiting for ${pending}…`;
       }
@@ -1577,9 +1606,12 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  /** The characters whose plan the turn still waits for, "the others" when there are none to name. */
+  /** The characters whose plan (its commit, or its reveal once all are committed) the turn still waits for, "the others" when there are none to name. */
   private pendingNames(): string {
-    const names = (this.view?.players ?? []).filter((p, i) => i !== this.myIndex && p.addr && p.status === "alive" && !p.submitted).map((p) => charName(p.char));
+    const revealing = this.view?.phase === "revealing";
+    const names = (this.view?.players ?? [])
+      .filter((p, i) => i !== this.myIndex && p.addr && p.status === "alive" && !(revealing ? p.revealed : p.committed))
+      .map((p) => charName(p.char));
     return names.join(", ") || "the others";
   }
 
@@ -1619,6 +1651,10 @@ export class GameScene extends Phaser.Scene {
         return void this.surrender();
       case "claim":
         return void this.claimTimeout();
+      case "reveal":
+        return void this.revealOwn();
+      case "open":
+        return void this.openPlans();
       case "cancel":
         return void this.cancelGame();
       case "setup":
@@ -1678,7 +1714,10 @@ export class GameScene extends Phaser.Scene {
     const players = view?.players ?? [];
     const names = players.map((p) => charName(p.char));
     const tone: ShowdownModel["statusTone"] =
-      this.mode === "select" || this.mode === "submitting" || this.mode === "setup" || (this.mode === "waiting" && view?.phase === "planning" && this.outOfTime())
+      this.mode === "select" ||
+      this.mode === "submitting" ||
+      this.mode === "setup" ||
+      (this.mode === "waiting" && (view?.phase === "planning" || view?.phase === "revealing") && (this.outOfTime() || this.ownRevealWaits() || this.openWaits()))
         ? "move"
         : this.mode === "playback" ? "replay" : this.mode === "ended" ? "over" : this.mode === "waiting" ? "wait" : "info";
     const calling = this.setup?.req.kind === "create" ? this.setup.req : null;
@@ -1741,8 +1780,14 @@ export class GameScene extends Phaser.Scene {
 
     // Planning layout: my character (or everyone, for a spectator) on the left, the others and my plan on the right, the hand below.
     const committed = this.setup ? this.displayChars() : this.committed; // setting up, my panel shows the position picked
-    const planning = view?.phase === "planning";
-    const badge = (i: number) => (planning && players[i]?.addr ? (players[i].submitted ? "PLAN SENT" : "PLANNING") : "");
+    const planning = view?.phase === "planning" || view?.phase === "revealing";
+    const badge = (i: number) => {
+      const p = players[i];
+      if (!p?.addr || p.status !== "alive") return "";
+      if (view?.phase === "planning") return p.committed ? "PLAN SENT" : "PLANNING";
+      if (view?.phase === "revealing") return p.revealed ? "REVEALED" : "REVEALING";
+      return "";
+    };
     const mine = this.myIndex >= 0 && committed[this.myIndex] ? this.charPanel(this.myIndex, committed[this.myIndex], "") : null;
     const everyone = players.flatMap((p, i) => (p.addr && committed[i] ? [this.charPanel(i, committed[i], badge(i))] : []));
     const left = mine ? [mine] : everyone;
@@ -1820,7 +1865,7 @@ export class GameScene extends Phaser.Scene {
     const pending = this.pendingNames();
 
     if (this.mode === "select" && this.outOfTime()) {
-      const sentBy = view.players.filter((p, i) => i !== this.myIndex && p.addr && p.submitted).map((p) => charName(p.char));
+      const sentBy = view.players.filter((p, i) => i !== this.myIndex && p.addr && p.committed).map((p) => charName(p.char));
       const out = !!me && missOutcome(me) === "out";
       const missed = (me?.missed ?? 0) + 1;
       return {
@@ -1835,7 +1880,7 @@ export class GameScene extends Phaser.Scene {
             : `${sentBy.join(", ")} sent a plan: closing the turn passes it for you, missed turn ${missed} of ${MAX_MISSED} in a row (at ${MAX_MISSED}, you are out of the fight).`,
         warn: true,
         buttons: [
-          { id: "claim", label: sentBy.length ? "Close the turn" : "Close the showdown", tone: sentBy.length && out ? "danger" : "primary" },
+          { id: "claim", label: sentBy.length ? "CLOSE THE TURN" : "CLOSE THE SHOWDOWN", tone: sentBy.length && out ? "danger" : "primary" },
           replay,
           lobby,
         ],
@@ -1896,7 +1941,8 @@ export class GameScene extends Phaser.Scene {
       }
       const due = pastTimeout(view.timeoutAt, Date.now() / 1000);
       const passed = me && me.delay >= MAX_ACTION_POINTS;
-      const late = view.players.filter((p, i) => i !== this.myIndex && p.addr && p.status === "alive" && !p.submitted);
+      if (view.phase === "revealing") return this.revealPanel(lines(plan), sent, !!passed, due, replay);
+      const late = view.players.filter((p, i) => i !== this.myIndex && p.addr && p.status === "alive" && !p.committed);
       const lateNames = (outcome: "pass" | "out") => late.filter((p) => missOutcome(p) === outcome).map((p) => charName(p.char)).join(", ");
       const claimed = [
         lateNames("pass") && `passes the turn for ${lateNames("pass")}`,
@@ -1905,8 +1951,8 @@ export class GameScene extends Phaser.Scene {
         .filter(Boolean)
         .join(" and ");
       const note = due
-        ? `Out of time for ${pending}: claiming the turn ${claimed || "moves the showdown on"}.`
-        : `Waiting for ${pending}. ${view.timeoutAt > 0 ? `You may claim the turn in ${formatLeft(Math.max(0, view.timeoutAt + CHAIN_CLOCK_MARGIN - Date.now() / 1000))}.` : ""}`;
+        ? `Out of time for ${pending}: closing the turn ${claimed || "moves the showdown on"}.`
+        : `Waiting for ${pending}. ${view.timeoutAt > 0 ? `You may close the turn in ${formatLeft(Math.max(0, view.timeoutAt + CHAIN_CLOCK_MARGIN - Date.now() / 1000))}.` : ""}`;
       return {
         title: "Your plan",
         points: "sent",
@@ -1915,7 +1961,7 @@ export class GameScene extends Phaser.Scene {
         note,
         warn: due,
         buttons: [
-          ...(due ? [{ id: "claim", label: "CLAIM THE TURN", tone: "primary" as const }] : []),
+          ...(due ? [{ id: "claim", label: "CLOSE THE TURN", tone: "primary" as const }] : []),
           replay,
           { id: "surrender", label: "Surrender", tone: "danger" },
         ],
@@ -2050,7 +2096,8 @@ export class GameScene extends Phaser.Scene {
       down: c.down,
       delay: c.delay,
       status: c.status,
-      submitted: p.submitted,
+      committed: p.committed,
+      revealed: p.revealed,
       missed: p.missed ?? 0,
       phase: view.phase,
       isMe: seat === this.myIndex,
@@ -2972,7 +3019,7 @@ export class GameScene extends Phaser.Scene {
     this.renderView();
     try {
       const encoded = encodePlan(plan);
-      await this.chain.realm.submitPlan(this.gameID, encoded);
+      await this.sendHidden(this.view, encoded);
       if (!this.scene.isActive()) return;
       this.rememberSentPlan(encoded);
       // While the wallet was answering (its result screen stays open until
@@ -3375,6 +3422,169 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  // ── Hidden plans ──────────────────────────────────────────────────────────
+
+  /** Where this browser keeps its pending reveals: game ids restart on each chain and realm. */
+  private revealScope(): RevealScope {
+    return { chainId: this.chain.config.chainId, realmPath: this.chain.config.realmPath };
+  }
+
+  /** Auto-sign is on: reveals and openings go out by themselves, else they wait for a click (an Adena popup each). */
+  private autoSign(): boolean {
+    return this.chain.wallet.state.kind === "active";
+  }
+
+  /**
+   * Sends my plan for the turn: in clear when every other character in the
+   * fight committed (theirs are fixed by their hashes), else as a commit,
+   * its salt and plan kept in this browser for the reveal and timelocked
+   * (offline) to the turn's drand round for anyone to open if I vanish.
+   */
+  private async sendHidden(view: GameView, plan: string) {
+    const turn = view.turn;
+    const seat = this.myIndex;
+    if (lastToCommit(view, seat)) {
+      await this.chain.realm.reveal(this.gameID, turn, seat, newSalt(), plan);
+      return;
+    }
+    const sealed: Sealed = { salt: newSalt(), plan };
+    const locked = await lockSealed(view.lockRound, sealed);
+    savePending(this.revealScope(), this.gameID, turn, seat, sealed);
+    await this.chain.realm.commit(this.gameID, planHash(this.gameID, turn, seat, sealed.salt, sealed.plan), locked);
+  }
+
+  /** My committed plan, held by this browser, waits for its reveal (auto-sign off: a click). */
+  private ownRevealWaits(): boolean {
+    const view = this.view;
+    if (!view || this.myIndex < 0 || !ownRevealDue(view, this.myIndex)) return false;
+    return !!loadPending(this.revealScope(), this.gameID, view.turn, this.myIndex);
+  }
+
+  /**
+   * The timelocked plans to open now: their drand round is out and nobody
+   * revealed them. Tried ones are tried again until the reveals' grace is
+   * over (drand may have been out of reach), then left to the claim.
+   */
+  private toOpen(): number[] {
+    const view = this.view;
+    if (!view) return [];
+    const now = Date.now() / 1000;
+    const seats = openableSeats(view, now);
+    if (!pastTimeout(view.revealUntil, now)) return seats;
+    const tried = this.openTried.turn === view.turn ? this.openTried.seats : new Set<number>();
+    return seats.filter((s) => !tried.has(s));
+  }
+
+  private openWaits(): boolean {
+    return this.toOpen().length > 0;
+  }
+
+  /** On every poll: with auto-sign on, sends my due reveal, then opens the plans left unrevealed past their round. */
+  private revealDue() {
+    const view = this.view;
+    if (!view || this.revealing || this.myIndex < 0 || !this.autoSign()) return;
+    if (view.phase === "planning" || view.phase === "revealing") prunePending(this.revealScope(), this.gameID, view.turn);
+    const now = Date.now();
+    if (this.ownRevealWaits() && now - this.revealFailedAt.own > REVEAL_RETRY_MS) void this.revealOwn();
+    else if (this.openWaits() && now - this.revealFailedAt.open > REVEAL_RETRY_MS) void this.openPlans();
+  }
+
+  /** Reveals my committed plan from this browser's copy, with any timelocked plan already open. */
+  private async revealOwn() {
+    const view = this.view;
+    if (!view || this.revealing || !this.ownRevealWaits()) return;
+    const sealed = loadPending(this.revealScope(), this.gameID, view.turn, this.myIndex)!;
+    this.revealing = true;
+    this.renderView();
+    try {
+      await this.chain.realm.reveal(this.gameID, view.turn, this.myIndex, sealed.salt, sealed.plan);
+    } catch (e) {
+      this.revealFailedAt.own = Date.now();
+      if (this.scene.isActive()) showToast(this, userMessage(e), "error");
+    } finally {
+      this.revealing = false;
+    }
+    await this.poller?.pokeNow();
+  }
+
+  /**
+   * Opens every timelocked plan left unrevealed past its drand round, and
+   * reveals them in one transaction, mine too if it is still pending: one
+   * round opens them all. A plan that does not open is left out, and the
+   * realm skips one that does not match its commit: once the reveals'
+   * grace is over, the claim passes that seat's turn (a missed one).
+   */
+  private async openPlans() {
+    const view = this.view;
+    if (!view || this.revealing) return;
+    const seats = this.toOpen();
+    if (seats.length === 0) return;
+    if (this.openTried.turn !== view.turn) this.openTried = { turn: view.turn, seats: new Set() };
+    for (const seat of seats) this.openTried.seats.add(seat);
+    this.revealing = true;
+    this.renderView();
+    try {
+      const reveals: { seat: number; salt: string; plan: string }[] = [];
+      const mine = this.myIndex >= 0 && ownRevealDue(view, this.myIndex) ? loadPending(this.revealScope(), this.gameID, view.turn, this.myIndex) : null;
+      if (mine) reveals.push({ seat: this.myIndex, ...mine });
+      for (const seat of seats) {
+        if (seat === this.myIndex && mine) continue;
+        try {
+          const s = await openLocked(view.players[seat].locked);
+          // A ";" would break RevealMany's lists; a plan that does not match its commit is skipped by the realm.
+          if (!s.plan.includes(";")) reveals.push({ seat, ...s });
+        } catch {
+          // not openable (yet, or broken): left to the claim
+        }
+      }
+      if (reveals.length === 0) throw new Error("No timelocked plan could be opened");
+      if (reveals.length === 1 && reveals[0].seat === this.myIndex) await this.chain.realm.reveal(this.gameID, view.turn, this.myIndex, reveals[0].salt, reveals[0].plan);
+      else await this.chain.realm.revealMany(this.gameID, view.turn, reveals);
+      if (this.scene.isActive()) {
+        const names = reveals.filter((r) => r.seat !== this.myIndex).map((r) => charName(view.players[r.seat].char));
+        if (names.length) showToast(this, `${names.join(", ")}: plan opened at the deadline`, "info");
+      }
+    } catch (e) {
+      this.revealFailedAt.open = Date.now();
+      if (this.scene.isActive()) showToast(this, userMessage(e), "error");
+    } finally {
+      this.revealing = false;
+    }
+    await this.poller?.pokeNow();
+  }
+
+  /** The plan panel while the plans are revealed: mine, and what the turn waits for. */
+  private revealPanel(lines: NonNullable<ShowdownModel["plan"]>["lines"], sent: string | null, passed: boolean, due: boolean, replay: { id: string; label: string; tone: "plain"; disabled: boolean }): ShowdownModel["plan"] {
+    const view = this.view!;
+    const pending = this.pendingNames();
+    const own = this.ownRevealWaits();
+    const open = this.openWaits();
+    const auto = this.autoSign();
+    const lockAt = view.lockRound ? roundTime(view.lockRound) : 0;
+    const left = (t: number) => formatLeft(Math.max(0, t + CHAIN_CLOCK_MARGIN - Date.now() / 1000));
+    let note: string;
+    if (due && !open) note = `${pending}: no plan came in, nor opened from its timelocked copy. Closing the turn passes it for them, a missed turn (out of the fight at ${MAX_MISSED} in a row).`;
+    else if (this.revealing) note = "Revealing…";
+    else if (own) note = auto ? "Revealing your plan…" : "Every plan is committed: reveal yours (one Adena signature).";
+    else if (open) note = auto ? "Opening the plans left unrevealed…" : "Some plans were not revealed: their timelocked copies can be opened now.";
+    else if (lockAt) note = `Waiting for ${pending} to reveal. Their timelocked plans open in ${left(lockAt)}; the turn can be closed in ${left(view.revealUntil)}.`;
+    else note = `Waiting for ${pending} to reveal.`;
+    return {
+      title: "Your plan",
+      points: "revealing",
+      lines,
+      empty: passed ? `Too much delay to act this turn: you pass.` : sent === "" ? "You pass this turn." : "Your plan is in.",
+      note,
+      warn: (due && !open) || ((own || open) && !auto),
+      buttons: [
+        ...(own && !auto ? [{ id: "reveal", label: "REVEAL", tone: "primary" as const, disabled: this.revealing }] : []),
+        ...(open && !auto ? [{ id: "open", label: "OPEN THE PLANS", tone: "primary" as const, disabled: this.revealing }] : []),
+        ...(due && !open ? [{ id: "claim", label: "CLOSE THE TURN", tone: "primary" as const }] : []),
+        replay,
+      ],
+    };
+  }
+
   private rememberSentPlan(plan: string) {
     this.sentPlan = { turn: this.view?.turn ?? 0, plan };
   }
@@ -3385,14 +3595,24 @@ export class GameScene extends Phaser.Scene {
     return sent && sent.turn === this.view?.turn ? sent.plan : null;
   }
 
-  /** Reads my plan for the turn in progress back from the chain, when the chain says I sent one this session does not know. */
+  /**
+   * My plan for the turn in progress, when the chain says I sent one this
+   * session does not know: from this browser's pending reveal, else from
+   * the chain once it is revealed.
+   */
   private async loadSentPlan() {
     const view = this.view;
-    if (!view || this.myIndex < 0 || !view.players[this.myIndex]?.submitted || this.sentPlan?.turn === view.turn) return;
+    if (!view || this.myIndex < 0 || !view.players[this.myIndex]?.committed || this.sentPlan?.turn === view.turn) return;
     const turn = view.turn;
+    const pending = loadPending(this.revealScope(), this.gameID, turn, this.myIndex);
+    if (pending) {
+      this.sentPlan = { turn, plan: pending.plan };
+      return;
+    }
+    if (!view.players[this.myIndex].revealed) return;
     try {
       const p = await this.chain.realm.getPlan(this.gameID, this.chain.wallet.address);
-      if (!this.scene.isActive() || !p.submitted || p.turn !== turn || this.view?.turn !== turn) return;
+      if (!this.scene.isActive() || !p.revealed || p.turn !== turn || this.view?.turn !== turn) return;
       this.sentPlan = { turn, plan: p.plan };
       if (this.mode === "waiting") this.renderView();
     } catch {
@@ -3437,7 +3657,10 @@ export class GameScene extends Phaser.Scene {
     const pb = this.playback;
     if (!pb) return;
     this.stopAuto();
-    if (pb.live) this.shownResultTurn = pb.turns[pb.turns.length - 1].turn;
+    if (pb.live) {
+      this.shownResultTurn = pb.turns[pb.turns.length - 1].turn;
+      saveSeenTurn(this.revealScope(), this.gameID, this.shownResultTurn);
+    }
     // The end of turn halves the delay: the re-synced board shows it.
     const delays = this.displayChars().map((c) => c?.delay ?? 0);
     this.playback = null;

@@ -20,7 +20,7 @@ func main(cur realm) {
 	testing.SetRealm(testing.NewUserRealm(bob))
 	gnoslinger.JoinGame(cross(cur), id, "A-H7", 0)
 	testing.SetRealm(testing.NewUserRealm(carol))
-	gnoslinger.SubmitPlan(cross(cur), id, "1f:ahead")
+	gnoslinger.Commit(cross(cur), id, gnoslinger.PlanHash(id, 1, 0, "ab", "1f:ahead"), "locked")
 }
 
 // Error:

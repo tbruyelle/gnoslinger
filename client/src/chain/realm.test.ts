@@ -58,15 +58,15 @@ describe("RealmClient.send", () => {
     });
     const wallet = fakeWallet(async () => ({ hash: "x" }));
     const realm = new RealmClient(rpc, wallet, PKG);
-    // A game view for the watcher: plan not submitted, so only the wallet path can settle.
+    // A game view for the watcher: plan not committed, so only the wallet path can settle.
     const game = { id: "1", rev: 1, phase: "planning", turn: 1, maxTurns: 10, board: "A", winner: -1, endReason: "", createdAt: 0, updatedAt: 0, timeoutAt: 0, lastTurn: null,
-      players: [{ addr: ME, char: "marshal", hex: "A-F1", facing: 3, down: false, delay: 0, status: "alive", submitted: false, playedFoot: false, playedRun: false },
-                { addr: "g1o", char: "dude", hex: "A-F12", facing: 0, down: false, delay: 0, status: "alive", submitted: false, playedFoot: false, playedRun: false }] };
+      players: [{ addr: ME, char: "marshal", hex: "A-F1", facing: 3, down: false, delay: 0, status: "alive", committed: false, revealed: false, locked: "", playedFoot: false, playedRun: false },
+                { addr: "g1o", char: "dude", hex: "A-F12", facing: 0, down: false, delay: 0, status: "alive", committed: false, revealed: false, locked: "", playedFoot: false, playedRun: false }] };
     const rpc2 = fakeRpc((path) => (path.startsWith("json/game/") ? JSON.stringify(game) : "{}"), {
       height: 3, error: "gnoslinger: you cannot use both sides of a card", log: "", data: null, events: [],
     });
     const realm2 = new RealmClient(rpc2, wallet, PKG);
-    await expect(realm2.submitPlan("1", "1f:ahead,1b:back")).rejects.toThrow("both sides");
+    await expect(realm2.commit("1", "ab".repeat(32), "")).rejects.toThrow("both sides");
     void rpc;
   });
 

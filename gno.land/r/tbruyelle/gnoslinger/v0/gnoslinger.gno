@@ -1,11 +1,14 @@
 // Package gnoslinger is the on-chain lobby and referee of Gunslinger
 // showdowns (the 1982 Avalon Hill gunfight game) of two to four players.
-// Players create and join games and submit their turn plans; the realm
-// resolves each turn with the pure engine package and keeps the result for
-// the web client to animate.
+// Players create and join games and play their turn plans hidden: each
+// commits the hash of its plan, then reveals it once every plan is
+// committed (DESIGN_HIDDEN_PLANS.md); the realm resolves each turn with the
+// pure engine package and keeps the result for the web client to animate.
 package gnoslinger
 
 import (
+	"crypto/sha256"
+	enchex "encoding/hex"
 	"strconv"
 	"time"
 
@@ -30,6 +33,22 @@ const (
 	// MaxMissed is the turns in a row a player may let time out: each is
 	// passed for it, the last puts its character out of the fight.
 	MaxMissed = 3
+	// RevealGrace is how long after the commit deadline a claim waits
+	// before it may pass the turn of a seat whose plan is not revealed: the
+	// timelocked plans open LockDelay after the deadline, and their opener
+	// needs time for its transaction.
+	RevealGrace = 5 * time.Minute
+	// LockDelay puts the drand round the plans are timelocked to after the
+	// deadline, past any drift between the block time and drand's clock.
+	LockDelay = 2 * time.Minute
+	// MaxLocked bounds the size of a timelocked plan.
+	MaxLocked = 1024
+	// MaxSalt bounds the size of a salt (hex).
+	MaxSalt = 64
+	// The drand quicknet chain the plans are timelocked to: its genesis
+	// (unix seconds) and the seconds between two rounds.
+	DrandGenesis = 1692803367
+	DrandPeriod  = 3
 )
 
 // Phase is where a game stands.
@@ -38,10 +57,14 @@ type Phase int
 const (
 	// PhaseWaiting: the seats are filling up.
 	PhaseWaiting Phase = iota
-	// PhasePlanning: every seat taken; collecting the plans of the current turn.
+	// PhasePlanning: every seat taken; collecting the commits of the
+	// current turn.
 	PhasePlanning
 	// PhaseFinished: over, see Game.EndReason.
 	PhaseFinished
+	// PhaseRevealing: every seat in the fight committed; collecting the
+	// reveals.
+	PhaseRevealing
 )
 
 // String returns the phase name used in JSON views.
@@ -53,6 +76,8 @@ func (p Phase) String() string {
 		return "planning"
 	case PhaseFinished:
 		return "finished"
+	case PhaseRevealing:
+		return "revealing"
 	}
 	return "?"
 }
@@ -93,8 +118,16 @@ func (r *TurnResult) Cards() []int { return engine.DecodeInts(r.CardsEnc) }
 // Events is what happened during the turn, in order.
 func (r *TurnResult) Events() []engine.Event { return engine.DecodeEvents(r.EventsEnc) }
 
-// Game is one showdown. Players, Plans, Submitted, Missed and VP have one entry
-// per seat, the seats filling up in the order the players join.
+// Sealed is a seat's sealed plan for the turn in progress, cleared by its
+// reveal.
+type Sealed struct {
+	Hash   string // PlanHash of the seat's salt and plan; "" until committed
+	Locked string // the salt and plan timelocked to LockRound
+}
+
+// Game is one showdown. Players, Commits, Plans, Salts, Revealed, Missed and
+// VP have one entry per seat, the seats filling up in the order the players
+// join.
 type Game struct {
 	ID        string
 	Players   []Player
@@ -103,9 +136,11 @@ type Game struct {
 	MaxTurns  int
 	Timeout   time.Duration // the time a turn gives, from TurnStart, after which ClaimTimeout succeeds
 	Phase     Phase
-	Plans     []string // current turn, canonical form
-	Submitted []bool
-	Missed    []int         // turns in a row each seat let time out, reset by a plan
+	Commits   []Sealed      // the turn in progress, each cleared by its seat's reveal
+	Plans     []string      // the turn in progress, revealed, canonical form
+	Salts     []string      // the turn in progress, revealed; part of the deck's seed
+	Revealed  []bool        // the turn in progress: the seat's plan is in (revealed, or passed)
+	Missed    []int         // turns in a row each seat let time out, reset by a revealed plan
 	TurnStart time.Time     // when the turn in progress started: its clock, left alone by the saves within the turn
 	Turns     []*TurnResult // resolved turns, in order (at most MaxTurns)
 	Winner    int           // seat index, -1 for none: the most victory points, -1 on a tie
@@ -179,15 +214,46 @@ func (g *Game) seated() int {
 	return n
 }
 
-// allIn reports whether the turn has every plan it waits for: one from
-// each character still in the fight.
-func (g *Game) allIn() bool {
+// committed reports whether seat p committed its plan this turn (revealed
+// or not).
+func (g *Game) committed(p int) bool { return g.Commits[p].Hash != "" || g.Revealed[p] }
+
+// allCommitted reports whether every character still in the fight
+// committed its plan.
+func (g *Game) allCommitted() bool {
 	for p := range g.Players {
-		if g.State.Chars[p].Status == engine.Alive && !g.Submitted[p] {
+		if g.State.Chars[p].Status == engine.Alive && !g.committed(p) {
 			return false
 		}
 	}
 	return true
+}
+
+// allRevealed reports whether the turn has every plan it waits for: one
+// from each character still in the fight.
+func (g *Game) allRevealed() bool {
+	for p := range g.Players {
+		if g.State.Chars[p].Status == engine.Alive && !g.Revealed[p] {
+			return false
+		}
+	}
+	return true
+}
+
+// clearTurn forgets the commits and plans of the turn.
+func (g *Game) clearTurn() {
+	n := g.seats()
+	g.Commits = make([]Sealed, n)
+	g.Plans = make([]string, n)
+	g.Salts = make([]string, n)
+	g.Revealed = make([]bool, n)
+}
+
+// PlanHash is what a seat commits: the sha256, in hex, of its salt and plan
+// for that game, turn and seat ("gnoslinger|id|turn|seat|salt|plan").
+func PlanHash(id string, turn, seat int, salt, plan string) string {
+	h := sha256.Sum256([]byte("gnoslinger|" + id + "|" + strconv.Itoa(turn) + "|" + strconv.Itoa(seat) + "|" + salt + "|" + plan))
+	return enchex.EncodeToString(h[:])
 }
 
 // lastTurn is the most recently resolved turn, or nil.
@@ -198,19 +264,40 @@ func (g *Game) lastTurn() *TurnResult {
 	return g.Turns[len(g.Turns)-1]
 }
 
+// commitUntil is the turn's deadline: commits are refused from then, and
+// the turn can be claimed if commits are missing. Timeout after the turn's
+// start whatever happened since (a commit does not restart it); a game
+// waiting for players has none.
+func (g *Game) commitUntil() time.Time { return g.TurnStart.Add(g.Timeout) }
+
+// revealUntil is when a claim may put the seats that did not reveal out of
+// the fight: RevealGrace after the deadline.
+func (g *Game) revealUntil() time.Time { return g.commitUntil().Add(RevealGrace) }
+
 // timeoutAt is when the turn in progress becomes claimable through
-// ClaimTimeout, Timeout after its start whatever happened since (a plan
-// sent does not restart it); a game waiting for players has no timeout.
-func (g *Game) timeoutAt() time.Time { return g.TurnStart.Add(g.Timeout) }
+// ClaimTimeout: the deadline while planning, revealUntil while revealing.
+func (g *Game) timeoutAt() time.Time {
+	if g.Phase == PhaseRevealing {
+		return g.revealUntil()
+	}
+	return g.commitUntil()
+}
+
+// LockRound is the drand quicknet round the turn's plans are timelocked
+// to: the first round after the deadline plus LockDelay. The realm never
+// checks anything about drand: the round only tells every client the same.
+func (g *Game) lockRound() int64 {
+	return (g.commitUntil().Add(LockDelay).Unix()-DrandGenesis)/DrandPeriod + 2
+}
 
 // startTurn starts the turn's clock.
 func (g *Game) startTurn() { g.TurnStart = time.Now() }
 
-// assertInTime refuses a plan once the turn is claimable:
-// past timeoutAt it can only be claimed (ClaimTimeout), so playing late
-// cannot turn a lost game around, nor win it by claiming right after.
+// assertInTime refuses a commit once the turn's deadline passed: from
+// then it can only be claimed (ClaimTimeout), so playing late cannot turn
+// a lost game around, nor win it by claiming right after.
 func (g *Game) assertInTime() {
-	if !time.Now().Before(g.timeoutAt()) {
+	if !time.Now().Before(g.commitUntil()) {
 		panic("gnoslinger: out of time: the game can only be claimed now")
 	}
 }

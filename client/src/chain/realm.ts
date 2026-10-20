@@ -46,7 +46,7 @@ export class RealmClient {
     return parseHistoryView(await this.rpc.qrender(this.pkgPath, `json/history/${id}`));
   }
 
-  /** The plan addr submitted for the turn in progress (plans are plain on chain). */
+  /** Where addr's plan for the turn in progress stands; the plan itself shows once revealed. */
   async getPlan(id: string, addr: string): Promise<PlanView> {
     return parsePlanView(await this.rpc.qrender(this.pkgPath, `json/plan/${id}/${addr}`));
   }
@@ -94,15 +94,36 @@ export class RealmClient {
     await this.send("CancelGame", [id], () => this.gone(id));
   }
 
-  /** Submits the ordered plan string, e.g. "1f:ahead_left,2f:ahead,3f" ("" passes). */
-  async submitPlan(id: string, plan: string): Promise<void> {
+  /** Commits my plan for the turn in progress: its hash (game/commit.ts planHash) and its timelocked copy ("" for none). */
+  async commit(id: string, hash: string, locked: string): Promise<void> {
     const me = this.wallet.address;
     const before = await this.getGame(id);
-    await this.send("SubmitPlan", [id, plan], async () => {
+    await this.send("Commit", [id, hash, locked], async () => {
       const g = await this.getGame(id);
       const seat = seatOf(g, me);
-      const mine = seat >= 0 && g.players[seat].submitted;
+      const mine = seat >= 0 && g.players[seat].committed;
       return mine || g.turn !== before.turn || g.phase === "finished" ? true : null;
+    });
+  }
+
+  /**
+   * Reveals a seat's salt and plan for the turn, e.g. "1f:ahead_left,2f:ahead,3f"
+   * ("" passes): a committed one once every plan is committed, or my own
+   * plan in clear when it is the last to commit.
+   */
+  async reveal(id: string, turn: number, seat: number, salt: string, plan: string): Promise<void> {
+    await this.send("Reveal", [id, String(turn), String(seat), salt, plan], async () => {
+      const g = await this.getGame(id);
+      return g.players[seat]?.revealed || g.turn !== turn || g.phase === "finished" ? true : null;
+    });
+  }
+
+  /** Reveals several seats of the turn in one transaction: the opened timelocked plans. */
+  async revealMany(id: string, turn: number, reveals: { seat: number; salt: string; plan: string }[]): Promise<void> {
+    const args = [id, String(turn), reveals.map((r) => r.seat).join(";"), reveals.map((r) => r.salt).join(";"), reveals.map((r) => r.plan).join(";")];
+    await this.send("RevealMany", args, async () => {
+      const g = await this.getGame(id);
+      return reveals.every((r) => g.players[r.seat]?.revealed) || g.turn !== turn || g.phase === "finished" ? true : null;
     });
   }
 
@@ -115,7 +136,8 @@ export class RealmClient {
     const before = await this.getGame(id);
     await this.send("ClaimTimeout", [id], async () => {
       const g = await this.getGame(id);
-      return g.turn !== before.turn || g.phase === "finished" ? true : null;
+      // A claim while planning moves on to the reveals; one while revealing resolves the turn.
+      return g.turn !== before.turn || g.phase !== before.phase ? true : null;
     });
   }
 

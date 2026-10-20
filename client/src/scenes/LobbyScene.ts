@@ -13,6 +13,9 @@ import { showToast } from "../ui/toast";
 import { installWalletNotices } from "../ui/walletNotices";
 import { MAX_PLAYERS, MIN_PLAYERS, SETUPS, nextSeat, seatChar } from "../game/setup";
 import { claimable } from "../game/lobby";
+import { loadPending } from "../game/commit";
+import { summaryRevealDue } from "../game/reveals";
+import type { GamesView as GamesList } from "../chain/types";
 import type { SetupRequest } from "./GameScene";
 
 /** All character tokens, for the picker that will come back later. */
@@ -95,6 +98,9 @@ export class LobbyScene extends Phaser.Scene {
   private dialogSeq = 0;
   private balance: string | null = null;
   private sessionBusy = false;
+  /** Games where my reveal, held by this browser, waits for a click; and a reveal sent from the lobby (auto-sign), in flight. */
+  private revealIds: string[] = [];
+  private lobbyRevealing = false;
   private sessionError = "";
   private sessionDays = SESSION_DAYS.indexOf(7);
   private sessionLimit = SESSION_LIMITS.indexOf(10);
@@ -313,7 +319,14 @@ export class LobbyScene extends Phaser.Scene {
       ]);
       // A game running out of time moves to Your move with no change on chain.
       const now = Date.now() / 1000;
-      const key = JSON.stringify(games) + games.mine.filter((g) => claimable(g, now)).map((g) => g.id).join(",");
+      const due = this.dueReveals(games);
+      if (this.chain.wallet.state.kind === "active") {
+        this.revealIds = [];
+        void this.revealFromLobby(due);
+      } else {
+        this.revealIds = due.map((d) => d.id);
+      }
+      const key = JSON.stringify(games) + games.mine.filter((g) => claimable(g, now)).map((g) => g.id).join(",") + this.revealIds.join(",");
       const topKey = JSON.stringify(top);
       if (key !== this.gamesKey || topKey !== this.topKey) {
         this.gamesKey = key;
@@ -324,6 +337,32 @@ export class LobbyScene extends Phaser.Scene {
       }
     } catch (e) {
       showToast(this, userMessage(e), "error");
+    }
+  }
+
+  /** My reveals this browser holds, in games collecting them. */
+  private dueReveals(games: GamesList): { id: string; turn: number; seat: number; salt: string; plan: string }[] {
+    if (!this.chain) return [];
+    const me = this.chain.wallet.address;
+    const scope = { chainId: this.chain.config.chainId, realmPath: this.chain.config.realmPath };
+    return games.mine.flatMap((g) => {
+      const seat = g.players.findIndex((p) => p.addr === me);
+      const sealed = summaryRevealDue(g, seat) ? loadPending(scope, g.id, g.turn, seat) : null;
+      return sealed ? [{ id: g.id, turn: g.turn, seat, ...sealed }] : [];
+    });
+  }
+
+  /** With auto-sign on, the lobby reveals my plans itself, one at a time (one transaction in flight). */
+  private async revealFromLobby(due: { id: string; turn: number; seat: number; salt: string; plan: string }[]) {
+    if (!this.chain || this.lobbyRevealing || due.length === 0) return;
+    this.lobbyRevealing = true;
+    try {
+      const r = due[0];
+      await this.chain.realm.reveal(r.id, r.turn, r.seat, r.salt, r.plan);
+    } catch (e) {
+      if (this.scene.isActive()) showToast(this, `Reveal: ${userMessage(e)}`, "error");
+    } finally {
+      this.lobbyRevealing = false;
     }
   }
 
@@ -408,6 +447,7 @@ export class LobbyScene extends Phaser.Scene {
       timeoutIndex: this.timeoutIndex,
       timeoutOptions: TIMEOUT_OPTIONS,
       topPlayers: this.topPlayers,
+      revealIds: this.revealIds,
       dialog: this.dialog,
     });
   }

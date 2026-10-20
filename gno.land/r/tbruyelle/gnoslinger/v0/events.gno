@@ -6,9 +6,12 @@ import "chain"
 //
 //	GameCreated       id creator char seats maxTurns timeoutMinutes hex facing
 //	PlayerJoined      id player seat char hex facing
-//	PlanSubmitted     id turn player seat
+//	PlanCommitted     id turn player seat
+//	AllCommitted      id turn   (every character in the fight committed: the reveals start)
+//	PlanRevealed      id turn seat by   (by: who sent the reveal, the player or the opener of its timelocked plan)
+//	PlanUnopened      id turn seat reason   (a RevealMany skips a seat whose salt and plan do not match its commit or whose plan is not valid)
 //	PlanPassed        id turn seat   (a player with no time points to play is passed automatically)
-//	PlanMissed        id turn seat missed   (a claimed timeout passes the turn of a player without a plan; Out at the MaxMissed-th in a row)
+//	PlanMissed        id turn seat missed   (a claimed timeout passes the turn of a player whose plan is not in, no commit or never revealed; Out at the MaxMissed-th in a row)
 //	PlayerSurrendered id turn player seat
 //	TurnResolved      id turn rev seed
 //	VictoryPoints id seat player reason points   (one per award at the end of a turn or of the showdown, rule 15; points < 0 for a loss)

@@ -19,8 +19,11 @@ stands when calling or joining,
 the foot actions (advance, back up, run, spin around, sprint, turn,
 leap/drop, get up/down) and the Colt 45 gun play (Draw & Cock,
 Cock/Aim/Shoot, Shoot, Load) with the full hit, wound and penalty rules, and
-victory points (rule 15). Plans are submitted in clear (no commit-reveal
-yet); throwing, brawling and multi-board layouts come later.
+victory points (rule 15). Plans are hidden: each player commits a hash of
+its plan, then reveals it once every plan is committed, with a copy
+timelocked to drand for anyone to open if it vanishes
+(`DESIGN_HIDDEN_PLANS.md`); throwing, brawling and multi-board layouts come
+later.
 
 ## Tech Stack
 
@@ -79,13 +82,13 @@ gno.land/
   p/tbruyelle/gnoslinger/hex/v0      directions, relative directions, Board adjacency + axial coords + fenced hexsides + obstacles + the between table, range, aim zone, line of sight (sight.gno; board_a.gno is generated)
   p/tbruyelle/gnoslinger/cards/v0    the 12 action cards (24 sides), Enabled() = implemented actions
   p/tbruyelle/gnoslinger/engine/v0   pure rules engine: set up (setup.gno), plan DSL + validation, Resolve, EndTurn, result deck (deck.gno, fire.gno), impact table, sight heights (sight.gno)
-  r/tbruyelle/gnoslinger/v0          the realm: games, lobby, SubmitPlan, JSON views, Render, filetests/
+  r/tbruyelle/gnoslinger/v0          the realm: games, lobby, Commit/Reveal/RevealMany, JSON views, Render, filetests/
   r/tbruyelle/gnoslinger/profiles/v0 the players' profiles and ranking, kept across game versions; written only by the allowed game realms
 client/src/
   chain/      rpc.ts (abci_query/status/tx/broadcast), adena.ts (wallet), session.ts (session key wallet), tx.ts (sign + encode a call), realm.ts (typed calls), poller.ts, types.ts
   rules/      cards.ts, facing.ts, sight.ts (pure card data, facing math, sight heights; mirrors the Gno packages)
   board/      board_A.json (generated) + boardA.ts (BoardMap: adjacency, aim zone, between table, line of sight)
-  game/       setup.ts (where each character sets up, as the engine), plan.ts (encode/validate), replay.ts (preview), playback.ts (resolution log), sight.ts (a character's sight, as the engine)
+  game/       commit.ts (hidden plans: hash, salt, pending reveals, tlock), reveals.ts (what is due: own reveal, opening, last commit in clear), setup.ts (where each character sets up, as the engine), plan.ts (encode/validate), replay.ts (preview), playback.ts (resolution log), sight.ts (a character's sight, as the engine)
   scenes/     BootScene → LobbyScene → GameScene   (SetupScene/TokenPlacementScene are dormant, multi-board later)
   ui/toast.ts
 scripts/gen_board_data.py   generates hex/v0/board_a.gno and client/src/board/board_A.json
@@ -96,9 +99,9 @@ assets/                     served as the Vite public dir (boards, tokens, cards
 
 ### Data
 `Game{ID, Players[]{Addr, Char}, State engine.State, Turn, MaxTurns, Timeout, Phase,
-Plans[], Submitted[], Missed[], TurnStart, Turns []*TurnResult, Winner, EndReason, Awards
+Commits []Sealed{Hash, Locked}, Plans[], Salts[], Revealed[], Missed[], TurnStart, Turns []*TurnResult, Winner, EndReason, Awards
 []engine.Award, VP[], Rev, CreatedAt, UpdatedAt}` stored in an `avl.Tree` by zero-padded `seqid`;
-`Players`, `Plans`, `Submitted`, `Missed` and `VP` have one entry per seat (2 to 4,
+`Players`, `Commits`, `Plans`, `Salts`, `Revealed`, `Missed` and `VP` have one entry per seat (2 to 4,
 `engine.MinPlayers`..`MaxPlayers`), the seats filling up in the order the
 players join (`Addr` "" while free; `seats`, `freeSeat`, `seated`,
 `allIn`); `State.Chars` is a slice of the same length.
@@ -129,7 +132,7 @@ each on a fresh node:
 | `JoinGame`, the player's first game (new profile) | 7,284 | 7,272 | 0.73 GNOT |
 | `CreateGame`, returning player | 16,641 | 16,648 | 1.66 GNOT |
 | `JoinGame`, returning player | −947 | −949 | refund 0.09 GNOT |
-| first `SubmitPlan` of a turn (plan stored) | 38–85 | 35–85 | ~0.007 GNOT |
+| first `SubmitPlan` of a turn (plan stored; measured before the hidden plans) | 38–85 | 35–85 | ~0.007 GNOT |
 | resolving `SubmitPlan`, both pass | 1,965 | 1,985 | 0.20 GNOT |
 | resolving, both advance + run | 1,884 | 1,884 | 0.19 GNOT |
 | resolving, both Draw & Cock | 1,829 | 1,839 | 0.18 GNOT |
@@ -189,7 +192,7 @@ realm (`cur.Previous().PkgPath()`) is on the allowlist (`games`; `init`
 allows `gno.land/r/tbruyelle/gnoslinger/v0`). The admin, the deployer at
 first (`unsafe.OriginCaller()`; test1 on gnodev), manages it: `Allow(pkgPath)`
 when a new game version is deployed, `Disallow(pkgPath)` to stop scoring an
-old one (its CreateGame, JoinGame and resolving SubmitPlan then panic),
+old one (its CreateGame, JoinGame and resolving reveal then panic),
 `SetAdmin(addr)`. Reads: `Get(addr) (Profile, bool)` (a copy), `Rank`,
 `Count`, `Games`, `IsGame`, `Admin`, `Name` (the address's name in
 `gno.land/r/sys/users`, also used by the game realm), `ProfileJSON`,
@@ -203,12 +206,16 @@ v0 once its running games are over.
 | `CreateGame(cur, seats, maxTurns, timeoutMinutes, startHex, facing) string` | 2 to 4 seats; the caller in seat 0 as the showdown's first character (the marshal), standing in one of its hexes (`startHex`) facing 0 N … 5 NW; 10 to 30 turns (the client sends 20); the timeout is per turn, 0 = 2 days (5 min to 30 days); phase `waiting`, which has no timeout: the game stays open until its seats fill up or its creator cancels it |
 | `JoinGame(cur, id, startHex, facing)` | the first free seat and its character (the kid, then el jefe, then axe), in one of its hexes; the last seat taken starts the game (phase `planning`, `GamesPlayed` for every seat; the turn clock starts there); refused to a player already seated |
 | `CancelGame(cur, id)` | creator, while a seat is free (players may have joined); deletes the game (and every seated player's `byPlayer` entry) so the creator gets the CreateGame storage deposit back; the client returns to the lobby once the game view answers "game not found" |
-| `SubmitPlan(cur, id, plan) int` | refused once the turn's timeout has passed (`assertInTime`: the game can only be claimed then, so a late plan cannot win it by claiming right after), and from a character out of the fight; validates (a target must be a seat of the game, not one's own), stores; the plan that completes the turn (one from each character still in the fight, `allIn`) resolves it in the same tx; returns Rev. A player with 5 or more delay cannot play anything and is passed automatically (`autoPass`, event `PlanPassed`); with everyone passed, turns resolve by themselves until someone can act |
-| `Surrender(cur, id)` | rule 15.4, while the plans are collected (the start of a turn): the character is `Out` (nobody can shoot it, it plays no more). With one character left in the fight the game ends and is scored (`surrender`); with more, the showdown goes on without it and the turn resolves if the others' plans are in |
-| `ClaimTimeout(cur, id)` | anyone, after the turn's timeout without progress (`time.Now()`, lazy: no timers on chain); refused while waiting for players (no timeout then; older games may show `expired`); no plan in → `abandoned` (not scored); otherwise each alive seat without a plan **misses** the turn (`Missed[seat]`++, event `PlanMissed`): the turn is passed for it (empty plan), unless that is its `MaxMissed` (3rd) miss in a row, which makes it `Out` (out of time counts as surrendering); a plan sent resets the count, an automatic pass (5+ delay) leaves it as it is. One character left → `timeout`, scored, the turn not played; more → the turn resolves with the plans in and the showdown goes on (the clock restarts) |
+| `Commit(cur, id, hash, locked) int` | **hidden plans** (`DESIGN_HIDDEN_PLANS.md`): phase `planning`, before the turn's deadline (`commitUntil`, `assertInTime`: past it the game can only be claimed), from a character in the fight that has not committed; `hash` is `PlanHash(id, turn, seat, salt, plan)` (64 lowercase hex), `locked` the salt and plan timelocked to the turn's `lockRound` (required, at most `MaxLocked` 1 KB; the client encrypts offline, so every commit can carry one); stores it (`Commits[seat]`, a `Sealed`), resets `Missed`; when every character in the fight committed, phase `revealing` (event `AllCommitted`); returns Rev. A player with 5 or more delay cannot play anything and is passed automatically (`progress`, event `PlanPassed`: revealed with the empty plan); with everyone passed, turns resolve by themselves until someone can act |
+| `Reveal(cur, id, turn, seat, salt, plan) int` | `turn` the one in progress. Phase `revealing`: anyone; the salt (1 to 64 hex) and plan must match the seat's hash; then the plan is validated (a target must be a seat of the game, not one's own) and stored with its salt, the commit cleared (its deposit refunded to the caller). Phase `planning`: the **last commit in clear**, only from the seat itself, before the deadline, once every other character in the fight committed (their plans are fixed by their hashes; a refused transaction still shows the plan, so the client only sends it when its poll shows exactly that); it counts as the seat's commit and reveal. The reveal that completes the turn (every character in the fight revealed, `allRevealed`) resolves it in the same tx |
+| `RevealMany(cur, id, turn, seats, salts, plans) int` | phase `revealing`, anyone: several seats at once, the lists separated by `;` (an empty plan is an empty field): what the opener of the timelocked plans sends, one drand round opening them all. A seat already revealed is skipped, and so is one whose salt and plan do not match its hash or whose plan is not valid (event `PlanUnopened`: the opener cannot check that before opening, and one bad plan must not hold the others back); bad lists, an unknown seat, the wrong turn or phase abort |
+| `Surrender(cur, id)` | rule 15.4, while the plans are committed (the start of a turn; refused while revealing, which would be the abort after reading the others' plans): the character is `Out` (nobody can shoot it, it plays no more), its commit dropped. With one character left in the fight the game ends and is scored (`surrender`); with more, the showdown goes on without it and moves on to the reveals if the others' plans are committed |
+| `ClaimTimeout(cur, id)` | anyone (`time.Now()`, lazy: no timers on chain); refused while waiting for players (no timeout then; older games may show `expired`). **Planning**, past the deadline: no commit → `abandoned` (not scored); otherwise each alive seat without a commit **misses** the turn (`Missed[seat]`++, event `PlanMissed`): the turn is passed for it (empty plan), unless that is its `MaxMissed` (3rd) miss in a row, which makes it `Out` (out of time counts as surrendering); only a revealed plan resets the count (a commit alone does not), an automatic pass (5+ delay) leaves it as it is; the game then moves on to the reveals. **Revealing**, past `revealUntil` (the deadline plus `RevealGrace`, 5 min: the timelocked plans open `LockDelay`, 2 min, after the deadline, and their opener needs time): every alive seat whose plan is not revealed misses the turn the same way (`missTurn`, its commit dropped); refused before ("the plans can still be revealed"). A backstop, not the usual way: a vanished player's plan is opened from its timelocked copy and revealed with no claim; this only catches a copy that cannot be opened (deliberately broken, or drand out of reach) or one nobody opened. No harsher penalty: the realm cannot tell a copy nobody could open from one a claimer chose not to open (in a 2-player game the claimer is the only one around to open it), and a deliberately broken copy only buys the choice between its plan and a pass, each use a missed turn. One character left → `timeout`, scored, the turn not played; more → the turn moves on with the plans in |
 
 Errors are panics prefixed `gnoslinger: `; the client extracts them from the
-tx result log. Events: `GameCreated`, `PlayerJoined`, `PlanSubmitted`,
+tx result log. Events: `GameCreated`, `PlayerJoined`, `PlanCommitted`,
+`AllCommitted` (`id turn`), `PlanRevealed` (`id turn seat by`: the player, or
+the opener of its timelocked plan), `PlanUnopened` (`id turn seat reason`),
 `PlanPassed`, `PlanMissed` (`id turn seat missed`), `PlayerSurrendered`, `TurnResolved`, `VictoryPoints` (`id seat player reason
 points`, one per award, points < 0 for a loss), `GameEnded` (informational; there is no event subscription on
 the RPC, clients poll).
@@ -217,8 +224,16 @@ the RPC, clients poll).
 `Render("json/game/{id}")`, `Render("json/games/{addr}")`,
 `Render("json/history/{id}")` (every resolved turn with its starting state,
 plans, seed, drawn cards and events, for replays) and
-`Render("json/plan/{id}/{addr}")` (the plan an address submitted for the
-turn in progress, shown by the client while waiting); in the profiles
+`Render("json/plan/{id}/{addr}")` (where an address's plan for the turn in
+progress stands, `committed`, `revealed`, and the plan once revealed); each
+seat of `json/game` carries `committed`, `revealed` and `locked` (its
+timelocked plan, "" once revealed), the game `commitUntil`, `revealUntil`
+and `lockRound` (the drand quicknet round of the turn's timelocked plans,
+`(commitUntil + LockDelay − genesis) / 3 + 2`; the realm never checks
+anything about drand), the summaries' players `committed` and `revealed`,
+and `timeoutAt` is `commitUntil` while planning, `revealUntil` while
+revealing; `PlanHash(id, turn, seat, salt, plan)` is a plain function (for
+gnokey); in the profiles
 realm, `Render("json/profile/{addr}")` (`null` before the address's first
 game) and `Render("json/players/{offset}/{count}")` (a page of the ranking, at most
 50, `{total, offset, players}`; each profile carries its `rank` and `name`,
@@ -412,7 +427,7 @@ the ground are not played.
 **Result deck** (`engine/v0/deck.gno`): the 108 result cards are transcribed
 as data (`engine.Cards`: DELAY, WOUND and HEX lines; TAC is unused and the
 FIRE hit tables come with combat). Each turn the deck is shuffled once from a
-seed (`engine.Seed` over realm path, id, turn, both plans, height, block time
+seed (`engine.Seed` over realm path, id, turn, the revealed salts and plans, height, block time
 → `engine.NewDeck`, a seeded PCG `rand.Shuffle`) and cards are dealt in that
 order; the seed and the trace of the drawn cards (`TurnResult.Cards`) are
 stored so the turn can be replayed. "Drawing a delay card" (rule 14.21) deals
@@ -544,7 +559,10 @@ calls; `testing.SkipHeights(n)` advances block time 5 s per height.
   Quit), **Your move** (running games without my plan, the time left before
   a timeout can be claimed, red when running out; then the running games
   out of time, mine to claim, `claimable`, as brick OUT OF TIME cards with
-  a CLAIM button that opens the game), **Waiting on others**,
+  a CLOSE button that opens the game, saying what closing does: the turn
+  goes on without the late ones, or, nobody having committed, the showdown
+  ends without a winner; the game screen's buttons say CLOSE THE TURN or
+  CLOSE THE SHOWDOWN, the UI's word for a claim), **Waiting on others**,
   **Open showdowns** to join (those with a join or the call within a week, `stillOffered`), **Finished** (Replay) and the **New showdown**
   form (turns 10 to 30, time per turn). Under the form, **Top guns** lists the first 5 of the ranking (refreshed
 with the games every 5 s; a player shows as its registered name, else its
@@ -552,7 +570,7 @@ short address, `playerLabel`); a click anywhere on it opens the whole
 ranking in a dialog, 20 a page (`PLAYERS_PAGE`), whose rows open a
 player's profile; my address in the top bar opens mine (rank, games
 played, victory points, since). `game/lobby.ts` sorts the games into
-  those sections from the `submitted` flag and `status` each player
+  those sections from the `committed` and `revealed` flags and `status` each player
   carries in `json/games/{addr}` (a character out of the fight has no move
   to make). The form has a **Players** select (2 to 4, `SEAT_OPTIONS`)
   with the line-up of the seats in their colours. **Call a showdown** and
@@ -617,7 +635,7 @@ played, victory points, since). `game/lobby.ts` sorts the games into
   `GameScene.hexHighlight` over `BoardMap.outline`: a regular hexagon of
   `hexRadius`, measured from the grid, or the traced outline of a half-hex,
   `shapes` in `board_A.json`; turn choices use a regular hexagon that way); sides the realm does not play yet (`isEnabled`) are hatched
-  (cards with none, brawling, are left out), sides that cannot be picked right now are greyed out; **Send plan** → `SubmitPlan`; when `lastTurn.turn` changes, the
+  (cards with none, brawling, are left out), sides that cannot be picked right now are greyed out; **Send plan** → the hidden plan (`sendHidden`, `game/commit.ts`): when the poll shows every other character in the fight committed, `Reveal` in clear; else a 16-byte salt, `Commit` of `planHash` with the salt and plan timelocked to `lockRound` (`lockSealed`, tlock-js loaded on first use, encrypting offline with its built-in quicknet info, `defaultChainInfo`: only opening needs a drand node), the salt and plan kept in `localStorage` (`savePending`, `gnoslinger.reveal.<chainId>.<realm>.<game>.<turn>.<seat>`, pruned once past). While revealing (`game/reveals.ts`): my reveal is due (`ownRevealDue`) and goes out by itself with auto-sign on, from the game screen or the lobby (`revealFromLobby`); with it off the ribbon says "reveal your plan" with a **REVEAL** button and the lobby lists it under Your move. Past the drand round (`roundTime(lockRound)`, a 3 s timer watching for it), the plans left unrevealed are opened (`openLocked`, one round for all) and revealed in one `RevealMany`, mine too if still pending (`openPlans`; auto-sign off: **OPEN THE PLANS**); the panels show PLAN SENT/PLANNING then REVEALED/REVEALING, and Claim comes once past `revealUntil`; when `lastTurn.turn` changes, the
   resolution log is played back segment by segment (`playback.ts`) from the
   turn's stored starting state, then the state re-syncs. Moving forward, a
   segment plays its steps one after the other (`splitSteps`; the playback's
@@ -626,7 +644,11 @@ played, victory points, since). `game/lobby.ts` sorts the games into
   stepping back or jumping lands a segment in one go. **Replay** opens
   the whole history (`json/history/{id}`) with turn navigation and
   play/pause; a cross at the replay panel's top right closes it (or ends a
-  live turn's playback). A finished game opens straight on its whole
+  live turn's playback). A running game opened with a resolved turn this
+  browser has not played back yet (`loadSeenTurn`, `gnoslinger.seen.<chainId>.<realm>.<game>`,
+  saved when a live playback ends) opens on that turn's playback: it may
+  have resolved while the player was in the lobby, whose auto-sign reveals
+  by themselves, or on another account. A finished game opens straight on its whole
   replay, from the final turn when the game ends while watched, and that
   replay has no cross (`finalReplay`); Lobby leaves it. Only the last selected card can be deselected (choices are
   relative to the state before it). Tokens sharing a hex are fanned out
@@ -708,7 +730,7 @@ Clicking a token opens the **character
   `listPlayers` read), `VITE_POLL_MS`,
   optional `VITE_GAS_WANTED`/`VITE_GAS_FEE`. Without `VITE_GAS_WANTED` every
   call goes out with a fixed 100M gas limit (`DEFAULT_GAS_WANTED`): Adena's
-  own estimate has no margin, and a `SubmitPlan` that resolves the turn can
+  own estimate has no margin, and a reveal that resolves the turn can
   use more gas than its simulation since the deck seed includes the block
   height.
 
@@ -725,10 +747,13 @@ Clicking a token opens the **character
    G5 as Axe). Everyone sees the
    marshal at A-D6 (facing SE) and The Kid at A-H6 (facing NW); the game
    starts once the last seat is taken.
-3. Each account picks cards and sends its plan; the last submission
-   resolves the turn, every tab replays it, positions match
+3. Each account picks cards and sends its plan (a commit; the last one in
+   clear), the committed plans are then revealed (by themselves with
+   auto-sign on, else with REVEAL) and the last reveal resolves the turn, every tab replays it, positions match
    `go tool gnokey query vm/qrender -remote 127.0.0.1:26657 -data 'gno.land/r/tbruyelle/gnoslinger/v0:json/game/0000001'`.
-4. CLI alternative: `go tool gnokey maketx call -pkgpath gno.land/r/tbruyelle/gnoslinger/v0 -func SubmitPlan -args 0000001 -args "1f:ahead" -gas-fee 1000000ugnot -gas-wanted 20000000 -broadcast -chainid dev -remote 127.0.0.1:26657 <key>`
+4. CLI alternative: `go tool gnokey maketx call -pkgpath gno.land/r/tbruyelle/gnoslinger/v0 -func Commit -args 0000001 -args <hash> -args "" -gas-fee 1000000ugnot -gas-wanted 100000000 -broadcast -chainid dev -remote 127.0.0.1:26657 <key>`
+   with the hash from `go tool gnokey query vm/qeval -remote 127.0.0.1:26657 -data 'gno.land/r/tbruyelle/gnoslinger/v0.PlanHash("0000001",1,0,"a1","1f:ahead")'`,
+   then the last player `-func Reveal -args 0000001 -args 1 -args 1 -args b1 -args "1f:ahead"` (in clear) and anyone `-func Reveal -args 0000001 -args 1 -args 0 -args a1 -args "1f:ahead"`
    (`CreateGame -args 3 -args 20 -args 0 -args A-D6 -args 2`, `JoinGame
    -args 0000001 -args A-H6 -args 5`). A second gnodev for such a run,
    leaving the usual one alone: `go tool gnodev local -no-watch -no-web

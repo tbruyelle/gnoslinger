@@ -66,6 +66,8 @@ export interface LobbyModel {
   timeoutOptions: { minutes: number; label: string }[];
   /** The first players of the ranking, null while loading. */
   topPlayers: PlayersView | null;
+  /** Games whose plans are being revealed and where mine, held by this browser, waits for a click (auto-sign off). */
+  revealIds: string[];
   dialog: LobbyDialog | null;
 }
 
@@ -317,7 +319,7 @@ export class LobbyView {
       return `<div class="gl-col"><section class="gl-panel"><p class="gl-empty">${msg}</p></section></div>`;
     }
     const now = Date.now() / 1000;
-    const s = lobbySections(m.games, m.address, now);
+    const s = lobbySections(m.games, m.address, now, (g) => m.revealIds.includes(g.id));
     const others = (g: GameSummary) => g.players.filter((p) => p.addr && p.addr !== m.address);
     // The creator holds seat 0.
     const gameLabel = (g: GameSummary) => `Game ${g.id} · created by ${g.players[0]?.addr === m.address ? "you" : charName(g.players[0]?.char)}`;
@@ -339,17 +341,30 @@ export class LobbyView {
         const btn = (label: string) => `<button type="button" class="gl-play" data-act="open" data-id="${esc(g.id)}">${label}</button>`;
         if (claimable(g, now)) {
           const mine = g.players.find((p) => p.addr === m.address);
-          const why = mine && !mine.submitted && (mine.status ?? "alive") === "alive" ? "your plan did not come in time" : "the others did not play in time";
-          return row("gl-card over", g, versus(g), `${turn} · ${why}: claim the turn to go on`, '<span class="gl-pill over">OUT OF TIME</span>' + btn("CLAIM"));
+          // As the game screen puts it: nobody committed ends the showdown, else the turn goes on without the late ones.
+          if (g.phase === "planning" && !g.players.some((p) => p.committed)) {
+            return row("gl-card over", g, versus(g), `${turn} · nobody played in time: close the showdown, without a winner`, '<span class="gl-pill over">OUT OF TIME</span>' + btn("CLOSE"));
+          }
+          const why =
+            g.phase === "revealing"
+              ? "plans were not revealed in time"
+              : mine && !mine.committed && (mine.status ?? "alive") === "alive"
+                ? "your plan did not come in time"
+                : "the others did not play in time";
+          return row("gl-card over", g, versus(g), `${turn} · ${why}: close the turn to go on`, '<span class="gl-pill over">OUT OF TIME</span>' + btn("CLOSE"));
         }
+        if (g.phase === "revealing") return row("gl-card", g, versus(g), `${turn} · every plan is in: reveal yours`, btn("REVEAL"));
         const pill = `<span class="gl-pill${runningOut(left, g.timeout) ? " late" : ""}">${esc(formatLeft(left))} left</span>`;
         return row("gl-card", g, versus(g), turn, pill + btn("PLAY"));
       })
       .join("");
     const count = s.yourMove.length;
     const claims = s.yourMove.filter((g) => claimable(g, now)).length;
+    const reveals = s.yourMove.filter((g) => g.phase === "revealing" && !claimable(g, now)).length;
+    const plans = count - claims - reveals;
     const countLine = [
-      count - claims ? `${count - claims} showdown${count - claims > 1 ? "s wait" : " waits"} for your plan` : "",
+      plans ? `${plans} showdown${plans > 1 ? "s wait" : " waits"} for your plan` : "",
+      reveals ? `${reveals} for your reveal` : "",
       claims ? `${claims} out of time` : "",
     ]
       .filter(Boolean)
@@ -363,7 +378,8 @@ export class LobbyView {
     const waiting = s.waiting
       .map((g) => {
         if (g.phase === "waiting") return row("gl-line", g, versus(g), `${gameLabel(g)} · ${g.maxTurns} turns · ${formatDuration(g.timeout)} per turn`, openBtn(g));
-        return row("gl-line", g, versus(g), `${gameLabel(g)} · Turn ${g.turn} of ${g.maxTurns} · your plan is in · ${formatLeft(secondsLeft(g, now))} left to play`, openBtn(g));
+        const where = g.phase === "revealing" ? "revealing the plans" : `your plan is in · ${formatLeft(secondsLeft(g, now))} left to play`;
+        return row("gl-line", g, versus(g), `${gameLabel(g)} · Turn ${g.turn} of ${g.maxTurns} · ${where}`, openBtn(g));
       })
       .join("");
     const panel = (id: string, title: string, body: string) =>
@@ -414,7 +430,7 @@ export class LobbyView {
       `<span class="gl-note">Each on their own, in the order they join: ${lineUp}.</span></div>` +
       `<div class="gl-field"><label for="gl-turns">Turns</label><select id="gl-turns">${turns}</select></div>` +
       `<div class="gl-field"><label for="gl-timeout">Time to play each turn</label><select id="gl-timeout">${timeouts}</select>` +
-      '<span class="gl-note">Past it, anyone may claim the turn: a player who did not play passes it, and is out of the fight at the third in a row.</span></div>' +
+      '<span class="gl-note">Past it, anyone may close the turn: a player who did not play passes it, and is out of the fight at the third in a row.</span></div>' +
       `<button type="button" class="gl-create" data-act="create"${disabled}>CALL A SHOWDOWN</button>` +
       '<span class="gl-note">Next you take position on the board, then sign the call.</span>' +
       "</form>" +

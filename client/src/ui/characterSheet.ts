@@ -17,7 +17,9 @@ export interface SheetData {
   down: boolean;
   delay: number;
   status: string;
-  submitted: boolean;
+  /** The plan for the turn in progress: committed (hidden), then revealed. */
+  committed: boolean;
+  revealed: boolean;
   /** Turns in a row the player let time out (MAX_MISSED puts the character out of the fight). */
   missed: number;
   phase: string;
@@ -194,7 +196,8 @@ function tokenImage(d: SheetData): string {
 function statusRow(d: SheetData, accent: string): string {
   const chip = (label: string, value: string, strong = false) =>
     `<div style="display: flex; align-items: baseline; gap: 8px; border: 2px solid #2A1C14; border-radius: 8px; padding: 4px 12px; background: ${strong ? "#8E2F1A" : "#FBF4E4"}; color: ${strong ? "#F3E7CE" : "#2A1C14"}"><span style="font-size: 14px; letter-spacing: 2px; font-weight: 700">${label}</span><span style="font-size: 20px; font-weight: 700">${value}</span></div>`;
-  const plan = d.phase === "planning" ? (d.submitted ? "SENT" : "PENDING") : d.phase.toUpperCase();
+  const plan =
+    d.phase === "planning" ? (d.committed ? "SENT" : "PENDING") : d.phase === "revealing" ? (d.revealed ? "REVEALED" : "REVEALING") : d.phase.toUpperCase();
   const chips = [
     chip("HEX", escapeHtml(d.hex)),
     chip("FACING", DIRS[d.facing] ?? String(d.facing)),
