@@ -42,8 +42,12 @@ below) takes both away.
 
 Words used below:
 
-- **Reveal**: the `Reveal(id, seat, salt, plan)` transaction, which puts
-  a seat's salt and plan on chain against its hash. Anyone may send it.
+- **Reveal**: the `Reveal(id, turn, seat, salt, plan)` transaction, which
+  puts a seat's salt and plan on chain against its hash. Anyone may send
+  it.
+- **Last commit in clear**: the last seat to commit skips its commit and
+  reveals at once, its plan in clear: the others' plans are already fixed
+  by their hashes (below).
 - **Open**: decrypt a seat's timelocked plan off chain, once drand's
   round R is out. Any client can; it is followed by a reveal.
 - **Own reveal**: the player's browser reveals from the salt and plan it
@@ -60,7 +64,8 @@ and only says "Revealing…", and once, when a turn waited on the deadline,
 "The Kid's plan opened at the deadline".
 
 Two players, both online, both with auto-sign on: no popup at all.
-Without it, Adena asks for the commit and for the reveal.
+Without it, Adena asks for the commit and for the reveal, the last player
+to commit once only. Here B commits last:
 
 ```
  A's browser                      realm                                  B's browser
@@ -70,11 +75,11 @@ Without it, Adena asks for the commit and for the reveal.
    │ locked ← tlock(salt‖plan       │                                         │
    │          → round R)            │                                         │
    ├── Commit(id, hash, locked) ───►│ Commits[0] = {hash, locked}             │
-   │                                │◄── Commit(id, hash', locked') ──────────┤ (B saw only A's hash)
-   │                                │ every alive seat committed → revealing  │
-   │ poll: "revealing"              │                                         │ poll: "revealing"
-   ├── Reveal(id, 0, salt, plan) ──►│ sha256 matches; plan validated          │
-   │                                │◄── Reveal(id, 1, salt', plan') ─────────┤
+   │                                │                                         │ poll: A committed, B is last
+   │                                │◄── Reveal(id, t, 1, salt', plan') ──────┤ (in clear: A's plan is fixed)
+   │                                │ every alive seat in → revealing         │
+   │ poll: "revealing"              │                                         │
+   ├── Reveal(id,t,0,salt,plan) ───►│ sha256 matches; plan validated          │
    │                                │ every seat revealed → resolveTurn       │
    │                                │ seed ← salts, plans, height, block time │
    │ poll: lastTurn changed         │ Turn++, phase planning                  │ poll: lastTurn changed
@@ -94,8 +99,23 @@ timelocked plan only. Four seats work the same: `revealing` starts with
 the last commit of the alive seats, and the turn resolves with the last
 reveal.
 
-Per player and turn: two transactions (commit, reveal), zero signatures
-asked of the player. The reveal that completes the turn pays the
+**The last commit in clear.** Once every other alive seat has committed,
+hiding the last plan protects nothing: the others' plans are fixed by
+their hashes, so seeing the last one lets them refuse to reveal at most,
+which is the "last to reveal" case below, answered the same way. So the
+last seat to commit sends `Reveal` straight away, in `planning`, with its
+salt and plan and no hash to check: it counts as its commit and its
+reveal, the turn goes to `revealing` with that seat revealed, and it needs
+no timelocked copy. A transaction's arguments are public even when the
+realm refuses it, so a refused shortcut would show the plan to a seat
+that can still commit against it: the realm accepts it only when every
+other alive seat has committed and the turn given is the current one, and
+the client sends it only when its latest poll of the game shows exactly
+that (a commit is never withdrawn but by a surrender, and a seat that
+surrendered no longer plays).
+
+Per player and turn: two transactions (commit, reveal), one for the last
+to commit, zero signatures asked of the player. The reveal that completes the turn pays the
 resolution, as the last `SubmitPlan` does today; the others are cheap.
 
 ### The turn's clock
@@ -148,6 +168,7 @@ with the empty plan at once.
 | Moment | What the player sees | What it could do | Why it does not pay |
 |---|---|---|---|
 | Before committing | The others' hashes | Nothing | A sha256 of 16 random bytes and the plan is hiding and binding |
+| Last to commit | Every other hash | Send its plan in clear | The others' plans are fixed; they can only refuse to reveal, see two rows down |
 | Committed, others not | Nothing new | Wait | Commits are refused past D; whoever waits past D is Out |
 | Revealing, first to reveal | Nothing new | Refuse to reveal | Its timelocked plan opens at R anyway; with a broken one, `no_reveal` −8 and Out (so Captured −4 can follow), never better than its plan |
 | Revealing, last to reveal | Every other plan | Compute the outcome, then refuse | The seed includes the resolving block's height and time: the outcome is unknown until the reveal lands. And see the row above |
@@ -243,7 +264,7 @@ events. Replays and the history view do not change.
 | Function | Caller | Does |
 |---|---|---|
 | `Commit(cur, id, hash, locked string) int` | the seat | phase `planning`, before D, character alive, not yet committed; `hash` 64 hex chars, `locked` ≤ 1 KB; stores; when every alive seat has committed, phase `revealing` (event `AllCommitted`). Returns Rev |
-| `Reveal(cur, id, seat int, salt, plan string) int` | anyone | phase `revealing` only (a reveal while planning would leak), seat committed and not revealed; sha256 matches; then exactly today's `SubmitPlan` checks (parse, validate, ground ids, targets, `PlayedFoot`/`PlayedRun`); stores plan and salt and clears the seat's commit (its deposit refunded to the caller); when every seat is revealed, `resolveTurn` in the same tx. Returns Rev |
+| `Reveal(cur, id string, turn, seat int, salt, plan string) int` | anyone | `turn` the current one; phase `revealing`, seat committed and not revealed, sha256 matches; or phase `planning` (the last commit in clear), before D, by the seat itself, not committed, every other alive seat committed, no hash to check (any other reveal while planning would leak); then exactly today's `SubmitPlan` checks (parse, validate, ground ids, targets, `PlayedFoot`/`PlayedRun`); stores plan and salt and clears the seat's commit (its deposit refunded to the caller); when every seat is revealed, `resolveTurn` in the same tx. Returns Rev |
 | `RevealMany(cur, id, seats, salts, plans string) int` | anyone | the opened reveals of a turn in one transaction: `seats`, `salts` and `plans` are lists separated by `;` (a plan string never holds one; an empty plan is an empty field), the same length. Each seat as `Reveal`, in the order given; a seat already revealed is skipped (its player's own reveal landed first), any other failure aborts the whole call, so the opener's client checks each hash and plan before sending and leaves out a seat whose plan does not pass (it never reveals: `no_reveal` at the grace). Each cleared commit is refunded to the caller; when the call completes the turn, `resolveTurn` in the same tx. Returns Rev |
 | `Surrender(cur, id)` | the seat | `planning` only; drops the seat's commit; as today otherwise |
 | `ClaimTimeout(cur, id)` | anyone | see the clock above; a reveal-phase claim gives every unrevealed alive seat `Out` and the award `no_reveal` −8, then resolves with the plans in |
@@ -281,7 +302,9 @@ player gains `committed`, `revealed` and `locked`; the game gains `commitUntil`,
   `players[seat].revealed` or the turn changing, `revealMany(id, reveals)`
   watching every seat given revealed or the turn changing; sent through
   `chain.wallet` (auto-sign, else Adena).
-- `GameScene`: **Send plan** seals and commits; the header says
+- `GameScene`: **Send plan** seals and commits, or, when the latest poll
+  shows every other alive seat committed, sends the plan in clear with
+  `Reveal` (no seal, no timelocked copy, nothing kept in `localStorage`); the header says
   "Committed 1 of 2", then "Revealing…"; on every poll, with the phase
   `revealing`: my pending reveal goes out; past `lockRound`, every
   unrevealed seat with a timelocked plan is opened (one drand round for
@@ -306,7 +329,7 @@ player gains `committed`, `revealed` and `locked`; the game gains `commitUntil`,
 | Item | Today | With hidden plans |
 |---|---|---|
 | Signatures a turn, a player | 1 Adena popup (0 with auto-sign) | 2 Adena popups (0 with auto-sign) |
-| Transactions a turn, a player | 1 | 2 |
+| Transactions a turn, a player | 1 | 2 (1 for the last to commit) |
 | Storage a turn | ~2 KB, the turn's record | the same, plus ~0.5 KB a seat for the commit and its timelocked plan, refunded by its reveal |
 | Turn latency, both online | the last plan | the last reveal, seconds after the last commit |
 | Turn latency, a committer offline | n/a (the turn stalls until the claim) | D + 2 min, the plan still plays |
@@ -315,8 +338,9 @@ player gains `committed`, `revealed` and `locked`; the game gains `commitUntil`,
 
 1. Realm: the deadlines from `TurnStart` (built), `Commit`, `Reveal`,
    `revealing`, `no_reveal`, the seed with salts; unit tests and
-   filetests (a full turn, a reveal while planning refused, a wrong salt,
-   a claim in each phase). Client: seal, commit, reveal through Adena.
+   filetests (a full turn, the last commit in clear, a reveal while
+   planning refused while another seat has not committed, a wrong salt, a
+   claim in each phase). Client: seal, commit, reveal through Adena.
    Playable with two popups a turn.
 2. Realm: `RevealMany` (filetests: several seats in one call, a seat
    already revealed skipped, a wrong hash aborting it). Client: the
