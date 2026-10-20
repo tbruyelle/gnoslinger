@@ -35,7 +35,9 @@
 - Advanced tutorial
 
 ## Lobby
-- change showdown line representation, especially the icon of it
+- change showdown line representation, especially the icon of it, it represents
+  the adversaries biut it should show the player icon (what is displayued when
+  players are >2 ?)
 - allow winner to remove replay to be refunded for the deposit
 - Create game options
   - Allow create game with pot
