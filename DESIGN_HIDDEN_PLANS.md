@@ -211,18 +211,26 @@ in the realm (the caller is the player's address) nor in the mechanism:
 ```go
 // Commit is a seat's sealed plan for the current turn.
 type Commit struct {
-    Hash   string // sha256 hex of the domain, salt and plan; "" until committed
-    Locked string // the timelocked plan, a tlock ciphertext (≤ 1 KB), "" when the client sent none
+    // sha256 hex of the domain, salt and plan; "" until committed
+    Hash string
+    // the timelocked plan, a tlock ciphertext (≤ 1 KB); "" when the
+    // client sent none
+    Locked string
 }
 
 type Game struct {
     …
-    Phase     Phase     // waiting | planning | revealing | finished
-    TurnStart time.Time // the turn's clock; commits until +Timeout, reveals until +Timeout+RevealGrace
-    Commits   []Commit  // one per seat, each cleared by its seat's reveal
-    Plans     []string  // the revealed plans, canonical (as today)
-    Salts     []string  // the revealed salts, part of the seed; cleared when the turn resolves
-    Revealed  []bool    // replaces Submitted; a seat has committed when its Hash is set or it is revealed
+    Phase Phase // waiting | planning | revealing | finished
+    // the turn's clock: commits until +Timeout, reveals until
+    // +Timeout+RevealGrace
+    TurnStart time.Time
+    Commits   []Commit // one per seat, each cleared by its seat's reveal
+    Plans     []string // the revealed plans, canonical (as today)
+    // the revealed salts, part of the seed; cleared when the turn resolves
+    Salts []string
+    // replaces Submitted; a seat has committed when its Hash is set or it
+    // is revealed
+    Revealed []bool
     …
 }
 ```
@@ -245,12 +253,12 @@ The seed becomes `engine.Seed(realmPath, id, turn, salts…, plans…,
 height, time)`: the salts make it unpredictable to every player when it
 commits, the block keeps the outcome unknown to the last revealer.
 
-Events: `PlanCommitted` (id, turn, seat), `AllCommitted`, `PlanRevealed`
-(id, turn, seat, by; one per seat of a `RevealMany`), `PlanPassed`, `TurnResolved`, `VictoryPoints` with
-reason `no_reveal`. JSON: `phase` gains `revealing`; each player gains
-`committed`, `revealed` and `locked`; the game gains `commitUntil`,
-`revealUntil` and `lockRound`; `json/plan/{id}/{addr}` shows the
-commit only (the client shows its own plan from `localStorage`).
+Events: `PlanCommitted` (id, turn, seat), `AllCommitted`, `PlanRevealed` (id,
+turn, seat, by; one per seat of a `RevealMany`), `PlanPassed`, `TurnResolved`,
+`VictoryPoints` with reason `no_reveal`. JSON: `phase` gains `revealing`; each
+player gains `committed`, `revealed` and `locked`; the game gains `commitUntil`,
+`revealUntil` and `lockRound`; `json/plan/{id}/{addr}` shows the commit only
+(the client shows its own plan from `localStorage`).
 
 ### Rules decisions
 
