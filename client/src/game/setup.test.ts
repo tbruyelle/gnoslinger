@@ -18,22 +18,22 @@ describe("SETUPS", () => {
     }
   });
 
-  it("puts the marshal in D5-D7, E6, E7 looking south-east, the kid in H5-H7, G6, G7 looking north-west, el jefe in E8, F7, F8, G8 looking north and axe in E5, F5, F4, G5 looking south", () => {
+  it("puts the marshal in D5-D7, E6, E7 looking south-east, the kid in H5-H7, G6, G7 looking north-west, the reb in E8, F7, F8, G8 looking north and the yankee in E5, F5, F4, G5 looking south", () => {
     expect(setupZone("marshal")).toEqual(["A-D5", "A-D6", "A-D7", "A-E6", "A-E7"]);
     expect(setupZone("the_kid")).toEqual(["A-H5", "A-H6", "A-H7", "A-G6", "A-G7"]);
-    expect(setupZone("el_jefe")).toEqual(["A-E8", "A-F7", "A-F8", "A-G8"]);
-    expect(setupZone("axe")).toEqual(["A-E5", "A-F5", "A-F4", "A-G5"]);
+    expect(setupZone("reb")).toEqual(["A-E8", "A-F7", "A-F8", "A-G8"]);
+    expect(setupZone("yankee")).toEqual(["A-E5", "A-F5", "A-F4", "A-G5"]);
     expect(setupZone("dude")).toEqual([]);
     expect(defaultFacing("marshal")).toBe(2);
     expect(defaultFacing("the_kid")).toBe(5);
-    expect(defaultFacing("el_jefe")).toBe(0);
-    expect(defaultFacing("axe")).toBe(3);
+    expect(defaultFacing("reb")).toBe(0);
+    expect(defaultFacing("yankee")).toBe(3);
     expect(defaultFacing("dude")).toBe(0);
   });
 
   it("seats the characters in order, 2 to 4 of them", () => {
     expect([MIN_PLAYERS, MAX_PLAYERS]).toEqual([2, 4]);
-    expect([0, 1, 2, 3, 4].map(seatChar)).toEqual(["marshal", "the_kid", "el_jefe", "axe", ""]);
+    expect([0, 1, 2, 3, 4].map(seatChar)).toEqual(["marshal", "the_kid", "reb", "yankee", ""]);
     expect(nextSeat([{ addr: "g1a" }, { addr: "" }, { addr: "" }])).toBe(1);
     expect(nextSeat([{ addr: "g1a" }, { addr: "g1b" }])).toBe(-1);
   });
@@ -46,10 +46,10 @@ describe("SETUPS", () => {
     expect(canSetUp("marshal", "A-E7")).toBe(true);
     expect(canSetUp("the_kid", "A-G6")).toBe(true);
     expect(canSetUp("the_kid", "A-F8")).toBe(false);
-    expect(canSetUp("el_jefe", "A-F7")).toBe(true);
-    expect(canSetUp("el_jefe", "A-F6")).toBe(false);
-    expect(canSetUp("axe", "A-E5")).toBe(true);
-    expect(canSetUp("axe", "A-E6")).toBe(false);
+    expect(canSetUp("reb", "A-F7")).toBe(true);
+    expect(canSetUp("reb", "A-F6")).toBe(false);
+    expect(canSetUp("yankee", "A-E5")).toBe(true);
+    expect(canSetUp("yankee", "A-E6")).toBe(false);
     expect(canSetUp("dude", "A-D6")).toBe(false);
   });
 

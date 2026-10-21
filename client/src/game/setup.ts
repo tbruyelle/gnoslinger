@@ -20,17 +20,17 @@ export interface CharSetup {
  * The showdown played (the realm's engine.Setups), one character per seat
  * in seat order, each a side of its own, around the middle of the corral:
  * the Marshal on the west side in D5-D7, E6 and E7, the Kid on the east
- * side in H5-H7, G6 and G7, El Jefe to the south in E8, F7, F8 and G8, Axe
+ * side in H5-H7, G6 and G7, Reb to the south in E8, F7, F8 and G8, Yankee
  * to the north in E5, F5, F4 and G5. They face the middle: a flat-top grid
  * has no west or east, so
- * the Marshal looks south-east and the Kid north-west; El Jefe looks
- * north, Axe south.
+ * the Marshal looks south-east and the Kid north-west; Reb looks
+ * north, Yankee south.
  */
 export const SETUPS: CharSetup[] = [
   { char: "marshal", hexes: ["A-D5", "A-D6", "A-D7", "A-E6", "A-E7"], facing: 2 },
   { char: "the_kid", hexes: ["A-H5", "A-H6", "A-H7", "A-G6", "A-G7"], facing: 5 },
-  { char: "el_jefe", hexes: ["A-E8", "A-F7", "A-F8", "A-G8"], facing: 0 },
-  { char: "axe", hexes: ["A-E5", "A-F5", "A-F4", "A-G5"], facing: 3 },
+  { char: "reb", hexes: ["A-E8", "A-F7", "A-F8", "A-G8"], facing: 0 },
+  { char: "yankee", hexes: ["A-E5", "A-F5", "A-F4", "A-G5"], facing: 3 },
 ];
 
 /** The seats a showdown may have: 2 to as many characters as the showdown has (the realm's engine.MinPlayers, MaxPlayers). */

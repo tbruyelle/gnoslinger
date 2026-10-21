@@ -104,7 +104,7 @@ export interface PlanLine {
   detail: string;
   /** Time points, in the circle on the right; none for a line that is not an action. */
   cost?: number;
-  /** The character the action names ("aim at El Jefe"): its name in detail goes in its seat's colour. */
+  /** The character the action names ("aim at Reb"): its name in detail goes in its seat's colour. */
   target?: { name: string; color: string };
 }
 

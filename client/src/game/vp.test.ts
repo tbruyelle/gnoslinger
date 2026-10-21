@@ -31,7 +31,7 @@ describe("victory points", () => {
     expect(vpResult(-1, [0, 0], [], ["Marshal", "The Kid"])).toBe("");
     // More than two seats: everyone's score.
     const three = [{ p: 2, reason: "survive", points: 2 }];
-    expect(vpResult(2, [-6, -6, 4], three, ["Marshal", "The Kid", "El Jefe"])).toBe("El Jefe wins: Marshal −6, The Kid −6, El Jefe 4 VP");
-    expect(vpResult(-1, [2, 2, 2], three, ["Marshal", "The Kid", "El Jefe"])).toBe("a draw: Marshal 2, The Kid 2, El Jefe 2 VP");
+    expect(vpResult(2, [-6, -6, 4], three, ["Marshal", "The Kid", "Reb"])).toBe("Reb wins: Marshal −6, The Kid −6, Reb 4 VP");
+    expect(vpResult(-1, [2, 2, 2], three, ["Marshal", "The Kid", "Reb"])).toBe("a draw: Marshal 2, The Kid 2, Reb 2 VP");
   });
 });

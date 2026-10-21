@@ -15,7 +15,7 @@ and teams, the showdown packages (DESIGN_SHOWDOWNS.md, step 4).
 The realm and the client play showdowns of **2 to 4 players**, every
 character a side of its own: the creator picks the number of seats, and
 the seats take the showdown's characters **in the order the players join**
-(seat 0 the marshal, 1 the kid, 2 el jefe, 3 axe), each in its own hexes
+(seat 0 the marshal, 1 the kid, 2 the reb, 3 the yankee), each in its own hexes
 around the middle of the corral (D5-D7 with E6-E7, H5-H7 with G6-G7, E8/F7/F8/G8, E5/F5/F4/G5;
 AGENTS.md, Set up). No character
 pick yet, no teams, not more than four (the showdown's set up stops
@@ -51,7 +51,7 @@ and knock outs name seats (`AimAt`, `Killers`, `SeriousFrom`, `LegFrom`,
 
 ## Lobby
 
-3. **"Join as The Kid"** *Done:* "Join as El Jefe" names the next free
+3. **"Join as The Kid"** *Done:* "Join as Reb" names the next free
    seat's character, with "2 of 4 seats taken". *Left:* a character pick,
    and a team pick in team modes.
 4. **"vs The Kid · g1q8…"** *Done for four:* every other player is listed.
@@ -72,11 +72,11 @@ and knock outs name seats (`AimAt`, `Killers`, `SeriousFrom`, `LegFrom`,
    the fight are greyed. *Left:* grouping by team, an 8-seat test.
 8. **The header "The Marshal (you) vs The Kid"** lists every seat; the
    status names the characters whose plan is still awaited ("Plan sent,
-   waiting for The Kid, Axe…"). *Left:* the mode's name and "plans sent:
+   waiting for The Kid, Yankee…"). *Left:* the mode's name and "plans sent:
    3 / 5" past four.
 9. **Picking a target**: *Done:* clicking a token still works for any
    seat; a hex with several enemies in sight opens a menu naming them; the
-   plan list names the target ("aim at El Jefe"), in its seat's colour.
+   plan list names the target ("aim at Reb"), in its seat's colour.
 
 ## Game, replay
 

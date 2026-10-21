@@ -31,7 +31,7 @@ export interface SheetData {
   aim: number;
   aimHex: string;
   aimTarget: string;
-  /** Who holds AIM points on this character: "The Kid 4", "Axe 2". */
+  /** Who holds AIM points on this character: "The Kid 4", "Yankee 2". */
   aimedBy: string[];
   /** Endurance boxes left (20 at the start). */
   endurance: number;

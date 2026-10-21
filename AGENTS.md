@@ -14,7 +14,7 @@ transactions with the **Adena** wallet. There is no game server.
 Current milestone: **board A only, 2 to 4 players, one character each, every
 character a side of its own** (the creator picks the number of seats; the
 seats take the showdown's characters in the order the players join: the
-marshal, the kid, el jefe, axe), each player picking where its character
+marshal, the kid, the reb, the yankee), each player picking where its character
 stands when calling or joining,
 the foot actions (advance, back up, run, spin around, sprint, turn,
 leap/drop, get up/down) and the Colt 45 gun play (Draw & Cock,
@@ -164,7 +164,7 @@ seat order; `SeatChar`, `SetupOf`, `CanSetUp`, `ShowdownChars`), around
 the middle of the corral: seat 0 the **marshal** on the west side in
 **D5-D7, E6, E7** looking SE (a flat-top grid has no W or E), seat 1
 **the_kid** on the east side in **H5-H7, G6, G7** looking NW, seat 2
-**el_jefe** to the south in **E8, F7, F8, G8** looking N, seat 3 **axe**
+**reb** to the south in **E8, F7, F8, G8** looking N, seat 3 **yankee**
 to the north in **E5, F5, F4, G5** looking S (this project's own set up, each facing the middle; the
 rules' showdown 1 lines two sides up in G5-G9 and E5-E9). The creator is seat
 0 and picks how many seats the game has (2 to 4); each player joining
@@ -204,7 +204,7 @@ v0 once its running games are over.
 | Function | Notes |
 |---|---|
 | `CreateGame(cur, seats, maxTurns, timeoutMinutes, startHex, facing) string` | 2 to 4 seats; the caller in seat 0 as the showdown's first character (the marshal), standing in one of its hexes (`startHex`) facing 0 N … 5 NW; 10 to 30 turns (the client sends 20); the timeout is per turn, 0 = 2 days (5 min to 30 days); phase `waiting`, which has no timeout: the game stays open until its seats fill up or its creator cancels it |
-| `JoinGame(cur, id, startHex, facing)` | the first free seat and its character (the kid, then el jefe, then axe), in one of its hexes; the last seat taken starts the game (phase `planning`, `GamesPlayed` for every seat; the turn clock starts there); refused to a player already seated |
+| `JoinGame(cur, id, startHex, facing)` | the first free seat and its character (the kid, then the reb, then the yankee), in one of its hexes; the last seat taken starts the game (phase `planning`, `GamesPlayed` for every seat; the turn clock starts there); refused to a player already seated |
 | `CancelGame(cur, id)` | creator, while a seat is free (players may have joined); deletes the game (and every seated player's `byPlayer` entry) so the creator gets the CreateGame storage deposit back; the client returns to the lobby once the game view answers "game not found" |
 | `Commit(cur, id, hash, locked) int` | **hidden plans** (`DESIGN_HIDDEN_PLANS.md`): phase `planning`, before the turn's deadline (`commitUntil`, `assertInTime`: past it the game can only be claimed), from a character in the fight that has not committed; `hash` is `PlanHash(id, turn, seat, salt, plan)` (64 lowercase hex), `locked` the salt and plan timelocked to the turn's `lockRound` (required, at most `MaxLocked` 1 KB; the client encrypts offline, so every commit can carry one); stores it (`Commits[seat]`, a `Sealed`), resets `Missed`; when every character in the fight committed, phase `revealing` (event `AllCommitted`); returns Rev. A player with 5 or more delay cannot play anything and is passed automatically (`progress`, event `PlanPassed`: revealed with the empty plan); with everyone passed, turns resolve by themselves until someone can act |
 | `Reveal(cur, id, turn, seat, salt, plan) int` | `turn` the one in progress. Phase `revealing`: anyone; the salt (1 to 64 hex) and plan must match the seat's hash; then the plan is validated (a target must be a seat of the game, not one's own) and stored with its salt, the commit cleared (its deposit refunded to the caller). Phase `planning`: the **last commit in clear**, only from the seat itself, before the deadline, once every other character in the fight committed (their plans are fixed by their hashes; a refused transaction still shows the plan, so the client only sends it when its poll shows exactly that); it counts as the seat's commit and reveal. The reveal that completes the turn (every character in the fight revealed, `allRevealed`) resolves it in the same tx |
@@ -475,7 +475,7 @@ the profiles realm);
 JSON carries `vp` and `awards` (`{p, reason, points}`), the summaries `vp`.
 The client shows the `vp` events in the log of the turn (`describeEvent`),
 the result in the header ("Marshal wins 4 to −6 VP", with more seats
-"El Jefe wins: Marshal −6, The Kid −6, El Jefe 4 VP", `game/vp.ts`), a recap
+"Reb wins: Marshal −6, The Kid −6, Reb 4 VP", `game/vp.ts`), a recap
 per player at the end of the final replay (`vpRecap`), and my VP on the
 lobby's finished line. With more than two characters the showdown goes on
 after a kill, a pass out or a surrender, so kills and knock outs land on
@@ -582,7 +582,7 @@ played, victory points, since). `game/lobby.ts` sorts the games into
   set-up mode (below), where the player takes position first. Characters
   are fixed by seat: the creator plays the showdown's first character,
   `marshal` (`CREATOR_CHAR`), and a joiner the next free seat's
-  (`nextSeat`, `seatChar`: "Join as El Jefe · 2 of 4 seats taken"); the
+  (`nextSeat`, `seatChar`: "Join as Reb · 2 of 4 seats taken"); the
   realm seats the joiner wherever is free when the join lands.
 - `GameScene`: renders `committed` state from the chain. Opened with a
   `SetupRequest` instead of (or with) a game id, it is in **set-up mode**
@@ -748,8 +748,8 @@ Clicking a token opens the **character
    A-D6), turn the token if you like, **CALL THE SHOWDOWN**. Switch
    account in Adena (the app reconnects): **Join** from "Open showdowns",
    H5 to H7, G6 and G7 are green, click A-H6, **JOIN THE SHOWDOWN** (a
-   third player gets E8, F7, F8 and G8 as El Jefe, a fourth E5, F5, F4 and
-   G5 as Axe). Everyone sees the
+   third player gets E8, F7, F8 and G8 as Reb, a fourth E5, F5, F4 and
+   G5 as Yankee). Everyone sees the
    marshal at A-D6 (facing SE) and The Kid at A-H6 (facing NW); the game
    starts once the last seat is taken.
 3. Each account picks cards and sends its plan (a commit; the last one in

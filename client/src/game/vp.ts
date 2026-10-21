@@ -40,7 +40,7 @@ export function vpRecap(awards: VPAward[], vp: number[], names: string[]): strin
 
 /**
  * "Marshal wins 4 to −6 VP", "a draw, 2 to 2 VP"; with more than two
- * seats, "El Jefe wins: Marshal −6, The Kid −6, El Jefe 4 VP"; "" for a
+ * seats, "Reb wins: Marshal −6, The Kid −6, Reb 4 VP"; "" for a
  * game that earned no points.
  */
 export function vpResult(winner: number, vp: number[] | undefined, awards: VPAward[] | undefined, names: string[]): string {

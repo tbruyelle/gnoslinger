@@ -182,10 +182,10 @@ func renderHelp(res *mux.ResponseWriter, _ *mux.Request) {
 		"At the end of the turn half of your delay (rounded up) goes away."))
 	res.Write(md.H2("Setting up"))
 	res.Write(md.Paragraph("The creator picks how many play, two to four, and is the marshal; the others take the next characters " +
-		"in the order they join: the kid, then el jefe, then axe. Each player picks where to stand when calling or joining a showdown, " +
+		"in the order they join: the kid, then the reb, then the yankee. Each player picks where to stand when calling or joining a showdown, " +
 		"among the hexes assigned to its character, inside the corral: " + setupList() + "; each faces any direction (" +
 		md.InlineCode("0") + " N, " + md.InlineCode("1") + " NE, " + md.InlineCode("2") + " SE, " + md.InlineCode("3") + " S, " +
-		md.InlineCode("4") + " SW, " + md.InlineCode("5") + " NW; the marshal and el jefe look north-west, the kid and axe south-east unless told otherwise). " +
+		md.InlineCode("4") + " SW, " + md.InlineCode("5") + " NW; the marshal looks south-east, the kid north-west, the reb north and the yankee south unless told otherwise). " +
 		"All start upright with a loaded Colt 45 in the holster. Aims and shots name a character by seat (" + md.InlineCode("@1") +
 		") or a hex. A character killed or passed out is out of the fight; one may surrender while the plans are collected, and the others fight on."))
 	res.Write(md.H2("Plan string"))

@@ -64,7 +64,7 @@ func CreateGame(cur realm, seats int, maxTurns int, timeoutMinutes int, startHex
 }
 
 // JoinGame seats the caller in the first free seat of a waiting game,
-// playing that seat's character (the kid, then el jefe, then axe),
+// playing that seat's character (the kid, then the reb, then the yankee),
 // standing in startHex, one of that character's hexes, facing f; the game
 // starts collecting the commits of turn 1 once its last seat is taken.
 func JoinGame(cur realm, id string, startHex string, facing int) {

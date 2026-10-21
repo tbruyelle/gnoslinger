@@ -131,7 +131,7 @@ func TestSetUp(cur realm, t *testing.T) {
 	uassert.False(t, g.State.Chars[0].Down)
 	uassert.True(t, strings.Contains(GameJSON(id), `{"addr":"","name":"","char":"","hex":"","facing":0`), GameJSON(id))
 
-	// The first joiner is the kid, in its own hexes; the second el jefe.
+	// The first joiner is the kid, in its own hexes; the second the reb.
 	testing.SetRealm(testing.NewUserRealm(bob))
 	uassert.AbortsWithMessage(t, cur, "gnoslinger: the_kid sets up in A-H5, A-H6, A-H7, A-G6, A-G7, not in A-G9", func() {
 		JoinGame(cross(cur), id, "A-G9", 0)
@@ -152,18 +152,18 @@ func TestSetUp(cur realm, t *testing.T) {
 		JoinGame(cross(cur), id, "A-F8", 0)
 	})
 	testing.SetRealm(testing.NewUserRealm(carol))
-	uassert.AbortsWithMessage(t, cur, "gnoslinger: el_jefe sets up in A-E8, A-F7, A-F8, A-G8, not in A-H6", func() {
+	uassert.AbortsWithMessage(t, cur, "gnoslinger: reb sets up in A-E8, A-F7, A-F8, A-G8, not in A-H6", func() {
 		JoinGame(cross(cur), id, "A-H6", 0)
 	})
 	JoinGame(cross(cur), id, "A-F8", 4)
 	uassert.Equal(t, "planning", g.Phase.String())
 	uassert.False(t, openGames.Has(id))
-	uassert.Equal(t, "el_jefe", g.Players[2].Char)
+	uassert.Equal(t, "reb", g.Players[2].Char)
 	uassert.Equal(t, "A-F8", g.State.Chars[2].Hex)
-	uassert.True(t, strings.Contains(GameJSON(id), `"char":"el_jefe","hex":"A-F8","facing":4`), GameJSON(id))
+	uassert.True(t, strings.Contains(GameJSON(id), `"char":"reb","hex":"A-F8","facing":4`), GameJSON(id))
 	uassert.True(t, strings.Contains(Render("game/"+id), "| A-D6 | SE |"))
 	uassert.True(t, strings.Contains(Render("game/"+id), "| A-F8 | SW |"))
-	uassert.True(t, strings.Contains(Render(""), "marshal vs the\\_kid vs el\\_jefe"), Render(""))
+	uassert.True(t, strings.Contains(Render(""), "marshal vs the\\_kid vs reb"), Render(""))
 }
 
 func TestCommitAndReveal(cur realm, t *testing.T) {
@@ -949,7 +949,7 @@ func TestFourSeats(cur realm, t *testing.T) {
 	}
 	carolPlayed, davePlayed := played(carol), played(dave)
 	testing.SetRealm(testing.NewUserRealm(alice))
-	id := CreateGame(cross(cur), 4, 10, 0, "A-D6", 2) // looking south-east, el jefe's way
+	id := CreateGame(cross(cur), 4, 10, 0, "A-D6", 2) // looking south-east, the reb's way
 	g := getGame(id)
 	uassert.Equal(t, 4, len(g.State.Chars))
 	uassert.Equal(t, 4, len(g.VP))
@@ -964,12 +964,12 @@ func TestFourSeats(cur realm, t *testing.T) {
 	uassert.True(t, strings.Contains(GamesJSON(dave.String()), `"open":[{"id":"`+id+`"`), GamesJSON(dave.String()))
 	uassert.True(t, strings.Contains(GamesJSON(dave.String()), `{"addr":"","name":"","char":"","status":"alive","committed":false,"revealed":false}]`), GamesJSON(dave.String()))
 	uassert.True(t, strings.Contains(Render(""), "| 3/4 |"), Render(""))
-	uassert.True(t, strings.Contains(Render(""), "Join as axe"), Render(""))
+	uassert.True(t, strings.Contains(Render(""), "Join as yankee"), Render(""))
 	uassert.Equal(t, carolPlayed, played(carol)) // not started yet
 	testing.SetRealm(testing.NewUserRealm(dave))
 	JoinGame(cross(cur), id, "A-F5", 3)
 	uassert.Equal(t, "planning", g.Phase.String())
-	uassert.Equal(t, "axe", g.Players[3].Char)
+	uassert.Equal(t, "yankee", g.Players[3].Char)
 	uassert.Equal(t, carolPlayed+1, played(carol))
 	uassert.Equal(t, davePlayed+1, played(dave))
 
@@ -998,7 +998,7 @@ func TestFourSeats(cur realm, t *testing.T) {
 	uassert.Equal(t, "A-F5", lt.Start()[3].Hex)
 	uassert.True(t, strings.Contains(GameJSON(id), `"plans":["9f:1:0","","9f:1:0","1f:ahead"]`), GameJSON(id))
 
-	// Turn 2: alice aims at el jefe (seat 2), who then walks: the markers
+	// Turn 2: alice aims at the reb (seat 2), who then walks: the markers
 	// follow it; the JSON says which seat.
 	testing.SetRealm(testing.NewUserRealm(alice))
 	Commit(cross(cur), id, hashOf(id, 0, "5f:aim:@2"), "locked")
@@ -1013,7 +1013,7 @@ func TestFourSeats(cur realm, t *testing.T) {
 	uassert.Equal(t, 2, g.State.Chars[0].Aim)
 	uassert.Equal(t, 2, g.State.Chars[0].AimAt)
 	uassert.True(t, strings.Contains(GameJSON(id), `"aim":2,"aimAt":2,"aimHex":""`), GameJSON(id))
-	uassert.True(t, strings.Contains(Render("game/"+id), "marshal aims at A-F8 (el\\_jefe): 2 AIM points"), Render("game/"+id))
+	uassert.True(t, strings.Contains(Render("game/"+id), "marshal aims at A-F8 (reb): 2 AIM points"), Render("game/"+id))
 
 	// A character out of the fight sends no plan and is not waited for.
 	g.State.Chars[1].Status = engine.Killed
@@ -1073,7 +1073,7 @@ func TestSurrenderGoesOn(cur realm, t *testing.T) {
 	uassert.Equal(t, -6, g.VP[1])
 	uassert.Equal(t, 4, g.VP[2])
 	uassert.True(t, strings.Contains(GameJSON(id), `"vp":[-6,-6,4]`), GameJSON(id))
-	uassert.True(t, strings.Contains(Render(""), "-6 to -6 to 4 VP, winner: el\\_jefe"), Render(""))
+	uassert.True(t, strings.Contains(Render(""), "-6 to -6 to 4 VP, winner: reb"), Render(""))
 }
 
 func TestClaimTimeoutGoesOn(cur realm, t *testing.T) {
