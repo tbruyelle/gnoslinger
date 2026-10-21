@@ -5,16 +5,16 @@ package engine
 type PenaltyKind string
 
 const (
-	Kill      PenaltyKind = "kill"       // killed, out of the game
-	Stun      PenaltyKind = "stun"       // draws N wound cards and loses aim
-	Stagger   PenaltyKind = "stagger"    // thrown to a hex and facing drawn on two direction cards, then drops
-	Serious   PenaltyKind = "serious"    // N fatigue cards at the start of every turn; may kill at the end
+	Kill          PenaltyKind = "kill"       // killed, out of the game
+	Stun          PenaltyKind = "stun"       // draws N wound cards and loses aim
+	Stagger       PenaltyKind = "stagger"    // thrown to a hex and facing drawn on two direction cards, then drops
+	Serious       PenaltyKind = "serious"    // N fatigue cards at the start of every turn; may kill at the end
 	DropGunHand   PenaltyKind = "gun_hand"   // the weapon in the gun hand drops in the hex
-	GunArm    PenaltyKind = "gun_arm"    // -N aim time with the gun hand
+	GunArm        PenaltyKind = "gun_arm"    // -N aim time with the gun hand
 	DropOtherHand PenaltyKind = "other_hand" // the weapon in the other hand drops in the hex
-	OtherArm  PenaltyKind = "other_arm"  // -N aim time with the other hand
-	LegWound  PenaltyKind = "leg"        // N fatigue cards per hex moved while upright
-	Light     PenaltyKind = "light"      // draws N fatigue cards
+	OtherArm      PenaltyKind = "other_arm"  // -N aim time with the other hand
+	LegWound      PenaltyKind = "leg"        // N fatigue cards per hex moved while upright
+	Light         PenaltyKind = "light"      // draws N fatigue cards
 )
 
 // Penalty is one combat result, with its number when the kind takes one.

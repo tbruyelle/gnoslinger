@@ -703,7 +703,7 @@ func TestAimIsLost(t *testing.T) {
 	st.Chars[0].Aim, st.Chars[0].AimAt = 4, 1
 	st.Chars[0].Hex, st.Chars[0].Facing = "A-F5", hex.S
 	st.Chars[1].Hex, st.Chars[1].Facing = "A-G6", hex.N // SE of F5, on the edge of the zone
-	st, evs = resolve(t, st, "", "1f:ahead")             // the Kid steps to G5, NE of F5
+	st, evs = resolve(t, st, "", "1f:ahead")            // the Kid steps to G5, NE of F5
 	if la := ofKind(evs, 0, EvLoseAim); len(la) != 1 || la[0].Seg != 2 || la[0].Reason != ReasonOutOfZone || st.Chars[0].Aim != 0 {
 		t.Errorf("lose aim = %v, kid at %s", la, st.Chars[1].Hex)
 	}
@@ -1498,18 +1498,24 @@ func TestAimFollowsASeat(t *testing.T) {
 	if l := ofKind(evs, 0, EvLoseAim); len(l) != 1 || l[0].Reason != ReasonShot {
 		t.Errorf("lose aim = %v", l)
 	}
-	// An aim or a shot at a seat the game does not have, or at a dead one,
-	// is cancelled for want of a target.
+	// An aim at a seat the game does not have is cancelled for want of a
+	// target.
 	two := startState()
 	two.Chars[0].Guns[0].Location, two.Chars[0].Guns[0].Cocked = GunHand, true
 	_, evs = resolve(t, two, "5f:aim:@3", "")
 	if c := ofKind(evs, 0, EvCancel); len(c) != 1 || c[0].Reason != ReasonNoTarget {
 		t.Errorf("cancel = %v", c)
 	}
+	// A shot at a fallen character is held, as a Shoot doing nothing: no
+	// card, the gun cocked and loaded, the aim kept (12.6, 14.6, 11.3).
 	two.Chars[1].Status = Killed
-	_, evs = resolve(t, two, "7f:shoot:@1", "")
-	if c := ofKind(evs, 0, EvCancel); len(c) != 1 || c[0].Reason != ReasonNoTarget {
-		t.Errorf("cancel = %v", c)
+	two.Chars[0].Aim, two.Chars[0].AimAt = 2, 1
+	after, evs := resolve(t, two, "7f:shoot:@1", "")
+	if n := ofKind(evs, 0, EvNothing); len(n) != 1 || n[0].Reason != ReasonOutOfFight || n[0].Target != 1 || n[0].To != two.Chars[1].Hex || len(ofKind(evs, 0, EvShot)) != 0 || len(ofKind(evs, 0, EvCancel)) != 0 {
+		t.Errorf("events = %v", evs)
+	}
+	if c := after.Chars[0]; !c.Guns[0].Cocked || c.Guns[0].Shells != two.Chars[0].Guns[0].Shells || c.Aim != 2 || c.AimAt != 1 {
+		t.Errorf("shooter = %+v", c)
 	}
 }
 

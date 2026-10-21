@@ -229,5 +229,6 @@ describe("describeEvent and a shot held", () => {
     const names = ["marshal", "dude"];
     expect(describeEvent(ev({ p: 0, kind: "nothing", action: "shoot", to: "A-I11", target: 1, reason: "no_los" }), names)).toBe("marshal holds fire: dude in A-I11 is out of sight");
     expect(describeEvent(ev({ p: 0, kind: "nothing", action: "shoot", to: "A-J11", reason: "empty_hex" }), names)).toBe("marshal holds fire: nobody in A-J11");
+    expect(describeEvent(ev({ p: 0, kind: "nothing", action: "shoot", to: "A-H6", target: 1, reason: "out_of_fight" }), names)).toBe("marshal holds fire: dude is out of the fight");
   });
 });

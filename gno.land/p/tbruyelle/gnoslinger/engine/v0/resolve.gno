@@ -20,7 +20,7 @@ const (
 	EvUncock       = "uncock"        // Gun uncocked
 	EvAim          = "aim"           // N = AIM points after aiming, To = the hex they sit on, Target = the seat they follow (-1 for a hex)
 	EvLoseAim      = "lose_aim"      // Reason (To = the obstacle in the way for no_los)
-	EvNothing      = "nothing"       // a Shoot used to do nothing, or a shot held at a hex nobody stands in (Reason empty_hex, To = the hex) or at a target out of sight (Reason no_los, To = its hex, Target = its seat): keeps the aim
+	EvNothing      = "nothing"       // a Shoot used to do nothing, or a shot held at a hex nobody stands in (Reason empty_hex, To = the hex) or at a target out of sight (Reason no_los, To = its hex, Target = its seat) or out of the fight (Reason out_of_fight, To = its hex, Target = its seat): keeps the aim
 	EvShot         = "shot"          // Card, Target = the seat shot at (whoever stood in the hex named, for a shot at a hex), To = the hex shot at, Hit (final location or Miss), Range, N = aim time, Reason "" | out_of_zone | misfire (older records: Target -1 and empty_hex for a shot wasted on an empty hex)
 	EvMalfunction  = "malfunction"   // Card, Result (no_effect, misfire, jams, explodes, no_penalty), Gun, GunID
 	EvWildShot     = "wild_shot"     // Gun went off without hitting anything: uncocked, one shell less
@@ -35,38 +35,39 @@ const (
 
 // Delay and cancel reasons.
 const (
-	ReasonCrawl     = "crawl"       // moving while down (rule 9.2)
-	ReasonSprint    = "sprint"      // sprinting draws a delay card (rule 9.23)
-	ReasonLeap      = "leap"        // leap/drop draws two delay cards (rule 9.4)
-	ReasonOccupied  = "occupied"    // ending a move in an occupied hex (rule 9.24)
-	ReasonFence     = "fence"       // moving or staggering across a fence (rule 35.2)
-	ReasonObstacle  = "obstacle"    // moving or staggering onto or off an obstacle (rule 36.4)
-	ReasonDrop      = "drop"        // a DROP penalty draws three delay cards (rule 14.11)
-	ReasonStun      = "stun"        // a STUN draws wound cards (14.11)
-	ReasonLight     = "light"       // a LIGHT draws fatigue cards (14.11)
-	ReasonSerious   = "serious"     // fatigue cards at the start of the turn (14.12)
-	ReasonLeg       = "leg"         // fatigue cards per hex moved upright (14.12)
-	ReasonOffBoard  = "offboard"    // older records: a move off the board was cancelled (it now runs away, EvRunAway)
-	ReasonTime      = "time"        // not executed by the end of segment 5 (rule 7.53)
-	ReasonNoGun     = "no_gun"      // no gun in the box the action needs (11.3)
-	ReasonHandFull  = "hand_full"   // the destination hand already holds a gun
-	ReasonNoRoom    = "no_room"     // the character already carries MaxGuns weapons
-	ReasonNotCocked = "not_cocked"  // shooting an uncocked gun (13.1)
-	ReasonEmpty     = "empty"       // shooting a gun without shells (13.1)
-	ReasonJammed    = "jammed"      // shooting or cocking a jammed gun not completely reloaded yet (13.31)
-	ReasonFull      = "full"        // loading a gun already holding its Ammo limit (10.42)
-	ReasonBroken    = "broken"      // using or loading an exploded gun (13.31)
-	ReasonNoTarget  = "no_target"   // the character named is out of the fight (12.6), or is the shooter, or no such seat
-	ReasonOutOfZone = "out_of_zone" // the target is in the blind zone (8.32, 12.41)
-	ReasonNoLOS     = "no_los"      // no line of sight to the target, an obstacle in the way by the heights (31): an aim is cancelled, a shot is held, AIM points are lost
-	ReasonReveal    = "reveal"      // revealing an action other than Turn or a gun action (12.44)
-	ReasonTransfer  = "transfer"    // a new target more than one hex from the markers (12.5)
-	ReasonOwnHex    = "own_hex"     // a new target moving the markers into or out of the character's own hex (12.5)
-	ReasonNoHex     = "no_hex"      // aiming at a hex that is not on the board
-	ReasonShot      = "shot"        // aim spent by a shot (12.43)
-	ReasonStagger   = "stagger"     // thrown by a STAGGER penalty
-	ReasonMisfire   = "misfire"     // the shot was cancelled by a MALFUNCTION
-	ReasonEmptyHex  = "empty_hex"   // a shot at a hex nobody stood in: held (EvNothing)
+	ReasonCrawl      = "crawl"        // moving while down (rule 9.2)
+	ReasonSprint     = "sprint"       // sprinting draws a delay card (rule 9.23)
+	ReasonLeap       = "leap"         // leap/drop draws two delay cards (rule 9.4)
+	ReasonOccupied   = "occupied"     // ending a move in an occupied hex (rule 9.24)
+	ReasonFence      = "fence"        // moving or staggering across a fence (rule 35.2)
+	ReasonObstacle   = "obstacle"     // moving or staggering onto or off an obstacle (rule 36.4)
+	ReasonDrop       = "drop"         // a DROP penalty draws three delay cards (rule 14.11)
+	ReasonStun       = "stun"         // a STUN draws wound cards (14.11)
+	ReasonLight      = "light"        // a LIGHT draws fatigue cards (14.11)
+	ReasonSerious    = "serious"      // fatigue cards at the start of the turn (14.12)
+	ReasonLeg        = "leg"          // fatigue cards per hex moved upright (14.12)
+	ReasonOffBoard   = "offboard"     // older records: a move off the board was cancelled (it now runs away, EvRunAway)
+	ReasonTime       = "time"         // not executed by the end of segment 5 (rule 7.53)
+	ReasonNoGun      = "no_gun"       // no gun in the box the action needs (11.3)
+	ReasonHandFull   = "hand_full"    // the destination hand already holds a gun
+	ReasonNoRoom     = "no_room"      // the character already carries MaxGuns weapons
+	ReasonNotCocked  = "not_cocked"   // shooting an uncocked gun (13.1)
+	ReasonEmpty      = "empty"        // shooting a gun without shells (13.1)
+	ReasonJammed     = "jammed"       // shooting or cocking a jammed gun not completely reloaded yet (13.31)
+	ReasonFull       = "full"         // loading a gun already holding its Ammo limit (10.42)
+	ReasonBroken     = "broken"       // using or loading an exploded gun (13.31)
+	ReasonNoTarget   = "no_target"    // the character named is out of the fight (12.6), or is the shooter, or no such seat
+	ReasonOutOfZone  = "out_of_zone"  // the target is in the blind zone (8.32, 12.41)
+	ReasonNoLOS      = "no_los"       // no line of sight to the target, an obstacle in the way by the heights (31): an aim is cancelled, a shot is held, AIM points are lost
+	ReasonReveal     = "reveal"       // revealing an action other than Turn or a gun action (12.44)
+	ReasonTransfer   = "transfer"     // a new target more than one hex from the markers (12.5)
+	ReasonOwnHex     = "own_hex"      // a new target moving the markers into or out of the character's own hex (12.5)
+	ReasonNoHex      = "no_hex"       // aiming at a hex that is not on the board
+	ReasonShot       = "shot"         // aim spent by a shot (12.43)
+	ReasonStagger    = "stagger"      // thrown by a STAGGER penalty
+	ReasonMisfire    = "misfire"      // the shot was cancelled by a MALFUNCTION
+	ReasonEmptyHex   = "empty_hex"    // a shot at a hex nobody stood in: held (EvNothing)
+	ReasonOutOfFight = "out_of_fight" // a shot at a character killed, passed out, surrendered or run away: held (EvNothing)
 )
 
 // Malfunction results.
@@ -511,8 +512,9 @@ func fireHarmlessly(p int, g *Gun, seg int, evs *[]Event) {
 // 13.1, 13.2). A MALFUNCTION with no effect is replaced; a
 // misfire cancels the shot and a second draw may jam or blow up the gun.
 // The shooter then uncocks, spends a shell and loses the aim (13.9). A shot
-// at a hex nobody stands in when it comes up, or at a target out of sight
-// (31), is held, as a Shoot doing nothing: no card, no shell, the gun stays
+// at a hex nobody stands in when it comes up, at a target out of sight
+// (31), or at a character out of the fight (killed or passed out, 12.6,
+// 14.6; surrendered or run away), is held, as a Shoot doing nothing: no card, no shell, the gun stays
 // cocked and the aim is kept. It returns the seat shot at (NoSeat when
 // nobody was) and the IMPACT TABLE results of a hit, inflicted at the end
 // of the segment.
@@ -540,6 +542,14 @@ func shoot(board *hex.Board, p int, st *State, a Action, seg int, d Drawer, evs 
 	t := st.char(target)
 	if t != nil {
 		at = t.Hex
+	}
+	// A character named who fell before the shot came up can no longer be
+	// shot at (12.6, 14.6): the player would have named another target, or
+	// done nothing (11.3), when revealing it; a plan fixed at the start of
+	// the turn cannot, so the shot is held.
+	if t != nil && target != p && t.Status != Alive {
+		*evs = append(*evs, Event{Seg: seg, Player: p, Kind: EvNothing, Action: a.Code, To: at, Target: target, Reason: ReasonOutOfFight})
+		return NoSeat, nil
 	}
 	// The target, a character either way by now, out of sight (31) holds
 	// the shot like an empty hex: nothing fires, the aim stays where it is.

@@ -307,6 +307,8 @@ func describeEvent(g *Game, e engine.Event) string {
 			what = who + " holds fire: nobody in " + e.To
 		case engine.ReasonNoLOS:
 			what = who + " holds fire: " + seatLabel(g, e.Target) + " in " + e.To + " is out of sight"
+		case engine.ReasonOutOfFight:
+			what = who + " holds fire: " + seatLabel(g, e.Target) + " is out of the fight"
 		default:
 			what = who + " does nothing (" + action + ")"
 		}

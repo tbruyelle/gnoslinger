@@ -19,11 +19,11 @@ const (
 
 // Action is one card side chosen for the turn, with its committed choice.
 type Action struct {
-	Card int
-	Side byte // cards.FrontSide or cards.BackSide
-	Code cards.Code
-	Cost int
-	Dir  hex.Rel // committed relative direction, "" when the side takes none
+	Card   int
+	Side   byte // cards.FrontSide or cards.BackSide
+	Code   cards.Code
+	Cost   int
+	Dir    hex.Rel // committed relative direction, "" when the side takes none
 	Gun    int     // id of the character's gun for a gun choice (Draw & Cock), 0 when none
 	Ground int     // id of the gun on the ground to pick up (Draw & Cock, "g<id>"), 0 when none
 	Hand   int     // destination hand code for a gun choice (HandGun...), -1 when the side takes none

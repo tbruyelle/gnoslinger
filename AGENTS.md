@@ -272,7 +272,14 @@ nobody there, or with that character out of sight (rule 31, below), it is
 held, like a Shoot doing nothing: no card, no shell, the gun stays cocked
 and the aim is kept (a `nothing` event, Reason `empty_hex`, or `no_los`
 with `Target` the hidden seat; a shot at `@1` out of sight is held the
-same way).
+same way). So is a shot at `@1` once that character is out of the fight
+(killed, passed out, surrendered, run away; Reason `out_of_fight`,
+`Target` the seat): it cannot be a target any more (12.6, 14.6). The rules
+have the player state an action's choice when revealing it (7.4, 7.7),
+after the previous one, so the player would name someone else or do
+nothing (11.3); a hidden plan fixes every choice (targets, directions,
+options) at the start of the turn, and holding the shot is the nearest
+to doing nothing. An aim at a fallen character is cancelled (`no_target`).
 At most 5 entries, empty = pass. Example `1f:ahead_left,2f:ahead,3f`. Rules
 (engine `Plan.Validate`): one side per card, dir required for move/turn
 cards and in the right set, no choice otherwise, Draw & Cock needs a gun of
