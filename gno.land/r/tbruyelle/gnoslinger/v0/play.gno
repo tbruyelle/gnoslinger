@@ -374,11 +374,13 @@ func Surrender(cur realm, id string) {
 
 // ClaimTimeout ends the wait of a turn past its deadline. Anyone may call
 // it. A game waiting for players has no timeout (its creator may cancel
-// it). While the plans are committed, past the deadline: when nobody
-// committed, the game is abandoned; otherwise each player who did not
-// misses the turn: it is passed for them, unless that makes MaxMissed in a
-// row, which puts the character out of the fight (out of time counts as
-// surrendering); the game then goes on to the reveals. While they are
+// it). While the plans are committed, past the deadline: each player who
+// did not commit misses the turn: it is passed for them, unless that makes
+// MaxMissed in a row, which puts the character out of the fight (out of
+// time counts as surrendering); the game then goes on to the reveals, and
+// with nobody's plan in, the turn resolves empty. A showdown nobody plays
+// any more so ends after MaxMissed claims, everyone out of the fight (its
+// stakes given back, stakes.gno). While they are
 // revealed, RevealGrace past the deadline (the timelocked plans had time
 // to be opened, which is how a vanished player's plan normally comes in):
 // every character whose plan is still not in misses the turn the same way.
@@ -401,20 +403,13 @@ func ClaimTimeout(cur realm, id string) {
 		}
 		panic("gnoslinger: the game has not timed out yet")
 	}
-	switch {
-	case g.Phase == PhasePlanning && !anyCommitted(g):
-		g.finish(cur, "abandoned")
-		save(g)
-		return
-	default:
-		for p := range g.Players {
-			late := !g.committed(p) // planning: no commit
-			if g.Phase == PhaseRevealing {
-				late = !g.Revealed[p] // revealing: no plan in
-			}
-			if g.State.Chars[p].Status == engine.Alive && late {
-				missTurn(g, p)
-			}
+	for p := range g.Players {
+		late := !g.committed(p) // planning: no commit
+		if g.Phase == PhaseRevealing {
+			late = !g.Revealed[p] // revealing: no plan in
+		}
+		if g.State.Chars[p].Status == engine.Alive && late {
+			missTurn(g, p)
 		}
 	}
 	if engine.AliveCount(g.State) <= 1 {
@@ -442,14 +437,4 @@ func missTurn(g *Game, p int) {
 	c.PlayedRun = false
 	g.Plans[p] = ""
 	g.Revealed[p] = true
-}
-
-// anyCommitted reports whether a plan was committed this turn.
-func anyCommitted(g *Game) bool {
-	for p := range g.Players {
-		if g.Commits[p].Hash != "" || g.Revealed[p] && g.Salts[p] != "" {
-			return true
-		}
-	}
-	return false
 }

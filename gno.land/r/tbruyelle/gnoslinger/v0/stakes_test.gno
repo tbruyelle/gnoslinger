@@ -93,7 +93,8 @@ func TestStakeCancelAndAbandon(cur realm, t *testing.T) {
 	uassert.Equal(t, int64(fiveGnot), balance(alice)-aliceBefore)
 	uassert.Equal(t, int64(fiveGnot), balance(bob)-bobBefore)
 
-	// Abandoned, nobody playing in time: the stakes go back too, no cut.
+	// Nobody playing any more, everyone ends out of time: the stakes go
+	// back too, no cut.
 	houseBefore := House()
 	stake(fiveGnot)
 	id = CreateGame(cross(cur), 2, 10, 5, "A-D5", 3)
@@ -102,11 +103,14 @@ func TestStakeCancelAndAbandon(cur realm, t *testing.T) {
 	JoinGame(cross(cur), id, "A-H7", 0)
 	stake(0)
 	aliceBefore, bobBefore = balance(alice), balance(bob)
-	testing.SkipHeights(61) // past the 5 minute timeout
 	testing.SetRealm(testing.NewUserRealm(carol))
-	ClaimTimeout(cross(cur), id)
+	for i := 0; i < MaxMissed; i++ {
+		testing.SkipHeights(61) // past the 5 minute timeout
+		ClaimTimeout(cross(cur), id)
+	}
 	g := getGame(id)
-	uassert.Equal(t, "abandoned", g.EndReason)
+	uassert.Equal(t, "timeout", g.EndReason)
+	uassert.Equal(t, int64(fiveGnot), g.Payouts[0])
 	uassert.Equal(t, int64(fiveGnot), balance(alice)-aliceBefore)
 	uassert.Equal(t, int64(fiveGnot), balance(bob)-bobBefore)
 	uassert.Equal(t, houseBefore, House())

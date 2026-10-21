@@ -402,16 +402,15 @@ export class LobbyView {
         if (g.phase === "revealing" && m.revealIds.includes(g.id)) return row("gl-card", g, versus(g), `${turn} · every plan is in: reveal yours`, btn("REVEAL"));
         if (claimable(g, now)) {
           const mine = g.players.find((p) => p.addr === m.address);
-          // As the game screen puts it: nobody committed ends the showdown, else the turn goes on without the late ones.
-          if (g.phase === "planning" && !g.players.some((p) => p.committed)) {
-            return row("gl-card over", g, versus(g), `${turn} · nobody played in time: call time to end the showdown, without a winner`, '<span class="gl-pill over">OUT OF TIME</span>' + btn("CALL TIME"));
-          }
+          // As the game screen puts it: the turn goes on without the late ones, an empty turn if nobody played.
           const why =
             g.phase === "revealing"
               ? "plans were not revealed in time"
-              : mine && !mine.committed && (mine.status ?? "alive") === "alive"
-                ? "your plan did not come in time"
-                : "the others did not play in time";
+              : !g.players.some((p) => p.committed)
+                ? "nobody played in time"
+                : mine && !mine.committed && (mine.status ?? "alive") === "alive"
+                  ? "your plan did not come in time"
+                  : "the others did not play in time";
           return row("gl-card over", g, versus(g), `${turn} · ${why}: call time to go on`, '<span class="gl-pill over">OUT OF TIME</span>' + btn("CALL TIME"));
         }
         const pill = `<span class="gl-pill${runningOut(left, g.timeout) ? " late" : ""}">${esc(formatLeft(left))} left</span>`;
@@ -487,7 +486,7 @@ export class LobbyView {
     const timeouts = m.timeoutOptions.map((o, i) => `<option value="${i}"${i === m.timeoutIndex ? " selected" : ""}>${esc(o.label)}</option>`).join("");
     const stakes = m.stakeOptions.map((s) => `<option value="${s}"${s === m.stake ? " selected" : ""}>${esc(stakeOption(s))}</option>`).join("");
     const stakeNote = m.stake
-      ? `Every player puts ${formatGnot(m.stake)} in, signed in Adena. The winner takes ${formatGnot(winnings(m.stake, m.seats))}, the house keeping ${HOUSE_CUT_PERCENT}% for events; a draw splits it, a cancelled or abandoned showdown gives the stakes back.`
+      ? `Every player puts ${formatGnot(m.stake)} in, signed in Adena. The winner takes ${formatGnot(winnings(m.stake, m.seats))}, the house keeping ${HOUSE_CUT_PERCENT}% for events; a draw splits it; a showdown cancelled, or that everyone lets run out of time, gives the stakes back.`
       : "Played for the glory and the ranking only.";
     const disabled = m.status !== "ready" ? " disabled" : "";
     return (

@@ -5,7 +5,7 @@ import { formatCoins } from "../chain/rpc";
  * player puts the stake in (CreateGame and JoinGame send it, always signed
  * in Adena); the winner takes the pot less the house's cut, a draw splits
  * it between the seats tied for the most victory points, a showdown
- * cancelled or abandoned gives the stakes back.
+ * cancelled, or ended with everyone out of time, gives the stakes back.
  */
 
 /** The share of the pot the house keeps, for events (the realm's HouseCutPercent). */
@@ -41,10 +41,11 @@ export function winnings(stake: number, seats: number): number {
  * 9.5 GNOT", "Your 5 GNOT stake came back", "You lost your 5 GNOT stake";
  * "" for a free showdown or one not paid yet.
  */
-export function payoutLine(g: { stake?: number; payouts?: number[]; endReason?: string }, seat: number): string {
+export function payoutLine(g: { stake?: number; payouts?: number[] }, seat: number): string {
   if (!g.stake || !g.payouts?.length || seat < 0) return "";
   const got = g.payouts[seat] ?? 0;
-  if (g.endReason === "abandoned") return `Your ${formatGnot(g.stake)} stake came back`;
+  // Every seat got its stake back, which only a refund gives (a split comes after the house's cut).
+  if (g.payouts.every((p) => p === g.stake)) return `Your ${formatGnot(g.stake)} stake came back`;
   if (got === 0) return `You lost your ${formatGnot(g.stake)} stake`;
   return `You won ${formatGnot(got)}`;
 }

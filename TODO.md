@@ -27,23 +27,11 @@
   - Real bonus cards from the game
 
 ## Tutorial
-- Basic tutorial
-  - Movement
-  - win conditions (dead or runaway)
-  - draw & cock
-  - aim & shoot
 - Advanced tutorial
 
 ## Lobby
-- change showdown line representation, especially the icon of it, it represents
-  the adversaries biut it should show the player icon (what is displayued when
-  players are >2 ?)
 - allow winner to remove replay to be refunded for the deposit
 - Create game options
-  - Allow create game with pot
-    - join require to fill the pot with the same amount
-    - cancel game clawbacks the fund
-    - part of the pot is hold by the realm to create events
   - only the default gun
   - any gun bought
   - scenario

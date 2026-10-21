@@ -5,6 +5,8 @@ import (
 	"chain/banker"
 	"chain/runtime/unsafe"
 	"strconv"
+
+	"gno.land/p/tbruyelle/gnoslinger/engine/v0"
 )
 
 // Stakes (this project's, not the board game's): a showdown may be played
@@ -13,8 +15,9 @@ import (
 // showdown ends the house keeps HouseCutPercent of the pot for events, and
 // the winner takes the rest; a draw splits it between the seats tied for
 // the most victory points (what does not divide evenly goes to the house).
-// A showdown abandoned with nobody playing in time, or cancelled before it
-// starts, gives every stake back in full. The admin, the deployer at
+// A showdown that ends with nobody left in the fight, everyone out of time
+// (or abandoned, in games from before every timeout passed the turn), or
+// cancelled before it starts, gives every stake back in full. The admin, the deployer at
 // first, may send the house's funds out (WithdrawHouse): a later version of
 // the realm cannot reach this one's balance.
 
@@ -68,7 +71,7 @@ func pay(cur realm, to address, amount int64) {
 }
 
 // refundStakes gives every seated player its stake back: the showdown
-// was cancelled or abandoned. Payouts records it, so a finished game says
+// was cancelled, or nobody was left to win it. Payouts records it, so a finished game says
 // what each seat got.
 func (g *Game) refundStakes(cur realm) {
 	if g.Pot == 0 {
@@ -91,7 +94,7 @@ func (g *Game) payPot(cur realm) {
 	if g.Pot == 0 || g.Payouts != nil {
 		return
 	}
-	if g.EndReason == "abandoned" { // nobody played: nothing was won
+	if g.nobodyWon() {
 		g.refundStakes(cur)
 		return
 	}
@@ -118,6 +121,13 @@ func (g *Game) payPot(cur realm) {
 	}
 	g.HouseCut = cut
 	house += cut
+}
+
+// nobodyWon tells a showdown that ended with nobody left in the fight
+// because everyone ran out of time (or, from before every timeout passed
+// the turn, abandoned): nobody played it to the end, nothing was won.
+func (g *Game) nobodyWon() bool {
+	return g.EndReason == "abandoned" || g.EndReason == "timeout" && engine.AliveCount(g.State) == 0
 }
 
 // WithdrawHouse sends amount ugnot of the house's funds to an address.

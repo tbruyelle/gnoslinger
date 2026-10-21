@@ -660,18 +660,48 @@ func TestClaimTimeout(cur realm, t *testing.T) {
 	uassert.Equal(t, 0, g.Winner)
 	uassert.Equal(t, "out", g.State.Chars[1].Status.String())
 
-	// No plan in: abandoned.
+	// No plan in: every claim passes the turn for everyone, the turn
+	// resolves empty; at the MaxMissed-th, nobody is left in the fight.
 	testing.SetRealm(testing.NewUserRealm(alice))
 	id = CreateGame(cross(cur), 2, 10, 30, "A-D5", 3)
 	testing.SetRealm(testing.NewUserRealm(bob))
 	JoinGame(cross(cur), id, "A-H7", 0)
+	g = getGame(id)
+	for turn := 1; turn < MaxMissed; turn++ {
+		testing.SkipHeights(361)
+		ClaimTimeout(cross(cur), id)
+		uassert.Equal(t, "planning", g.Phase.String())
+		uassert.Equal(t, turn+1, g.Turn)
+		uassert.Equal(t, turn, len(g.Turns))
+		uassert.Equal(t, turn, g.Missed[0])
+		uassert.Equal(t, turn, g.Missed[1])
+	}
 	testing.SkipHeights(361)
 	ClaimTimeout(cross(cur), id)
-	g = getGame(id)
-	uassert.Equal(t, "abandoned", g.EndReason)
+	uassert.Equal(t, "finished", g.Phase.String())
+	uassert.Equal(t, "timeout", g.EndReason)
 	uassert.Equal(t, -1, g.Winner)
-	uassert.Equal(t, 0, len(g.Awards))
-	uassert.Equal(t, "alive", g.State.Chars[0].Status.String())
+	uassert.Equal(t, "out", g.State.Chars[0].Status.String())
+	uassert.Equal(t, "out", g.State.Chars[1].Status.String())
+	uassert.True(t, g.nobodyWon())
+
+	// A character passed automatically (5 delay or more) has its plan in:
+	// the other one, late, misses the turn, which resolves; the showdown
+	// goes on (it used to end abandoned, the late winner losing it all).
+	testing.SetRealm(testing.NewUserRealm(alice))
+	id = CreateGame(cross(cur), 2, 10, 30, "A-D5", 3)
+	testing.SetRealm(testing.NewUserRealm(bob))
+	JoinGame(cross(cur), id, "A-H7", 0)
+	g = getGame(id)
+	g.State.Chars[1].Delay = 6
+	progress(cur, g)
+	uassert.True(t, g.Revealed[1])
+	testing.SkipHeights(361)
+	ClaimTimeout(cross(cur), id)
+	uassert.Equal(t, "planning", g.Phase.String())
+	uassert.Equal(t, 2, g.Turn)
+	uassert.Equal(t, 1, g.Missed[0])
+	uassert.Equal(t, 0, g.Missed[1])
 }
 
 func TestLateMoves(cur realm, t *testing.T) {

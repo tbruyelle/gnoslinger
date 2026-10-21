@@ -1927,14 +1927,15 @@ export class GameScene extends Phaser.Scene {
         points: "",
         lines: [],
         empty: "Your plan did not come in time: the turn takes no more plans.",
-        note: !sentBy.length
-          ? "Nobody sent a plan: calling time ends the showdown without a winner."
-          : out
-            ? `${sentBy.join(", ")} sent a plan: calling time puts you out of the fight, ${MAX_MISSED} missed turns in a row${view.players.length > 2 ? "; the others fight on" : ""}.`
-            : `${sentBy.join(", ")} sent a plan: calling time passes the turn for you, missed turn ${missed} of ${MAX_MISSED} in a row (at ${MAX_MISSED}, you are out of the fight).`,
+        // Nobody's plan in, the turn is passed for everyone late and resolves empty.
+        note:
+          `${sentBy.length ? `${sentBy.join(", ")} sent a plan` : "Nobody sent a plan"}: calling time ` +
+          (out
+            ? `puts you out of the fight, ${MAX_MISSED} missed turns in a row${view.players.length > 2 ? "; the others fight on" : ""}.`
+            : `passes the turn for you${sentBy.length ? "" : " and the others"}, missed turn ${missed} of ${MAX_MISSED} in a row (at ${MAX_MISSED}, you are out of the fight).`),
         warn: true,
         buttons: [
-          { id: "claim", label: "CALL TIME", tone: sentBy.length && out ? "danger" : "primary" },
+          { id: "claim", label: "CALL TIME", tone: out ? "danger" : "primary" },
           replay,
           lobby,
         ],

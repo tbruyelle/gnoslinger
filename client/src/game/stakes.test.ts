@@ -15,7 +15,9 @@ describe("stakes", () => {
     const over = { stake: 5_000_000, payouts: [9_500_000, 0], endReason: "surrender" };
     expect(payoutLine(over, 0)).toBe("You won 9.5 GNOT");
     expect(payoutLine(over, 1)).toBe("You lost your 5 GNOT stake");
-    expect(payoutLine({ stake: 5_000_000, payouts: [5_000_000, 5_000_000], endReason: "abandoned" }, 1)).toBe("Your 5 GNOT stake came back");
+    expect(payoutLine({ stake: 5_000_000, payouts: [5_000_000, 5_000_000] }, 1)).toBe("Your 5 GNOT stake came back");
+    // A draw splits the pot after the cut: not a refund.
+    expect(payoutLine({ stake: 5_000_000, payouts: [4_750_000, 4_750_000] }, 1)).toBe("You won 4.75 GNOT");
     expect(payoutLine({ stake: 0, payouts: [] }, 0)).toBe("");
     expect(payoutLine(over, -1)).toBe("");
   });

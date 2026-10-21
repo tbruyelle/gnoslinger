@@ -17,7 +17,7 @@ import "chain"
 //	VictoryPoints id seat player reason points   (one per award at the end of a turn or of the showdown, rule 15; points < 0 for a loss)
 //	GameEnded     id reason winner
 //	PotPaid       id seat player amount   (ugnot; one per winner, a draw splitting the pot, stakes.gno)
-//	StakeRefunded id seat player amount   (a cancelled or abandoned showdown gives the stakes back)
+//	StakeRefunded id seat player amount   (a showdown cancelled, or ended with everyone out of time, gives the stakes back)
 //	HouseWithdrawn to amount
 //	AdminChanged  admin
 //
