@@ -1064,10 +1064,11 @@ export class GameScene extends Phaser.Scene {
     // Joining: I set my character up in the next free seat while the
     // showdown waits for players; once it went on without me, I only
     // watch; once the chain shows me seated, the set up is over.
-    if (this.setup?.req.kind === "join" && view.phase !== "waiting") {
-      showToast(this, view.phase === "planning" ? "The seats filled up without you" : "This showdown is over", "info");
+    // Seated first: my own join may be what took the last seat.
+    if (this.setup?.req.kind === "join" && seatOf(view, this.chain.wallet.address) >= 0) {
       this.endSetup();
-    } else if (this.setup?.req.kind === "join" && seatOf(view, this.chain.wallet.address) >= 0) {
+    } else if (this.setup?.req.kind === "join" && view.phase !== "waiting") {
+      showToast(this, view.phase === "planning" ? "The seats filled up without you" : "This showdown is over", "info");
       this.endSetup();
     }
     const turnChanged = view.turn !== this.renderedTurn;
@@ -2461,8 +2462,15 @@ export class GameScene extends Phaser.Scene {
         await this.chain.realm.joinGame(this.gameID, setup.hex, setup.facing, setup.req.stake);
         if (!this.scene.isActive()) return;
         this.endSetup();
-        this.mode = "sync";
-        this.renderView();
+        // The poll may have seen the join land first (a stake waits for
+        // Adena's popup): then the view is current and no new revision
+        // will come to move on from "sync".
+        if (this.view && seatOf(this.view, this.chain.wallet.address) >= 0) {
+          this.applyState(false);
+        } else {
+          this.mode = "sync";
+          this.renderView();
+        }
         await this.poller?.pokeNow();
       }
     } catch (e) {
