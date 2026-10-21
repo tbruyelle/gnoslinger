@@ -3143,6 +3143,15 @@ export class GameScene extends Phaser.Scene {
    * that just resolved: closing it re-syncs the board and moves on.
    */
   private startPlayback(turns: TurnResult[], live: boolean, index = 0) {
+    // A turn where nothing happened (nobody's plan in, time called) has nothing to show: say so and move on.
+    const only = turns.length === 1 ? turns[0] : null;
+    if (live && only && only.events.length === 0) {
+      saveSeenTurn(this.revealScope(), this.gameID, only.turn);
+      this.shownResultTurn = only.turn;
+      showToast(this, `Turn ${only.turn} passed: nothing happened`, "info");
+      this.applyState(false);
+      return;
+    }
     this.stopAuto();
     this.clearSelection();
     this.playback = { turns, index, seg: 0, cut: null, anim: 0, live, auto: null };
