@@ -131,8 +131,16 @@ const CSS = `
 .gl-card{display:flex;flex-wrap:wrap;align-items:center;gap:12px 18px;background:#FBF4E4;border:2px solid #2A1C14;border-radius:12px;padding:12px 14px}
 .gl-line{display:flex;flex-wrap:wrap;align-items:center;gap:12px 18px;border-bottom:2px dashed #CBB892;padding:6px 4px 12px}
 .gl-line:last-child{border-bottom:0;padding-bottom:4px}
-.gl-token{width:44px;height:44px;flex-shrink:0}
-.gl-card .gl-token{width:52px;height:52px}
+.gl-crest{position:relative;flex-shrink:0;width:50px;height:50px}
+.gl-card .gl-crest{width:58px;height:58px}
+.gl-crest-me{display:block;width:44px;height:44px;border-radius:50%;background:#FBF4E4;box-shadow:0 0 0 3px var(--seat)}
+.gl-card .gl-crest-me{width:52px;height:52px}
+.gl-crest-me img{width:100%;height:100%}
+.gl-minis{position:absolute;right:0;bottom:0;display:flex}
+.gl-mini{width:22px;height:22px;margin-left:-8px;border-radius:50%;background:#FBF4E4;border:2px solid var(--seat);overflow:hidden}
+.gl-mini:first-child{margin-left:0}
+.gl-mini img{width:100%;height:100%;display:block}
+.gl-mini.free{border-style:dashed;background:#F3E7CE}
 .gl-what{flex:1 1 220px;min-width:0;display:flex;flex-direction:column;gap:2px}
 .gl-title{font-size:19px;font-weight:700}
 .gl-card .gl-title{font-size:20px}
@@ -203,6 +211,28 @@ function esc(s: string): string {
 /** A character's token, turned upright as on the character sheet. */
 function tokenImg(char: string, cls = "gl-token"): string {
   return `<img class="${cls}" src="char_${esc(char)}.png" alt="" style="transform: rotate(${uprightTokenAngle(char)}deg)">`;
+}
+
+/**
+ * A showdown's line icon: the character I play (or would join as), ringed in
+ * its seat colour, and the other seats' tokens small over its corner, an empty
+ * seat as a dashed ring.
+ */
+function crest(players: GameSummary["players"], seat: number): string {
+  const main = players[seat];
+  const char = main?.char || seatChar(seat);
+  const minis = players
+    .map((p, i) => {
+      if (i === seat) return "";
+      const style = `style="--seat:${seatColor(i)}"`;
+      if (!p.addr) return `<span class="gl-mini free" ${style} title="${esc(`Free seat: ${charName(seatChar(i))}`)}"></span>`;
+      return `<span class="gl-mini" ${style} title="${esc(`${charName(p.char)} · ${playerLabel(p)}`)}">${tokenImg(p.char, "")}</span>`;
+    })
+    .join("");
+  return (
+    `<span class="gl-crest"><span class="gl-crest-me" style="--seat:${seatColor(seat)}" title="${esc(charName(char))}">${tokenImg(char, "")}</span>` +
+    `<span class="gl-minis">${minis}</span></span>`
+  );
 }
 
 export class LobbyView {
@@ -337,9 +367,10 @@ export class LobbyView {
       if (g.phase === "waiting") return o.length === 0 ? `Waiting for players · ${seatsTaken(g)}` : `With ${names} · ${seatsTaken(g)}`;
       return "vs " + names;
     };
-    const token = (g: GameSummary) => others(g)[0]?.char ?? g.players.find((p) => p.addr === m.address)?.char ?? m.creatorChar;
+    // The lobby lists my games: I hold a seat in each (seat 0 should I not).
+    const mySeat = (g: GameSummary) => Math.max(0, g.players.findIndex((p) => p.addr === m.address));
     const row = (cls: string, g: GameSummary, title: string, detail: string, extra: string) =>
-      `<div class="${cls}">${tokenImg(token(g))}<div class="gl-what">` +
+      `<div class="${cls}">${crest(g.players, mySeat(g))}<div class="gl-what">` +
       `<span class="gl-title">${esc(title)}</span><span class="gl-detail">${esc(detail)}</span></div>${extra}</div>`;
 
     const yourMove = s.yourMove
@@ -401,14 +432,14 @@ export class LobbyView {
     const open = s.open
       .filter((g) => stillOffered(g, now) && nextSeat(g.players) >= 0)
       .map((g) => {
-        const c = g.players[0];
+        const seat = nextSeat(g.players);
         const seated = g.players.filter((p) => p.addr);
         const title = seated.map((p) => `${charName(p.char)} · ${playerLabel(p)}`).join(", ");
         return (
-          `<div class="gl-line">${tokenImg(c?.char ?? "")}<div class="gl-what">` +
+          `<div class="gl-line">${crest(g.players, seat)}<div class="gl-what">` +
           `<span class="gl-title">${esc(title)}</span>` +
           `<span class="gl-detail">${esc(`Game ${g.id} · ${seatsTaken(g)} · ${g.maxTurns} turns · ${formatDuration(g.timeout)} per turn`)}</span></div>` +
-          `<button type="button" class="gl-join" data-act="join" data-id="${esc(g.id)}">Join as ${esc(charName(seatChar(nextSeat(g.players))))}</button></div>`
+          `<button type="button" class="gl-join" data-act="join" data-id="${esc(g.id)}">Join as ${esc(charName(seatChar(seat)))}</button></div>`
         );
       })
       .join("");

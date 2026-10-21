@@ -565,7 +565,10 @@ calls; `testing.SkipHeights(n)` advances block time 5 s per height.
   ends without a winner; the game screen's buttons say CLOSE THE TURN or
   CLOSE THE SHOWDOWN, the UI's word for a claim), **Waiting on others**,
   **Open showdowns** to join (those with a join or the call within a week, `stillOffered`), **Finished** (Replay) and the **New showdown**
-  form (turns 10 to 30, time per turn). Under the form, **Top guns** lists the first 5 of the ranking (refreshed
+  form (turns 10 to 30, time per turn). Each showdown's line shows my
+  character's token (on an open showdown, the one I would join as) ringed
+  in its seat's colour, the other seats' tokens small over its corner, a
+  free seat as a dashed ring (`crest`). Under the form, **Top guns** lists the first 5 of the ranking (refreshed
 with the games every 5 s; a player shows as its registered name, else its
 short address, `playerLabel`); a click anywhere on it opens the whole
 ranking in a dialog, 20 a page (`PLAYERS_PAGE`), whose rows open a
