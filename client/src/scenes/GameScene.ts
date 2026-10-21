@@ -1594,7 +1594,7 @@ export class GameScene extends Phaser.Scene {
       case "select": {
         if (!this.outOfTime()) return "Your move: pick your action cards";
         const sent = view.players.some((p, i) => i !== this.myIndex && p.addr && p.committed);
-        return sent ? "Out of time: your plan did not come in, close the turn" : "Out of time: nobody played, close the showdown";
+        return sent ? "Out of time: your plan did not come in, call time" : "Out of time: nobody played, call time";
       }
       case "submitting":
         return "Signing your plan…";
@@ -1603,12 +1603,12 @@ export class GameScene extends Phaser.Scene {
         const me = this.myIndex >= 0 ? view.players[this.myIndex] : null;
         const pending = this.pendingNames();
         if (view.phase === "revealing") {
-          if (this.outOfTime() && !this.openWaits()) return `No plan from ${pending}: close the turn`;
+          if (this.outOfTime() && !this.openWaits()) return `No plan from ${pending}: call time`;
           if (this.ownRevealWaits()) return "Every plan is in: reveal your plan";
           if (this.openWaits()) return "Plans left unrevealed: open them";
           return `Revealing the plans: waiting for ${pending}…`;
         }
-        if (this.outOfTime()) return `Out of time for ${pending}: close the turn`;
+        if (this.outOfTime()) return `Out of time for ${pending}: call time`;
         if (me && me.delay >= MAX_ACTION_POINTS) return `Too much delay to act this turn (${me.delay}): you pass, waiting for ${pending}…`;
         return `Plan sent, waiting for ${pending}…`;
       }
@@ -1928,13 +1928,13 @@ export class GameScene extends Phaser.Scene {
         lines: [],
         empty: "Your plan did not come in time: the turn takes no more plans.",
         note: !sentBy.length
-          ? "Nobody sent a plan: the showdown ends without a winner once closed."
+          ? "Nobody sent a plan: calling time ends the showdown without a winner."
           : out
-            ? `${sentBy.join(", ")} sent a plan: closing the turn puts you out of the fight, ${MAX_MISSED} missed turns in a row${view.players.length > 2 ? "; the others fight on" : ""}.`
-            : `${sentBy.join(", ")} sent a plan: closing the turn passes it for you, missed turn ${missed} of ${MAX_MISSED} in a row (at ${MAX_MISSED}, you are out of the fight).`,
+            ? `${sentBy.join(", ")} sent a plan: calling time puts you out of the fight, ${MAX_MISSED} missed turns in a row${view.players.length > 2 ? "; the others fight on" : ""}.`
+            : `${sentBy.join(", ")} sent a plan: calling time passes the turn for you, missed turn ${missed} of ${MAX_MISSED} in a row (at ${MAX_MISSED}, you are out of the fight).`,
         warn: true,
         buttons: [
-          { id: "claim", label: sentBy.length ? "CLOSE THE TURN" : "CLOSE THE SHOWDOWN", tone: sentBy.length && out ? "danger" : "primary" },
+          { id: "claim", label: "CALL TIME", tone: sentBy.length && out ? "danger" : "primary" },
           replay,
           lobby,
         ],
@@ -2005,8 +2005,8 @@ export class GameScene extends Phaser.Scene {
         .filter(Boolean)
         .join(" and ");
       const note = due
-        ? `Out of time for ${pending}: closing the turn ${claimed || "moves the showdown on"}.`
-        : `Waiting for ${pending}. ${view.timeoutAt > 0 ? `You may close the turn in ${formatLeft(Math.max(0, view.timeoutAt + CHAIN_CLOCK_MARGIN - Date.now() / 1000))}.` : ""}`;
+        ? `Out of time for ${pending}: calling time ${claimed || "moves the showdown on"}.`
+        : `Waiting for ${pending}. ${view.timeoutAt > 0 ? `You may call time in ${formatLeft(Math.max(0, view.timeoutAt + CHAIN_CLOCK_MARGIN - Date.now() / 1000))}.` : ""}`;
       return {
         title: "Your plan",
         points: "sent",
@@ -2015,7 +2015,7 @@ export class GameScene extends Phaser.Scene {
         note,
         warn: due,
         buttons: [
-          ...(due ? [{ id: "claim", label: "CLOSE THE TURN", tone: "primary" as const }] : []),
+          ...(due ? [{ id: "claim", label: "CALL TIME", tone: "primary" as const }] : []),
           replay,
           { id: "surrender", label: "Surrender", tone: "danger" },
         ],
@@ -3109,7 +3109,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private async claimTimeout() {
-    await this.act(() => this.chain.realm.claimTimeout(this.gameID), "Timeout claimed");
+    await this.act(() => this.chain.realm.claimTimeout(this.gameID), "Time called");
   }
 
   /** The realm deletes a cancelled game, so there is nothing left to show: back to the lobby. */
@@ -3620,11 +3620,11 @@ export class GameScene extends Phaser.Scene {
     const lockAt = view.lockRound ? roundTime(view.lockRound) + DRAND_MARGIN : 0;
     const left = (t: number) => formatLeft(Math.max(0, t + CHAIN_CLOCK_MARGIN - Date.now() / 1000));
     let note: string;
-    if (due && !open) note = `${pending}: no plan came in, nor opened from its timelocked copy. Closing the turn passes it for them, a missed turn (out of the fight at ${MAX_MISSED} in a row).`;
+    if (due && !open) note = `${pending}: no plan came in, nor opened from its timelocked copy. Calling time passes it for them, a missed turn (out of the fight at ${MAX_MISSED} in a row).`;
     else if (this.revealing) note = "Revealing…";
     else if (own) note = auto ? "Revealing your plan…" : "Every plan is committed: reveal yours (one Adena signature).";
     else if (open) note = auto ? "Opening the plans left unrevealed…" : "Some plans were not revealed: their timelocked copies can be opened now.";
-    else if (lockAt) note = `Waiting for ${pending} to reveal. Their timelocked plans open in ${left(lockAt)}; the turn can be closed in ${left(view.revealUntil)}.`;
+    else if (lockAt) note = `Waiting for ${pending} to reveal. Their timelocked plans open in ${left(lockAt)}; time can be called in ${left(view.revealUntil)}.`;
     else note = `Waiting for ${pending} to reveal.`;
     return {
       title: "Your plan",
@@ -3636,7 +3636,7 @@ export class GameScene extends Phaser.Scene {
       buttons: [
         ...(own && !auto ? [{ id: "reveal", label: "REVEAL", tone: "primary" as const, disabled: this.revealing }] : []),
         ...(open && !auto ? [{ id: "open", label: "OPEN THE PLANS", tone: "primary" as const, disabled: this.revealing }] : []),
-        ...(due && !open ? [{ id: "claim", label: "CLOSE THE TURN", tone: "primary" as const }] : []),
+        ...(due && !open ? [{ id: "claim", label: "CALL TIME", tone: "primary" as const }] : []),
         replay,
       ],
     };

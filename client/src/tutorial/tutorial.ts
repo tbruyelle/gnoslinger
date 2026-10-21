@@ -229,7 +229,7 @@ export function tutorialCoach(s: { turn: number; phase: string; playbackTurn: nu
   if (s.playbackTurn !== null) {
     const text = PLAYBACK[s.playbackTurn - 1];
     if (!text) return null;
-    return { step: step(s.playbackTurn), title: `Turn ${s.playbackTurn}`, text: [text], todo: "Press PLAY, or step through the segments with ▶, then close the turn with the cross at the top right." };
+    return { step: step(s.playbackTurn), title: `Turn ${s.playbackTurn}`, text: [text], todo: "Press PLAY, or step through the segments with ▶, then close the playback with the cross at the top right." };
   }
   const lesson = PLANNING[s.turn - 1];
   if (!lesson) return null;

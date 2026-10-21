@@ -404,7 +404,7 @@ export class LobbyView {
           const mine = g.players.find((p) => p.addr === m.address);
           // As the game screen puts it: nobody committed ends the showdown, else the turn goes on without the late ones.
           if (g.phase === "planning" && !g.players.some((p) => p.committed)) {
-            return row("gl-card over", g, versus(g), `${turn} · nobody played in time: close the showdown, without a winner`, '<span class="gl-pill over">OUT OF TIME</span>' + btn("CLOSE"));
+            return row("gl-card over", g, versus(g), `${turn} · nobody played in time: call time to end the showdown, without a winner`, '<span class="gl-pill over">OUT OF TIME</span>' + btn("CALL TIME"));
           }
           const why =
             g.phase === "revealing"
@@ -412,7 +412,7 @@ export class LobbyView {
               : mine && !mine.committed && (mine.status ?? "alive") === "alive"
                 ? "your plan did not come in time"
                 : "the others did not play in time";
-          return row("gl-card over", g, versus(g), `${turn} · ${why}: close the turn to go on`, '<span class="gl-pill over">OUT OF TIME</span>' + btn("CLOSE"));
+          return row("gl-card over", g, versus(g), `${turn} · ${why}: call time to go on`, '<span class="gl-pill over">OUT OF TIME</span>' + btn("CALL TIME"));
         }
         const pill = `<span class="gl-pill${runningOut(left, g.timeout) ? " late" : ""}">${esc(formatLeft(left))} left</span>`;
         return row("gl-card", g, versus(g), withStake(turn, g), pill + btn("PLAY"));
@@ -498,7 +498,7 @@ export class LobbyView {
       `<span class="gl-note">Each on their own, in the order they join: ${lineUp}.</span></div>` +
       `<div class="gl-field"><label for="gl-turns">Turns</label><select id="gl-turns">${turns}</select></div>` +
       `<div class="gl-field"><label for="gl-timeout">Time to play each turn</label><select id="gl-timeout">${timeouts}</select>` +
-      '<span class="gl-note">Past it, anyone may close the turn: a player who did not play passes it, and is out of the fight at the third in a row.</span></div>' +
+      '<span class="gl-note">Past it, anyone may call time: a player who did not play passes it, and is out of the fight at the third in a row.</span></div>' +
       `<div class="gl-field"><label for="gl-stake">Stake</label><select id="gl-stake">${stakes}</select>` +
       `<span class="gl-note">${esc(stakeNote)}</span></div>` +
       `<button type="button" class="gl-create" data-act="create"${disabled}>CALL A SHOWDOWN</button>` +

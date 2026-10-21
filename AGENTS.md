@@ -597,10 +597,10 @@ calls; `testing.SkipHeights(n)` advances block time 5 s per height.
   Quit), **Your move** (running games without my plan, the time left before
   a timeout can be claimed, red when running out; then the running games
   out of time, mine to claim, `claimable`, as brick OUT OF TIME cards with
-  a CLOSE button that opens the game, saying what closing does: the turn
-  goes on without the late ones, or, nobody having committed, the showdown
-  ends without a winner; the game screen's buttons say CLOSE THE TURN or
-  CLOSE THE SHOWDOWN, the UI's word for a claim), **Waiting on others**,
+  a CALL TIME button that opens the game, saying what calling time does:
+  the turn goes on without the late ones, or, nobody having committed, the
+  showdown ends without a winner; the game screen's button says CALL TIME
+  too, the UI's words for a claim), **Waiting on others**,
   **Open showdowns** to join (those with a join or the call within a week, `stillOffered`), **Finished** (Replay) and the **New showdown**
   form (turns 10 to 30, time per turn, **Stake**: Free, 1, 5, 10 or 25
   GNOT, `game/stakes.ts`, its note saying what the winner takes; a line
