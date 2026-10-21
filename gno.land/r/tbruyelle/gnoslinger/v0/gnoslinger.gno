@@ -147,8 +147,16 @@ type Game struct {
 	EndReason string
 	// Awards are the victory points earned and lost so far (rule 15), at
 	// the end of each turn and of the showdown; VP adds them up per seat.
-	Awards    []engine.Award
-	VP        []int
+	Awards []engine.Award
+	VP     []int
+	// Stake is what each player puts in, in ugnot (0: a free showdown);
+	// Pot what the realm holds for the showdown, the stakes paid so far.
+	// Payouts is what each seat got once the showdown is over (nil before,
+	// and for a free one), HouseCut what the house kept (stakes.gno).
+	Stake     int64
+	Pot       int64
+	Payouts   []int64
+	HouseCut  int64
 	Rev       int // bumped on every change; clients poll it
 	CreatedAt time.Time
 	UpdatedAt time.Time
@@ -316,8 +324,9 @@ func (g *Game) award(cur realm, awards []engine.Award) {
 }
 
 // finish ends the game: the most victory points win, a tie for the most (a
-// game nobody played included) being a draw.
-func (g *Game) finish(reason string) {
+// game nobody played included) being a draw; the pot is paid out (cur,
+// the crossing call's, pays from the realm).
+func (g *Game) finish(cur realm, reason string) {
 	g.Phase = PhaseFinished
 	g.EndReason = reason
 	g.Winner = -1
@@ -338,6 +347,7 @@ func (g *Game) finish(reason string) {
 		w = g.Players[g.Winner].Addr.String()
 	}
 	emit("GameEnded", "id", g.ID, "reason", reason, "winner", w)
+	g.payPot(cur)
 }
 
 // save records a change: bumps the revision and the activity clock.

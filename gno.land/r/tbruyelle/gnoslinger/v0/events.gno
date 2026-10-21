@@ -4,7 +4,7 @@ import "chain"
 
 // Events emitted by the realm (type, attribute keys):
 //
-//	GameCreated       id creator char seats maxTurns timeoutMinutes hex facing
+//	GameCreated       id creator char seats maxTurns timeoutMinutes hex facing stake
 //	PlayerJoined      id player seat char hex facing
 //	PlanCommitted     id turn player seat
 //	AllCommitted      id turn   (every character in the fight committed: the reveals start)
@@ -16,6 +16,10 @@ import "chain"
 //	TurnResolved      id turn rev seed
 //	VictoryPoints id seat player reason points   (one per award at the end of a turn or of the showdown, rule 15; points < 0 for a loss)
 //	GameEnded     id reason winner
+//	PotPaid       id seat player amount   (ugnot; one per winner, a draw splitting the pot, stakes.gno)
+//	StakeRefunded id seat player amount   (a cancelled or abandoned showdown gives the stakes back)
+//	HouseWithdrawn to amount
+//	AdminChanged  admin
 //
 // They land in transaction results; clients still poll Game.Rev to sync.
 func emit(typ string, attrs ...string) {

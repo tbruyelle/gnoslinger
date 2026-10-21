@@ -103,7 +103,7 @@ assets/                     served as the Vite public dir (boards, tokens, cards
 ### Data
 `Game{ID, Players[]{Addr, Char}, State engine.State, Turn, MaxTurns, Timeout, Phase,
 Commits []Sealed{Hash, Locked}, Plans[], Salts[], Revealed[], Missed[], TurnStart, Turns []*TurnResult, Winner, EndReason, Awards
-[]engine.Award, VP[], Rev, CreatedAt, UpdatedAt}` stored in an `avl.Tree` by zero-padded `seqid`;
+[]engine.Award, VP[], Stake, Pot, Payouts[], HouseCut, Rev, CreatedAt, UpdatedAt}` stored in an `avl.Tree` by zero-padded `seqid`;
 `Players`, `Commits`, `Plans`, `Salts`, `Revealed`, `Missed` and `VP` have one entry per seat (2 to 4,
 `engine.MinPlayers`..`MaxPlayers`), the seats filling up in the order the
 players join (`Addr` "" while free; `seats`, `freeSeat`, `seated`,
@@ -159,6 +159,31 @@ rewritten `Game` (not broken down further); events (combat: shots, wounds,
 their cards) add a few hundred bytes. A 20-turn game is roughly 40–55 KB
 (4–5.5 GNOT) on top of create and join.
 
+### Stakes (`stakes.gno`)
+A showdown may be played for GNOT (this project's, not the board game's):
+the ugnot sent with `CreateGame` are its `Stake` (none: a free showdown),
+and every `JoinGame` must send exactly the same (refused otherwise); the
+realm holds them, the `Pot`. Coins are read with `unsafe.OriginSend()` and
+taken only from a direct user call (`IsUserCall`, so a realm in between
+cannot have spent the send), in ugnot only; every other crossing call
+refuses coins (`assertNoSend`), which would sit in the balance with no
+showdown to pay them. When the game finishes (`finish`, which takes the
+crossing call's `cur` to pay), `payPot`: the house keeps `HouseCutPercent`
+(5) for events, the winner takes the rest, a draw splits it between the
+seats tied for the most victory points (the remainder of the division to
+the house); `abandoned` (nobody committed in time) and `CancelGame` give
+every stake back in full (`refundStakes`). `Payouts` (per seat) and
+`HouseCut` record it; events `PotPaid`, `StakeRefunded`. The house's funds
+(`house`, `House()`) are the only part of the balance not owed to a game:
+the admin (`Admin()`, the deployer at first: test1 on gnodev) sends them
+out with `WithdrawHouse(to, amount)` and hands over with `SetAdmin`, since
+a later realm version cannot reach this one's balance. JSON: `stake`,
+`pot`, `payouts` (`[]` until paid), `houseCut` in `json/game` and the
+summaries; gnoweb shows the stake on the open games and the game page,
+the join link sends it, and the home page what the house holds. Checked
+on gnodev (2026-10-21): a 5 GNOT showdown won by surrender paid the
+winner 9.5 GNOT and the house 0.5; a join sending 1 GNOT was refused.
+
 ### Set up
 Rule 3.4 and the SET UP of a showdown (`engine/v0/setup.gno`, [H3]): each
 character of the showdown has its own hexes to set up in and a default
@@ -206,9 +231,9 @@ v0 once its running games are over.
 ### Crossing functions (called with MsgCall, args are strings)
 | Function | Notes |
 |---|---|
-| `CreateGame(cur, seats, maxTurns, timeoutMinutes, startHex, facing) string` | 2 to 4 seats; the caller in seat 0 as the showdown's first character (the marshal), standing in one of its hexes (`startHex`) facing 0 N … 5 NW; 10 to 30 turns (the client sends 20); the timeout is per turn, 0 = 2 days (5 min to 30 days); phase `waiting`, which has no timeout: the game stays open until its seats fill up or its creator cancels it |
-| `JoinGame(cur, id, startHex, facing)` | the first free seat and its character (the kid, then the reb, then the yankee), in one of its hexes; the last seat taken starts the game (phase `planning`, `GamesPlayed` for every seat; the turn clock starts there); refused to a player already seated |
-| `CancelGame(cur, id)` | creator, while a seat is free (players may have joined); deletes the game (and every seated player's `byPlayer` entry) so the creator gets the CreateGame storage deposit back; the client returns to the lobby once the game view answers "game not found" |
+| `CreateGame(cur, seats, maxTurns, timeoutMinutes, startHex, facing) string` | the ugnot sent are the stake (Stakes); 2 to 4 seats; the caller in seat 0 as the showdown's first character (the marshal), standing in one of its hexes (`startHex`) facing 0 N … 5 NW; 10 to 30 turns (the client sends 20); the timeout is per turn, 0 = 2 days (5 min to 30 days); phase `waiting`, which has no timeout: the game stays open until its seats fill up or its creator cancels it |
+| `JoinGame(cur, id, startHex, facing)` | must send the game's stake; the first free seat and its character (the kid, then the reb, then the yankee), in one of its hexes; the last seat taken starts the game (phase `planning`, `GamesPlayed` for every seat; the turn clock starts there); refused to a player already seated |
+| `CancelGame(cur, id)` | creator, while a seat is free (players may have joined); gives every stake back; deletes the game (and every seated player's `byPlayer` entry) so the creator gets the CreateGame storage deposit back; the client returns to the lobby once the game view answers "game not found" |
 | `Commit(cur, id, hash, locked) int` | **hidden plans** (`DESIGN_HIDDEN_PLANS.md`): phase `planning`, before the turn's deadline (`commitUntil`, `assertInTime`: past it the game can only be claimed), from a character in the fight that has not committed; `hash` is `PlanHash(id, turn, seat, salt, plan)` (64 lowercase hex), `locked` the salt and plan timelocked to the turn's `lockRound` (required, at most `MaxLocked` 1 KB; the client encrypts offline, so every commit can carry one); stores it (`Commits[seat]`, a `Sealed`), resets `Missed`; when every character in the fight committed, phase `revealing` (event `AllCommitted`); returns Rev. A player with 5 or more delay cannot play anything and is passed automatically (`progress`, event `PlanPassed`: revealed with the empty plan); with everyone passed, turns resolve by themselves until someone can act |
 | `Reveal(cur, id, turn, seat, salt, plan) int` | `turn` the one in progress. Phase `revealing`: anyone; the salt (1 to 64 hex) and plan must match the seat's hash; then the plan is validated (a target must be a seat of the game, not one's own) and stored with its salt, the commit cleared (its deposit refunded to the caller). Phase `planning`: the **last commit in clear**, only from the seat itself, before the deadline, once every other character in the fight committed (their plans are fixed by their hashes; a refused transaction still shows the plan, so the client only sends it when its poll shows exactly that); it counts as the seat's commit and reveal. The reveal that completes the turn (every character in the fight revealed, `allRevealed`) resolves it in the same tx |
 | `RevealMany(cur, id, turn, seats, salts, plans) int` | phase `revealing`, anyone: several seats at once, the lists separated by `;` (an empty plan is an empty field): what the opener of the timelocked plans sends, one drand round opening them all. A seat already revealed is skipped, and so is one whose salt and plan do not match its hash or whose plan is not valid (event `PlanUnopened`: the opener cannot check that before opening, and one bad plan must not hold the others back); bad lists, an unknown seat, the wrong turn or phase abort |
@@ -535,7 +560,9 @@ calls; `testing.SkipHeights(n)` advances block time 5 s per height.
   `Session…Error` at CheckTx, or "session not allowed error" at delivery
   when a storage deposit goes over), it falls back to Adena, and
   `ui/walletNotices.ts` says auto-sign stopped; past the limit it is not
-  tried again before the next spend period. `enable` sends
+  tried again before the next spend period. A call sending coins (a
+  stake) always goes through Adena, so the player signs the money it puts
+  in. `enable` sends
   `/auth.m_create_session` through Adena's `DoContract` (accepted since
   Adena's session-account release; `AdenaWallet.doMessages`), revoking the
   previous key of the browser in the same tx; `revoke` sends
@@ -575,7 +602,10 @@ calls; `testing.SkipHeights(n)` advances block time 5 s per height.
   ends without a winner; the game screen's buttons say CLOSE THE TURN or
   CLOSE THE SHOWDOWN, the UI's word for a claim), **Waiting on others**,
   **Open showdowns** to join (those with a join or the call within a week, `stillOffered`), **Finished** (Replay) and the **New showdown**
-  form (turns 10 to 30, time per turn). Each showdown's line shows my
+  form (turns 10 to 30, time per turn, **Stake**: Free, 1, 5, 10 or 25
+  GNOT, `game/stakes.ts`, its note saying what the winner takes; a line
+  shows the stake and pot, a finished one what I won or lost, the game
+  screen's title the pot). Each showdown's line shows my
   character's token (on an open showdown, the one I would join as) ringed
   in its seat's colour, the other seats' tokens small over its corner, a
   free seat as a dashed ring (`crest`). Under the form, **Top guns** lists the first 5 of the ranking (refreshed

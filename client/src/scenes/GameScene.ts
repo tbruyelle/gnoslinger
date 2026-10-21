@@ -37,6 +37,7 @@ import { DRAND_MARGIN, lastToCommit, openableSeats, ownRevealDue } from "../game
 import { openAndReveal } from "../game/opener";
 import { seatColor, seatColorNum } from "../ui/seats";
 import { TUTORIAL_GAME, TUTORIAL_HASH, tutorialChain, tutorialCoach } from "../tutorial/tutorial";
+import { formatGnot, payoutLine } from "../game/stakes";
 
 // ── Layout constants ────────────────────────────────────────────────────────
 
@@ -60,7 +61,10 @@ type Mode = "sync" | "setup" | "select" | "submitting" | "waiting" | "playback" 
  * (the board follows the chain: the seat moves on if someone takes it
  * first).
  */
-export type SetupRequest = { kind: "create"; charKey: string; seats: number; turns: number; timeoutMinutes: number } | { kind: "join"; seat: number; charKey: string };
+/** stake: ugnot each player puts in (game/stakes.ts), sent with the call or the join. */
+export type SetupRequest =
+  | { kind: "create"; charKey: string; seats: number; turns: number; timeoutMinutes: number; stake: number }
+  | { kind: "join"; seat: number; charKey: string; stake: number };
 
 /** Depth of the setup zone's highlights: under the aim zone shown on token hover (0.5) and the tokens (from 1). */
 const SETUP_ZONE_DEPTH = 0.3;
@@ -1130,12 +1134,13 @@ export class GameScene extends Phaser.Scene {
   private syncJoinSeat(view: GameView) {
     const setup = this.setup;
     if (!setup || setup.req.kind !== "join" || setup.busy) return;
+    setup.req.stake = view.stake ?? 0; // the join sends the stake the chain asks for
     const seat = nextSeat(view.players);
     if (seat < 0 || seat === setup.seat) return;
     const charKey = seatChar(seat);
     const taken = view.players[setup.seat];
     if (setup.hex && taken?.addr) showToast(this, `${charName(taken.char)} was taken first: you play ${charName(charKey)}, take position again`, "info");
-    setup.req = { kind: "join", seat, charKey };
+    setup.req = { kind: "join", seat, charKey, stake: setup.req.stake };
     setup.seat = seat;
     setup.hex = null;
     setup.facing = defaultFacing(charKey);
@@ -1765,7 +1770,7 @@ export class GameScene extends Phaser.Scene {
     const calling = this.setup?.req.kind === "create" ? this.setup.req : null;
     const base = {
       title: view
-        ? `Game ${view.id} · Turn ${view.turn} of ${view.maxTurns}`
+        ? `Game ${view.id} · Turn ${view.turn} of ${view.maxTurns}${view.pot ? ` · ${formatGnot(view.pot)} pot` : ""}`
         : calling
           ? `New showdown · ${calling.seats} players · ${calling.turns} turns · ${formatDuration(calling.timeoutMinutes * 60)} per turn`
           : `Game ${this.gameID}`,
@@ -1883,11 +1888,17 @@ export class GameScene extends Phaser.Scene {
         note: s.busy
           ? "Signing in Adena…"
           : s.hex
-            ? "Click your token to turn it (the right button turns it the other way), or click another green hex to move. Hover your token to see where you could aim."
+            ? "Click your token to turn it (the right button turns it the other way), or click another green hex to move. Hover your token to see where you could aim." +
+              (s.req.stake ? ` Adena then asks you to sign the ${formatGnot(s.req.stake)} stake.` : "")
             : `You start upright, your Colt 45 holstered, facing ${DIR_NAMES[s.facing]} unless you turn.`,
         warn: false,
         buttons: [
-          { id: "setup", label: s.busy ? "SIGNING…" : s.req.kind === "create" ? "CALL THE SHOWDOWN" : "JOIN THE SHOWDOWN", tone: "primary", disabled: off },
+          {
+            id: "setup",
+            label: s.busy ? "SIGNING…" : (s.req.kind === "create" ? "CALL THE SHOWDOWN" : "JOIN THE SHOWDOWN") + (s.req.stake ? `\n${formatGnot(s.req.stake)}` : ""),
+            tone: "primary",
+            disabled: off,
+          },
           { id: "turnLeft", label: "↶ Turn left", tone: "plain", disabled: off },
           { id: "turnRight", label: "Turn right ↷", tone: "plain", disabled: off },
           lobby,
@@ -1970,7 +1981,7 @@ export class GameScene extends Phaser.Scene {
         empty: `The showdown is open: it starts once ${left > 1 ? `${left} more players join` : "one more player joins"}.`,
         note: this.myIndex === 0 ? "" : "Only the player who called the showdown can cancel it.",
         warn: false,
-        buttons: this.myIndex === 0 ? [{ id: "cancel", label: "Cancel the showdown", tone: "danger" as const }] : [],
+        buttons: this.myIndex === 0 ? [{ id: "cancel", label: view.stake ? "Cancel the showdown · stakes back" : "Cancel the showdown", tone: "danger" as const }] : [],
       };
     }
     if (this.mode === "waiting") {
@@ -2010,7 +2021,7 @@ export class GameScene extends Phaser.Scene {
       };
     }
     if (this.mode === "ended") {
-      return { title: "Game over", points: "", lines: [], empty: this.statusLine(), note: "", warn: false, buttons: [replay, lobby] };
+      return { title: "Game over", points: "", lines: [], empty: this.statusLine(), note: payoutLine(view, this.myIndex), warn: false, buttons: [replay, lobby] };
     }
     return { title: this.mode === "spectate" ? "Spectating" : "Loading", points: "", lines: [], empty: this.statusLine(), note: "", warn: false, buttons: [replay, lobby] };
   }
@@ -2436,7 +2447,7 @@ export class GameScene extends Phaser.Scene {
     try {
       if (setup.req.kind === "create") {
         const chain = this.chain;
-        const r = await chain.realm.createGame(setup.req.seats, setup.req.turns, setup.req.timeoutMinutes, setup.hex, setup.facing);
+        const r = await chain.realm.createGame(setup.req.seats, setup.req.turns, setup.req.timeoutMinutes, setup.hex, setup.facing, setup.req.stake);
         // The tx result was not indexed in time: the game is the newest of ours.
         const id = r.gameID ?? (await chain.realm.listGames(chain.wallet.address)).mine[0]?.id ?? null;
         if (!this.scene.isActive()) return;
@@ -2447,7 +2458,7 @@ export class GameScene extends Phaser.Scene {
         }
         this.scene.restart({ gameID: id });
       } else {
-        await this.chain.realm.joinGame(this.gameID, setup.hex, setup.facing);
+        await this.chain.realm.joinGame(this.gameID, setup.hex, setup.facing, setup.req.stake);
         if (!this.scene.isActive()) return;
         this.endSetup();
         this.mode = "sync";

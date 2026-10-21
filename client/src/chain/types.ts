@@ -172,6 +172,11 @@ export interface GameView {
   vp?: number[];
   /** The victory points earned and lost, per seat (rule 15). */
   awards?: VPAward[];
+  /** Stakes (the realm's stakes.gno), in ugnot: what each player puts in (0: a free showdown), the stakes paid so far, what each seat got once over ([] before), what the house kept. */
+  stake?: number;
+  pot?: number;
+  payouts?: number[];
+  houseCut?: number;
   createdAt: number;
   updatedAt: number;
   /** Unix seconds after which ClaimTimeout succeeds: commitUntil while planning, revealUntil while revealing; 0 otherwise. */
@@ -206,6 +211,11 @@ export interface GameSummary {
   endReason: string;
   /** Victory points per seat, once a played game ended. */
   vp?: number[];
+  /** Stakes (the realm's stakes.gno), in ugnot: what each player puts in (0: a free showdown), the stakes paid so far, what each seat got once over ([] before), what the house kept. */
+  stake?: number;
+  pot?: number;
+  payouts?: number[];
+  houseCut?: number;
   createdAt: number;
   updatedAt: number;
   /** Unix seconds after which ClaimTimeout succeeds: the deadline while planning, its grace while revealing; 0 otherwise. */

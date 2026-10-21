@@ -71,22 +71,24 @@ export class RealmClient {
    * one of that character's hexes, game/setup.ts), and returns its id
    * (null only if neither the wallet nor the chain told us in time).
    * timeoutMinutes 0 keeps the realm's default inactivity timeout (2 days).
+   * stake (ugnot, 0 for a free showdown) is sent with the call: every
+   * joiner sends the same (game/stakes.ts).
    */
-  async createGame(seats: number, maxTurns: number, timeoutMinutes: number, startHex: string, facing: number): Promise<{ hash: string | null; gameID: string | null }> {
+  async createGame(seats: number, maxTurns: number, timeoutMinutes: number, startHex: string, facing: number, stake = 0): Promise<{ hash: string | null; gameID: string | null }> {
     const me = this.wallet.address;
     const before = new Set((await this.listGames(me)).mine.map((g) => g.id));
     const r = await this.send("CreateGame", [String(seats), String(maxTurns), String(timeoutMinutes), startHex, String(facing)], async () => {
       const games = await this.listGames(me);
       const fresh = games.mine.find((g) => !before.has(g.id) && g.players[0]?.addr === me);
       return fresh?.id ?? null;
-    });
+    }, coins(stake));
     return { hash: r.hash, gameID: r.tx?.data ? unwrapQevalString(r.tx.data) : r.watched };
   }
 
-  /** Takes the next free seat of a waiting game (its character is the seat's), standing in startHex (one of that character's hexes) facing f. */
-  async joinGame(id: string, startHex: string, facing: number): Promise<void> {
+  /** Takes the next free seat of a waiting game (its character is the seat's), standing in startHex (one of that character's hexes) facing f, sending the game's stake (ugnot). */
+  async joinGame(id: string, startHex: string, facing: number, stake = 0): Promise<void> {
     const me = this.wallet.address;
-    await this.send("JoinGame", [id, startHex, String(facing)], async () => ((await this.getGame(id)).players.some((p) => p.addr === me) ? true : null));
+    await this.send("JoinGame", [id, startHex, String(facing)], async () => ((await this.getGame(id)).players.some((p) => p.addr === me) ? true : null), coins(stake));
   }
 
   /** Cancels a game nobody joined; the realm deletes it (refunding its storage deposit). */
@@ -166,12 +168,12 @@ export class RealmClient {
    * the wallet answer is still the only way to learn a rejection or a panic.
    * One call at a time, because two quick calls race on the account sequence.
    */
-  private async send<R>(func: string, args: string[], watch?: () => Promise<R | null>): Promise<Sent<R>> {
+  private async send<R>(func: string, args: string[], watch?: () => Promise<R | null>, send = ""): Promise<Sent<R>> {
     if (this.busy) throw new ChainError("busy", "A transaction is still pending");
     this.busy = true;
     const stop = { done: false };
     try {
-      const call: VmCall = { caller: this.wallet.address, send: "", pkg_path: this.pkgPath, func, args };
+      const call: VmCall = { caller: this.wallet.address, send, pkg_path: this.pkgPath, func, args };
       const fromWallet = this.wallet.doContract(call).then((r) => ({ hash: r.hash, watched: null as R | null }));
       const fromChain = watch
         ? this.watchChain(watch, stop).then((watched) => ({ hash: null as string | null, watched }))
@@ -209,4 +211,9 @@ export class RealmClient {
       if (Date.now() > deadline) return new Promise<R>(() => {});
     }
   }
+}
+
+/** The coins a call sends for a stake of ugnot: "" for none. */
+function coins(ugnot: number): string {
+  return ugnot > 0 ? `${ugnot}ugnot` : "";
 }

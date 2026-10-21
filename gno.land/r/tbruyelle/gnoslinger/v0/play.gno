@@ -20,6 +20,7 @@ import (
 // reveal from then if the player does not. When this commit is the last one the turn waits for, the game
 // moves on to the reveals.
 func Commit(cur realm, id string, hash string, locked string) int {
+	assertNoSend()
 	caller := cur.Previous().Address()
 	g := getGame(id)
 	if g.Phase != PhasePlanning {
@@ -61,6 +62,7 @@ func Commit(cur realm, id string, hash string, locked string) int {
 // an empty string passes. The reveal that completes the turn resolves it in
 // this same transaction and the next turn starts.
 func Reveal(cur realm, id string, turn int, seat int, salt string, plan string) int {
+	assertNoSend()
 	caller := cur.Previous().Address()
 	g := getGame(id)
 	if turn != g.Turn {
@@ -111,6 +113,7 @@ func Reveal(cur realm, id string, turn int, seat int, salt string, plan string) 
 // cannot check that before opening, and one bad timelocked plan must not
 // keep the others back; that seat stays unrevealed, for the claim.
 func RevealMany(cur realm, id string, turn int, seats string, salts string, plans string) int {
+	assertNoSend()
 	caller := cur.Previous().Address()
 	g := getGame(id)
 	if turn != g.Turn {
@@ -306,11 +309,11 @@ func resolveTurn(cur realm, g *Game) string {
 	g.clearTurn()
 	switch {
 	case engine.AliveCount(g.State) == 0:
-		g.finish("all_down")
+		g.finish(cur, "all_down")
 	case engine.AliveCount(g.State) == 1:
-		g.finish("last_standing")
+		g.finish(cur, "last_standing")
 	case g.Turn >= g.MaxTurns:
-		g.finish("max_turns")
+		g.finish(cur, "max_turns")
 	default:
 		g.Turn++
 		g.Phase = PhasePlanning
@@ -340,6 +343,7 @@ func groundExists(st engine.State, id int) bool {
 // captured; with more, the showdown goes on without it (its commit is
 // dropped), and goes on to the reveals if the others' plans are committed.
 func Surrender(cur realm, id string) {
+	assertNoSend()
 	caller := cur.Previous().Address()
 	g := getGame(id)
 	switch g.Phase {
@@ -357,7 +361,7 @@ func Surrender(cur realm, id string) {
 	emit("PlayerSurrendered", "id", id, "turn", strconv.Itoa(g.Turn), "player", caller.String(), "seat", strconv.Itoa(p))
 	if engine.AliveCount(g.State) <= 1 {
 		g.award(cur, engine.EndVictoryPoints(g.State))
-		g.finish("surrender")
+		g.finish(cur, "surrender")
 	} else {
 		g.Commits[p] = Sealed{}
 		g.Plans[p] = ""
@@ -383,6 +387,7 @@ func Surrender(cur realm, id string) {
 // left the game ends and is scored, with more the turn resolves with the
 // plans in and the showdown goes on.
 func ClaimTimeout(cur realm, id string) {
+	assertNoSend()
 	g := getGame(id)
 	switch g.Phase {
 	case PhaseFinished:
@@ -398,7 +403,7 @@ func ClaimTimeout(cur realm, id string) {
 	}
 	switch {
 	case g.Phase == PhasePlanning && !anyCommitted(g):
-		g.finish("abandoned")
+		g.finish(cur, "abandoned")
 		save(g)
 		return
 	default:
@@ -414,7 +419,7 @@ func ClaimTimeout(cur realm, id string) {
 	}
 	if engine.AliveCount(g.State) <= 1 {
 		g.award(cur, engine.EndVictoryPoints(g.State))
-		g.finish("timeout")
+		g.finish(cur, "timeout")
 	} else {
 		progress(cur, g)
 	}

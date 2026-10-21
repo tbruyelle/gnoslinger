@@ -226,7 +226,8 @@ export class SessionWallet implements Wallet {
 
   /** Signs with the session when there is a live one, else (or when the chain refuses it) through Adena. */
   async doContract(call: VmCall): Promise<{ hash: string }> {
-    if (!this.secret) return this.adena.doContract(call);
+    // A call sending coins (a stake) is always signed in Adena: the player sees the money it puts in.
+    if (!this.secret || call.send) return this.adena.doContract(call);
     const state = await this.refresh();
     if (state.kind !== "active") return this.adena.doContract(call);
     const info = state.info;

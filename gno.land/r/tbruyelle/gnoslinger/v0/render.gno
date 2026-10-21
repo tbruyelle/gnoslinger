@@ -60,12 +60,13 @@ func renderHome(res *mux.ResponseWriter, _ *mux.Request) {
 	res.Write(md.H2("Open games"))
 	n := 0
 	var b strings.Builder
-	b.WriteString("| Game | Creator | Seats | Created | |\n|---|---|---|---|---|\n")
+	b.WriteString("| Game | Creator | Seats | Stake | Created | |\n|---|---|---|---|---|---|\n")
 	openGames.ReverseIterate("", "", func(_ string, v any) bool {
 		g := v.(*Game)
 		b.WriteString("| " + link(g.ID, "game/"+g.ID) +
 			" | " + addr(g.Players[0].Addr) +
 			" | " + strconv.Itoa(g.seated()) + "/" + strconv.Itoa(g.seats()) +
+			" | " + stakeLabel(g) +
 			" | " + when(g.CreatedAt) +
 			" | " + joinLink(g) + " |\n")
 		n++
@@ -95,12 +96,27 @@ func renderHome(res *mux.ResponseWriter, _ *mux.Request) {
 	} else {
 		res.Write(b.String() + "\n")
 	}
+	if house > 0 {
+		res.Write(md.Paragraph("The house holds " + gnot(house) + " for events."))
+	}
 }
 
 func renderGame(res *mux.ResponseWriter, req *mux.Request) {
 	g := getGame(req.GetVar("id"))
 	res.Write(md.H1("Game " + g.ID))
 	res.Write(md.Paragraph("Turn " + strconv.Itoa(g.Turn) + " of " + strconv.Itoa(g.MaxTurns) + " · " + phaseLabel(g)))
+	if g.Stake > 0 {
+		line := "Stake " + stakeLabel(g) + " · pot " + gnot(g.Pot)
+		for i, v := range g.Payouts {
+			if v > 0 {
+				line += " · " + addr(g.Players[i].Addr) + " got " + gnot(v)
+			}
+		}
+		if g.HouseCut > 0 {
+			line += " · the house kept " + gnot(g.HouseCut)
+		}
+		res.Write(md.Paragraph(line))
+	}
 
 	var b strings.Builder
 	b.WriteString("| Seat | Player | Character | Hex | Facing | Down | Delay | Status | Plan |\n")
@@ -414,7 +430,29 @@ func joinLink(g *Game) string {
 		return ""
 	}
 	setup := engine.SetupOf(engine.SeatChar(seat))
-	return md.Link("Join as "+strings.ReplaceAll(setup.Char, "_", " "), txlink.Call("JoinGame", "id", g.ID, "startHex", setup.Hexes[len(setup.Hexes)/2], "facing", strconv.Itoa(int(setup.Facing))))
+	tx := txlink.NewLink("JoinGame").AddArgs("id", g.ID, "startHex", setup.Hexes[len(setup.Hexes)/2], "facing", strconv.Itoa(int(setup.Facing)))
+	if g.Stake > 0 {
+		tx = tx.SetSend(strconv.FormatInt(g.Stake, 10) + Denom)
+	}
+	return md.Link("Join as "+strings.ReplaceAll(setup.Char, "_", " "), tx.URL())
+}
+
+// gnot words an amount of ugnot in GNOT: "5 GNOT", "9.5 GNOT".
+func gnot(ugnot int64) string {
+	s := strconv.FormatInt(ugnot/1_000_000, 10)
+	if frac := ugnot % 1_000_000; frac != 0 {
+		f := strconv.FormatInt(1_000_000+frac, 10)[1:]
+		s += "." + strings.TrimRight(f, "0")
+	}
+	return s + " GNOT"
+}
+
+// stakeLabel words a showdown's stake: "free", or "5 GNOT each".
+func stakeLabel(g *Game) string {
+	if g.Stake == 0 {
+		return "free"
+	}
+	return gnot(g.Stake) + " each"
 }
 
 // setupList words where each character sets up: "the marshal in A-G5 to A-G9, ...".

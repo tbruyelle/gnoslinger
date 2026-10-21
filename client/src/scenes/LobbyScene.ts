@@ -18,6 +18,7 @@ import { openableSeats, summaryOpenable, summaryRevealDue } from "../game/reveal
 import { openAndReveal } from "../game/opener";
 import type { GamesView as GamesList } from "../chain/types";
 import type { SetupRequest } from "./GameScene";
+import { STAKE_OPTIONS } from "../game/stakes";
 
 /** All character tokens, for the picker that will come back later. */
 export const CHARACTERS = Object.keys(CHAR_ARROW_DIR);
@@ -118,6 +119,7 @@ export class LobbyScene extends Phaser.Scene {
   private seats = DEFAULT_SEATS;
   private turns = DEFAULT_TURNS;
   private timeoutIndex = DEFAULT_TIMEOUT_INDEX;
+  private stake = 0;
   /** The lobby screen, an HTML overlay (the splash stays on the canvas). */
   private view: LobbyView | null = null;
   private refreshTimer: Phaser.Time.TimerEvent | null = null;
@@ -157,17 +159,25 @@ export class LobbyScene extends Phaser.Scene {
       // Calling and joining go through the board first, where the player takes position (GameScene's set up).
       join: (id) => {
         // The joiner takes the next free seat, playing its character (the board checks again against the chain).
-        const players = this.games?.open.find((g) => g.id === id)?.players ?? [];
-        const seat = Math.max(0, nextSeat(players));
-        this.scene.start("GameScene", { gameID: id, setup: { kind: "join", seat, charKey: seatChar(seat) } satisfies SetupRequest });
+        const game = this.games?.open.find((g) => g.id === id);
+        const seat = Math.max(0, nextSeat(game?.players ?? []));
+        this.scene.start("GameScene", { gameID: id, setup: { kind: "join", seat, charKey: seatChar(seat), stake: game?.stake ?? 0 } satisfies SetupRequest });
       },
       create: () =>
         this.scene.start("GameScene", {
-          setup: { kind: "create", charKey: CREATOR_CHAR, seats: this.seats, turns: this.turns, timeoutMinutes: TIMEOUT_OPTIONS[this.timeoutIndex].minutes } satisfies SetupRequest,
+          setup: { kind: "create", charKey: CREATOR_CHAR, seats: this.seats, turns: this.turns, timeoutMinutes: TIMEOUT_OPTIONS[this.timeoutIndex].minutes, stake: this.stake } satisfies SetupRequest,
         }),
-      setSeats: (seats) => (this.seats = seats),
+      // The line-up and the stake's winnings follow the number of players.
+      setSeats: (seats) => {
+        this.seats = seats;
+        this.renderView();
+      },
       setTurns: (turns) => (this.turns = turns),
       setTimeout: (index) => (this.timeoutIndex = index),
+      setStake: (ugnot) => {
+        this.stake = ugnot;
+        this.renderView();
+      },
       openProfile: (addr, fromPage) => void this.openProfile(addr, fromPage),
       openPlayers: (page) => void this.openPlayers(page),
       openSession: () => {
@@ -490,6 +500,8 @@ export class LobbyScene extends Phaser.Scene {
       turnOptions: TURN_OPTIONS,
       timeoutIndex: this.timeoutIndex,
       timeoutOptions: TIMEOUT_OPTIONS,
+      stake: this.stake,
+      stakeOptions: STAKE_OPTIONS,
       topPlayers: this.topPlayers,
       revealIds: this.revealIds,
       openIds: this.openIds,

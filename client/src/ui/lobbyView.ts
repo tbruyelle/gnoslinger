@@ -5,6 +5,7 @@ import { uprightTokenAngle } from "../rules";
 import { charName, claimable, formatDuration, formatLeft, lobbySections, outcomeLine, runningOut, seatsTaken, secondsLeft, stillOffered } from "../game/lobby";
 import { nextSeat, seatChar } from "../game/setup";
 import { seatColor } from "./seats";
+import { HOUSE_CUT_PERCENT, formatGnot, payoutLine, stakeLine, stakeOption, winnings } from "../game/stakes";
 
 /**
  * The lobby, an HTML overlay over the canvas (like the character sheet), from
@@ -63,6 +64,9 @@ export interface LobbyModel {
   turns: number;
   turnOptions: number[];
   timeoutIndex: number;
+  /** The stake of a new showdown, in ugnot, among stakeOptions (game/stakes.ts). */
+  stake: number;
+  stakeOptions: number[];
   timeoutOptions: { minutes: number; label: string }[];
   /** The first players of the ranking, null while loading. */
   topPlayers: PlayersView | null;
@@ -85,6 +89,7 @@ export interface LobbyActions {
   setSeats(seats: number): void;
   setTurns(turns: number): void;
   setTimeout(index: number): void;
+  setStake(ugnot: number): void;
   openProfile(addr: string, fromPage: number | null): void;
   /** Opens the ranking dialog at a page (0-based). */
   openPlayers(page: number): void;
@@ -212,6 +217,12 @@ function esc(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 }
 
+/** A line's detail with the showdown's stake and pot, when it has one. */
+function withStake(detail: string, g: GameSummary): string {
+  const stake = stakeLine(g);
+  return stake ? `${detail} · ${stake}` : detail;
+}
+
 /** A character's token, turned upright as on the character sheet. */
 function tokenImg(char: string, cls = "gl-token"): string {
   return `<img class="${cls}" src="char_${esc(char)}.png" alt="" style="transform: rotate(${uprightTokenAngle(char)}deg)">`;
@@ -302,6 +313,7 @@ export class LobbyView {
       if (el.id === "gl-seats") this.actions.setSeats(Number(el.value));
       if (el.id === "gl-turns") this.actions.setTurns(Number(el.value));
       if (el.id === "gl-timeout") this.actions.setTimeout(Number(el.value));
+      if (el.id === "gl-stake") this.actions.setStake(Number(el.value));
       if (el.id === "gl-session-days") this.actions.setSessionDays(Number(el.value));
       if (el.id === "gl-session-limit") this.actions.setSessionLimit(Number(el.value));
     });
@@ -403,7 +415,7 @@ export class LobbyView {
           return row("gl-card over", g, versus(g), `${turn} · ${why}: close the turn to go on`, '<span class="gl-pill over">OUT OF TIME</span>' + btn("CLOSE"));
         }
         const pill = `<span class="gl-pill${runningOut(left, g.timeout) ? " late" : ""}">${esc(formatLeft(left))} left</span>`;
-        return row("gl-card", g, versus(g), turn, pill + btn("PLAY"));
+        return row("gl-card", g, versus(g), withStake(turn, g), pill + btn("PLAY"));
       })
       .join("");
     const count = s.yourMove.length;
@@ -426,7 +438,7 @@ export class LobbyView {
     const openBtn = (g: GameSummary, label = "Open") => `<button type="button" class="gl-open" data-act="open" data-id="${esc(g.id)}">${label}</button>`;
     const waiting = s.waiting
       .map((g) => {
-        if (g.phase === "waiting") return row("gl-line", g, versus(g), `${gameLabel(g)} · ${g.maxTurns} turns · ${formatDuration(g.timeout)} per turn`, openBtn(g));
+        if (g.phase === "waiting") return row("gl-line", g, versus(g), withStake(`${gameLabel(g)} · ${g.maxTurns} turns · ${formatDuration(g.timeout)} per turn`, g), openBtn(g));
         const where = g.phase === "revealing" ? "revealing the plans" : `your plan is in · ${formatLeft(secondsLeft(g, now))} left to play`;
         return row("gl-line", g, versus(g), `${gameLabel(g)} · Turn ${g.turn} of ${g.maxTurns} · ${where}`, openBtn(g));
       })
@@ -444,14 +456,17 @@ export class LobbyView {
         return (
           `<div class="gl-line">${crest(g.players, seat)}<div class="gl-what">` +
           `<span class="gl-title">${esc(title)}</span>` +
-          `<span class="gl-detail">${esc(`Game ${g.id} · ${seatsTaken(g)} · ${g.maxTurns} turns · ${formatDuration(g.timeout)} per turn`)}</span></div>` +
-          `<button type="button" class="gl-join" data-act="join" data-id="${esc(g.id)}">Join as ${esc(charName(seatChar(seat)))}</button></div>`
+          `<span class="gl-detail">${esc(withStake(`Game ${g.id} · ${seatsTaken(g)} · ${g.maxTurns} turns · ${formatDuration(g.timeout)} per turn`, g))}</span></div>` +
+          `<button type="button" class="gl-join" data-act="join" data-id="${esc(g.id)}">Join as ${esc(charName(seatChar(seat)))}${g.stake ? ` · ${esc(formatGnot(g.stake))}` : ""}</button></div>`
         );
       })
       .join("");
 
     const finished = s.finished
-      .map((g) => row("gl-line", g, versus(g), `${gameLabel(g)} · ${outcomeLine(g, m.address)}`, openBtn(g, "Replay")))
+      .map((g) => {
+        const paid = payoutLine(g, g.players.findIndex((p) => p.addr === m.address));
+        return row("gl-line", g, versus(g), `${gameLabel(g)} · ${outcomeLine(g, m.address)}${paid ? ` · ${paid}` : ""}`, openBtn(g, "Replay"));
+      })
       .join("");
 
     return (
@@ -470,6 +485,10 @@ export class LobbyView {
     const lineUp = Array.from({ length: m.seats }, (_, i) => `<span style="color:${seatColor(i)}">${esc(charName(seatChar(i)))}</span>`).join(", ");
     const turns = m.turnOptions.map((t) => `<option value="${t}"${t === m.turns ? " selected" : ""}>${t}</option>`).join("");
     const timeouts = m.timeoutOptions.map((o, i) => `<option value="${i}"${i === m.timeoutIndex ? " selected" : ""}>${esc(o.label)}</option>`).join("");
+    const stakes = m.stakeOptions.map((s) => `<option value="${s}"${s === m.stake ? " selected" : ""}>${esc(stakeOption(s))}</option>`).join("");
+    const stakeNote = m.stake
+      ? `Every player puts ${formatGnot(m.stake)} in, signed in Adena. The winner takes ${formatGnot(winnings(m.stake, m.seats))}, the house keeping ${HOUSE_CUT_PERCENT}% for events; a draw splits it, a cancelled or abandoned showdown gives the stakes back.`
+      : "Played for the glory and the ranking only.";
     const disabled = m.status !== "ready" ? " disabled" : "";
     return (
       '<aside class="gl-aside" aria-labelledby="gl-new"><form class="gl-form">' +
@@ -480,6 +499,8 @@ export class LobbyView {
       `<div class="gl-field"><label for="gl-turns">Turns</label><select id="gl-turns">${turns}</select></div>` +
       `<div class="gl-field"><label for="gl-timeout">Time to play each turn</label><select id="gl-timeout">${timeouts}</select>` +
       '<span class="gl-note">Past it, anyone may close the turn: a player who did not play passes it, and is out of the fight at the third in a row.</span></div>' +
+      `<div class="gl-field"><label for="gl-stake">Stake</label><select id="gl-stake">${stakes}</select>` +
+      `<span class="gl-note">${esc(stakeNote)}</span></div>` +
       `<button type="button" class="gl-create" data-act="create"${disabled}>CALL A SHOWDOWN</button>` +
       '<span class="gl-note">Next you take position on the board, then sign the call.</span>' +
       "</form>" +

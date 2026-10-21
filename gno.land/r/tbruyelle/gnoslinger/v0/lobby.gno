@@ -20,8 +20,11 @@ import (
 // gives the players, past which anyone may claim it with ClaimTimeout, 0
 // meaning DefaultTimeout (2 days). The game stays open until its seats fill
 // up or its creator cancels it: the turn clock starts with the last join.
+// The ugnot sent with the call are the showdown's stake, which every
+// joiner must send too; none, a free showdown (stakes.gno).
 func CreateGame(cur realm, seats int, maxTurns int, timeoutMinutes int, startHex string, facing int) string {
 	caller := cur.Previous().Address()
+	stake := sentStake(cur)
 	if seats < engine.MinPlayers || seats > engine.MaxPlayers {
 		panic("gnoslinger: seats must be between " + strconv.Itoa(engine.MinPlayers) + " and " + strconv.Itoa(engine.MaxPlayers))
 	}
@@ -49,6 +52,8 @@ func CreateGame(cur realm, seats int, maxTurns int, timeoutMinutes int, startHex
 		Missed:    make([]int, seats),
 		Winner:    -1,
 		VP:        make([]int, seats),
+		Stake:     stake,
+		Pot:       stake,
 		CreatedAt: time.Now(),
 	}
 	g.clearTurn()
@@ -59,7 +64,8 @@ func CreateGame(cur realm, seats int, maxTurns int, timeoutMinutes int, startHex
 	profiles.Ensure(cross(cur), caller)
 	save(g)
 	emit("GameCreated", "id", id, "creator", caller.String(), "char", charKey, "seats", strconv.Itoa(seats),
-		"maxTurns", strconv.Itoa(maxTurns), "timeoutMinutes", strconv.Itoa(int(timeout/time.Minute)), "hex", startHex, "facing", strconv.Itoa(facing))
+		"maxTurns", strconv.Itoa(maxTurns), "timeoutMinutes", strconv.Itoa(int(timeout/time.Minute)), "hex", startHex, "facing", strconv.Itoa(facing),
+		"stake", strconv.FormatInt(stake, 10))
 	return id
 }
 
@@ -67,8 +73,10 @@ func CreateGame(cur realm, seats int, maxTurns int, timeoutMinutes int, startHex
 // playing that seat's character (the kid, then the reb, then the yankee),
 // standing in startHex, one of that character's hexes, facing f; the game
 // starts collecting the commits of turn 1 once its last seat is taken.
+// The call must send the showdown's stake, no more, no less.
 func JoinGame(cur realm, id string, startHex string, facing int) {
 	caller := cur.Previous().Address()
+	stake := sentStake(cur)
 	g := getGame(id)
 	if g.Phase != PhaseWaiting {
 		panic("gnoslinger: game is not open")
@@ -86,6 +94,10 @@ func JoinGame(cur realm, id string, startHex string, facing int) {
 	}
 	charKey := engine.SeatChar(seat)
 	assertSetUp(charKey, startHex, facing)
+	if stake != g.Stake {
+		panic("gnoslinger: this showdown's stake is " + strconv.FormatInt(g.Stake, 10) + Denom + ", sent " + strconv.FormatInt(stake, 10) + Denom)
+	}
+	g.Pot += stake
 	g.Players[seat] = Player{Addr: caller, Char: charKey}
 	g.State.SetUp(seat, startHex, hex.Dir(facing))
 	index(caller, id)
@@ -122,8 +134,9 @@ func assertSetUp(charKey, startHex string, facing int) {
 // CancelGame withdraws a game whose seats are not all taken yet. Creator
 // only. The game is deleted, not kept as finished, so the creator gets back
 // the storage deposit CreateGame paid; the players who had joined are
-// unindexed with it.
+// unindexed with it, and every stake paid goes back.
 func CancelGame(cur realm, id string) {
+	assertNoSend()
 	caller := cur.Previous().Address()
 	g := getGame(id)
 	if g.Phase != PhaseWaiting {
@@ -132,6 +145,7 @@ func CancelGame(cur realm, id string) {
 	if g.Players[0].Addr != caller {
 		panic("gnoslinger: only the creator can cancel the game")
 	}
+	g.refundStakes(cur)
 	openGames.Remove(id)
 	games.Remove(id)
 	for _, p := range g.Players {

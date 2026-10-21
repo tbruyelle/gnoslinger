@@ -22,7 +22,8 @@ const listLimit = 50
 //	             "aim","aimAt" (the seat the AIM markers follow, -1 when they sit on a hex or there is no aim),"aimHex" (the hex they sit on, "" when they follow a seat),"endurance","serious","gunArm","otherArm","leg",
 //	             "guns":[{"id","type","name","location","cocked","shells","capacity","jammed","exploded"}]}]   (one entry per seat, 2 to 4),
 //	 "ground":[{"id" (ground id, "g<id>" in a plan),"hex","guns":[{..}]}],
-//	 "winner","endReason","vp":[victory points per seat],"awards":[{"p","reason","points"}] (rule 15, once a played game ends),
+//	 "winner","vp":[victory points per seat],"awards":[{"p","reason","points"}] (rule 15, once a played game ends),
+//	 "stake" (ugnot each player puts in, 0 for a free showdown),"pot" (the stakes paid so far),"payouts":[ugnot each seat got, [] until paid],"houseCut" (stakes.gno),"endReason",
 //	 "createdAt","updatedAt","timeoutAt" (when the turn in progress can be claimed, 0 unless planning or revealing),
 //	 "commitUntil" (the turn's deadline),"revealUntil" (when unrevealed seats can be claimed out),"lockRound" (the drand round the plans are timelocked to) (0 unless planning or revealing),
 //	 "lastTurn":null|{"turn","seed","cards":[result card numbers drawn, in order],"plans":[..],
@@ -61,6 +62,7 @@ func GameJSON(id string) string {
 		b.WriteString(`{"p":` + strconv.Itoa(a.Player) + `,"reason":` + quote(a.Reason) + `,"points":` + strconv.Itoa(a.Points) + `}`)
 	}
 	b.WriteByte(']')
+	writeStakes(&b, g)
 	b.WriteString(`,"endReason":` + quote(g.EndReason))
 	b.WriteString(`,"createdAt":` + strconv.FormatInt(g.CreatedAt.Unix(), 10))
 	b.WriteString(`,"updatedAt":` + strconv.FormatInt(g.UpdatedAt.Unix(), 10))
@@ -293,7 +295,7 @@ func writeEvent(b *strings.Builder, e engine.Event) {
 // address's registered name ("" if none):
 //
 //	{"name","open":[summary...],"mine":[summary...]}
-//	summary = {"id","rev","phase","turn","maxTurns","timeout","winner","endReason","vp","createdAt","updatedAt","timeoutAt","lockRound","players":[{"addr","name","char","status","committed","revealed"}]}
+//	summary = {"id","rev","phase","turn","maxTurns","timeout","winner","endReason","vp","stake","pot","payouts","houseCut","createdAt","updatedAt","timeoutAt","lockRound","players":[{"addr","name","char","status","committed","revealed"}]}
 //
 // lockRound (0 unless planning or revealing) tells the lobby when the
 // timelocked plans of a seat committed and not revealed can be opened.
@@ -337,6 +339,7 @@ func writeSummary(b *strings.Builder, g *Game) {
 	b.WriteString(`,"timeout":` + strconv.FormatInt(int64(g.Timeout/time.Second), 10))
 	b.WriteString(`,"winner":` + strconv.Itoa(g.Winner))
 	writeVP(b, g)
+	writeStakes(b, g)
 	b.WriteString(`,"endReason":` + quote(g.EndReason))
 	b.WriteString(`,"createdAt":` + strconv.FormatInt(g.CreatedAt.Unix(), 10))
 	b.WriteString(`,"updatedAt":` + strconv.FormatInt(g.UpdatedAt.Unix(), 10))
@@ -367,6 +370,20 @@ func writeVP(b *strings.Builder, g *Game) {
 		b.WriteString(strconv.Itoa(v))
 	}
 	b.WriteByte(']')
+}
+
+// writeStakes writes the stake, the pot and, once paid, what each seat got.
+func writeStakes(b *strings.Builder, g *Game) {
+	b.WriteString(`,"stake":` + strconv.FormatInt(g.Stake, 10))
+	b.WriteString(`,"pot":` + strconv.FormatInt(g.Pot, 10))
+	b.WriteString(`,"payouts":[`)
+	for i, v := range g.Payouts {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		b.WriteString(strconv.FormatInt(v, 10))
+	}
+	b.WriteString(`],"houseCut":` + strconv.FormatInt(g.HouseCut, 10))
 }
 
 // quote encodes s as a JSON string.
