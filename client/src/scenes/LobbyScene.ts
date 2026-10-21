@@ -61,6 +61,11 @@ const SPLASH_PAPER_STR = "#F3E7CE";
 const SPLASH_CREAM = 0xfbf4e4;
 const SPLASH_RED = 0xb5482a;
 const SPLASH_DARK_RED = 0x8e2f1a;
+const SPLASH_GOLD = 0xf2b544;
+const SPLASH_GOLD_STR = "#F2B544";
+const SPLASH_CREAM_STR = "#FBF4E4";
+/** Between Connect with Adena and the How to play link. */
+const SPLASH_LINK_GAP = 18;
 const RYE = "Rye, Georgia, serif";
 const ZILLA = "'Zilla Slab', Rockwell, Georgia, serif";
 const SPLASH_LINE = "Gunfighters, five segments a turn, one hand of cards. Every turn is settled on chain.";
@@ -144,6 +149,7 @@ export class LobbyScene extends Phaser.Scene {
     this.view = new LobbyView({
       retry: () => void this.connect(),
       quit: () => this.quit(),
+      tutorial: () => this.scene.start("GameScene", { tutorial: true }),
       copyAddress: () => {
         if (this.chain) void this.copyAddress(this.chain.wallet.address);
       },
@@ -590,7 +596,18 @@ export class LobbyScene extends Phaser.Scene {
         wordWrap: { width: w - 100 },
       })
       .setOrigin(0.5, 0);
-    this.makeSplashButton(w / 2, line.y + line.height + 26 + 29, "Connect with Adena", () => this.enter());
+    // Connect with Adena and How to play side by side, centred together.
+    const how = this.add
+      .text(0, 0, "How to play", { fontFamily: ZILLA, fontStyle: "bold", fontSize: "19px", color: SPLASH_GOLD_STR })
+      .setOrigin(0, 0.5)
+      .setInteractive({ useHandCursor: true });
+    const rowY = line.y + line.height + 26 + 29;
+    const bw = this.makeSplashButton(w / 2 - (SPLASH_LINK_GAP + how.width) / 2, rowY, "Connect with Adena", () => this.enter());
+    how.setPosition(w / 2 - (SPLASH_LINK_GAP + how.width) / 2 + bw / 2 + SPLASH_LINK_GAP, rowY).setDepth(2);
+    const underline = this.add.rectangle(how.x, rowY + how.height / 2, how.width, 2, SPLASH_GOLD).setOrigin(0, 0).setDepth(2);
+    how.on("pointerover", () => (how.setColor(SPLASH_CREAM_STR), underline.setFillStyle(SPLASH_CREAM)));
+    how.on("pointerout", () => (how.setColor(SPLASH_GOLD_STR), underline.setFillStyle(SPLASH_GOLD)));
+    how.on("pointerup", () => this.scene.start("GameScene", { tutorial: true }));
     this.add
       .text(w / 2, creditY, CREDIT, { fontFamily: ZILLA, fontSize: "14px", color: "#B9A88A", align: "center", lineSpacing: 4, wordWrap: { width: Math.min(832, w - 100) } })
       .setOrigin(0.5, 1);
@@ -601,7 +618,7 @@ export class LobbyScene extends Phaser.Scene {
   }
 
   /** The splash's big button: parchment ringed in ink and brick red, sitting on a dark red edge; lighter under the pointer. */
-  private makeSplashButton(cx: number, cy: number, label: string, onClick: () => void) {
+  private makeSplashButton(cx: number, cy: number, label: string, onClick: () => void): number {
     const text = this.add.text(0, 0, label, { fontFamily: ZILLA, fontStyle: "bold", fontSize: "22px", color: SPLASH_INK_STR }).setOrigin(0, 0.5);
     const icon = this.textures.exists("adena_icon") ? 30 : 0;
     const gap = icon ? 12 : 0;
@@ -625,6 +642,7 @@ export class LobbyScene extends Phaser.Scene {
     zone.on("pointerover", () => draw(SPLASH_CREAM));
     zone.on("pointerout", () => draw(SPLASH_PAPER));
     zone.on("pointerup", onClick);
+    return bw;
   }
 
 

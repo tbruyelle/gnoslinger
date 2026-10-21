@@ -2,7 +2,7 @@ import Phaser from "phaser";
 import type { CardNumber, CardSide, ChoiceType, RelativeDirection } from "../rules";
 import { AHEAD_DIRS, BACK_DIRS, dirIndexToAngle, getActionCardAsset, getActionDef, relativeToAbsoluteDir, CHAR_ARROW_DIR } from "../rules";
 import { BOARD_A } from "../board/boardA";
-import { getChain, type Chain } from "../chain";
+import { currentChain, getChain, type Chain } from "../chain";
 import { subscribeAccountChanged, subscribeNetworkChanged } from "../chain/adena";
 import { userMessage } from "../chain/errors";
 import { GamePoller } from "../chain/poller";
@@ -36,6 +36,7 @@ import { loadPending, loadSeenTurn, saveSeenTurn, lockSealed, newSalt, planHash,
 import { DRAND_MARGIN, lastToCommit, openableSeats, ownRevealDue } from "../game/reveals";
 import { openAndReveal } from "../game/opener";
 import { seatColor, seatColorNum } from "../ui/seats";
+import { TUTORIAL_GAME, TUTORIAL_HASH, tutorialChain, tutorialCoach } from "../tutorial/tutorial";
 
 // ── Layout constants ────────────────────────────────────────────────────────
 
@@ -735,6 +736,8 @@ class CharacterToken {
  */
 export class GameScene extends Phaser.Scene {
   private gameID = "";
+  /** How to play: the scripted showdown against the Kid (tutorial/), no chain or wallet behind it. */
+  private tutorial = false;
   private chain!: Chain;
   private poller: GamePoller | null = null;
   private unsubscribe: (() => void)[] = [];
@@ -841,8 +844,9 @@ export class GameScene extends Phaser.Scene {
   }
 
   /** A game to show, or a set up: calling a showdown has no game yet, joining one has the game it joins. */
-  init(data: { gameID?: string; setup?: SetupRequest }) {
-    this.gameID = data.gameID ?? "";
+  init(data: { gameID?: string; setup?: SetupRequest; tutorial?: boolean }) {
+    this.tutorial = !!data.tutorial;
+    this.gameID = this.tutorial ? TUTORIAL_GAME : (data.gameID ?? "");
     this.setup = data.setup
       ? { req: data.setup, seat: data.setup.kind === "create" ? 0 : data.setup.seat, hex: null, facing: defaultFacing(data.setup.charKey), zone: [], ghost: null, busy: false }
       : null;
@@ -919,7 +923,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   create() {
-    this.chain = getChain();
+    this.chain = this.tutorial ? tutorialChain() : getChain();
     this.showdown = new ShowdownView({
       button: (id) => this.onButton(id),
       card: (card, side) => {
@@ -967,12 +971,16 @@ export class GameScene extends Phaser.Scene {
       showToast(this, why, "info");
       this.scene.start("LobbyScene", { splash: false });
     };
-    this.unsubscribe.push(
-      subscribeAccountChanged(() => leave("Account changed")),
-      subscribeNetworkChanged(() => leave("Network changed")),
-    );
+    if (!this.tutorial) {
+      this.unsubscribe.push(
+        subscribeAccountChanged(() => leave("Account changed")),
+        subscribeNetworkChanged(() => leave("Network changed")),
+      );
+    }
 
+    if (this.tutorial) history.replaceState(null, "", TUTORIAL_HASH);
     this.events.once("shutdown", () => {
+      if (this.tutorial) history.replaceState(null, "", location.pathname + location.search);
       closeCharacterSheet();
       this.showdown?.destroy();
       this.showdown = null;
@@ -1635,7 +1643,31 @@ export class GameScene extends Phaser.Scene {
 
   /** Renders the screen around the board (ui/showdownView.ts) from the scene's state. */
   private renderView() {
-    this.showdown?.render(this.viewModel(), this.layout);
+    const m = this.viewModel();
+    this.showdown?.render(this.tutorial ? this.tutorialModel(m) : m, this.layout);
+  }
+
+  /** How to play: the coach over the right column, and none of the buttons that would leave the lesson's path. */
+  private tutorialModel(m: ShowdownModel): ShowdownModel {
+    const view = this.view;
+    const pb = this.playback;
+    const atEnd = !!pb && pb.index === pb.turns.length - 1 && pb.seg === SEGMENTS;
+    const coach = view ? tutorialCoach({ turn: view.turn, phase: view.phase, playbackTurn: pb ? pb.turns[pb.index].turn : null, atEnd }) : null;
+    const over = view?.phase === "finished" && (!pb || atEnd);
+    return {
+      ...m,
+      title: view ? `How to play · Turn ${view.turn}` : "How to play",
+      plan: m.plan && { ...m.plan, buttons: m.plan.buttons.filter((b) => !["surrender", "claim", "cancel"].includes(b.id)) },
+      coach: coach && {
+        ...coach,
+        buttons: over
+          ? [
+              { id: "tutorialAgain", label: "Play it again", tone: "plain" },
+              { id: "lobby", label: "To the lobby", tone: "primary" },
+            ]
+          : [],
+      },
+    };
   }
 
   /** The overlay's buttons. */
@@ -1643,7 +1675,10 @@ export class GameScene extends Phaser.Scene {
     const pb = this.playback;
     switch (id) {
       case "lobby":
-        return this.scene.start("LobbyScene", { splash: false });
+        // Out of the tutorial: back to the splash unless Adena is connected already.
+        return this.scene.start("LobbyScene", { splash: this.tutorial && !currentChain() ? undefined : false });
+      case "tutorialAgain":
+        return this.scene.restart({ tutorial: true });
       case "send":
         return void this.sendPlan();
       case "clear":

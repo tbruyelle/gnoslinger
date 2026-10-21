@@ -124,6 +124,17 @@ export interface TimelineRow {
   cells: { fill: SegFill; label: string; exec: boolean }[];
 }
 
+/** The tutorial's coach, at the top of the right column: the lesson and what to do now. */
+export interface CoachModel {
+  /** "Step 2 of 5". */
+  step: string;
+  title: string;
+  text: string[];
+  /** What to play or watch, "" for none. */
+  todo: string;
+  buttons: Button[];
+}
+
 export interface ShowdownModel {
   title: string;
   status: string;
@@ -165,6 +176,8 @@ export interface ShowdownModel {
     /** Names the panel's close cross, what closing does; null: no cross (a finished game's replay). */
     closeLabel: string | null;
   } | null;
+  /** The tutorial's coach, none outside it. */
+  coach?: CoachModel | null;
 }
 
 export interface ShowdownActions {
@@ -204,6 +217,11 @@ const CSS = `
 .gv-left{grid-area:left}
 .gv-col-title{margin:0 0 -4px;font-family:Rye,Georgia,serif;font-weight:400;font-size:22px;letter-spacing:1px;color:#F3E7CE}
 .gv-right{grid-area:right}
+.gv-coach{--rule:#F2B544;flex-shrink:0}
+.gv-coach small{font-size:13px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#8E2F1A}
+.gv-coach h2{margin:-6px 0 0;font-family:Rye,Georgia,serif;font-weight:400;font-size:24px;color:#33307F;border-bottom:3px solid #2A1C14;padding-bottom:6px}
+.gv-coach p{margin:0;font-size:15px;line-height:1.4}
+.gv-coach .gv-todo{font-weight:700;color:#8E2F1A}
 .gv-panel{background:#F3E7CE;border:3px solid #2A1C14;border-radius:16px;box-shadow:inset 0 0 0 4px #F3E7CE,inset 0 0 0 6px var(--rule,#2A1C14);padding:14px;display:flex;flex-direction:column;gap:10px}
 .gv-char{cursor:pointer;text-align:left;width:100%;font:inherit;color:inherit}
 .gv-char:hover{background:#FBF4E4}
@@ -484,9 +502,10 @@ export class ShowdownView {
       this.ribbon.innerHTML = m.status ? `<span class="gv-status ${m.statusTone}${flash}">${esc(m.status)}</span>` : "";
       this.shownStatus = status;
     }
+    const coach = this.coachHtml(m);
     if (m.replay) {
       this.left.innerHTML = m.left.map((c) => this.charHtml(c, true)).join("");
-      this.right.innerHTML = this.logHtml(m);
+      this.right.innerHTML = coach + this.logHtml(m);
       this.bottom.innerHTML = this.replayHtml(m);
     } else {
       // My plan goes with my character and the segment tracker; the other characters fill the right, compact when they are several.
@@ -498,6 +517,7 @@ export class ShowdownView {
       // Titled Opponents beside my own character, Characters for a spectator.
       const title = m.left.some((c) => c.you) ? (m.others.length > 1 ? "Opponents" : "Opponent") : "Characters";
       this.right.innerHTML =
+        coach +
         (m.others.length ? `<h2 class="gv-col-title">${title}</h2>` : "") + m.others.map((c) => this.charHtml(c, m.others.length > 1)).join("");
       this.bottom.innerHTML = this.handHtml(m);
     }
@@ -593,6 +613,21 @@ export class ShowdownView {
     return (
       `<div class="gv-segs" role="img" aria-label="Your plan on the turn's five segments">${segs}</div>` +
       '<div class="gv-legend"><span><em style="background:#4F7A3A"></em>Action</span><span><em style="background:#B5482A"></em>Delay</span></div>'
+    );
+  }
+
+  private coachHtml(m: ShowdownModel): string {
+    const c = m.coach;
+    if (!c) return "";
+    const buttons = c.buttons
+      .map((b) => `<button type="button" class="gv-btn ${b.tone}" data-act="btn" data-id="${esc(b.id)}"${b.disabled ? " disabled" : ""}>${esc(b.label)}</button>`)
+      .join("");
+    return (
+      `<section class="gv-panel gv-coach" aria-labelledby="gv-coach"><small>${esc(c.step)}</small><h2 id="gv-coach">${esc(c.title)}</h2>` +
+      c.text.map((t) => `<p>${esc(t)}</p>`).join("") +
+      (c.todo ? `<p class="gv-todo">${esc(c.todo)}</p>` : "") +
+      (buttons ? `<div class="gv-buttons">${buttons}</div>` : "") +
+      "</section>"
     );
   }
 

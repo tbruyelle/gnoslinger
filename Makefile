@@ -55,6 +55,11 @@ check:
 gen-board:
 	python3 scripts/gen_board_data.py
 
+# The tutorial's showdown, played by the realm (filetest z16), for the client.
+gen-tutorial:
+	go tool gno test -run ./gno.land/r/tbruyelle/gnoslinger/v0/z16_ -update-golden-tests ./gno.land/r/tbruyelle/gnoslinger/v0/
+	python3 scripts/gen_tutorial.py
+
 # --- Gno module cache ---
 
 # Download gno module dependencies by starting a local gnodev from the pinned
@@ -89,4 +94,4 @@ update-fork:
 	go mod edit -replace github.com/gnolang/gno/contribs/gnodev=$(FORK_REPO)/contribs/gnodev@$(FORK_REF)
 	go mod tidy
 
-.PHONY: gnodev web dev test test-v lint fmt check gen-board mod-download update-fork
+.PHONY: gnodev web dev test test-v lint fmt check gen-board gen-tutorial mod-download update-fork

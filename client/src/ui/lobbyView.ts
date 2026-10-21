@@ -76,6 +76,8 @@ export interface LobbyModel {
 export interface LobbyActions {
   retry(): void;
   quit(): void;
+  /** How to play: the tutorial. */
+  tutorial(): void;
   copyAddress(): void;
   open(id: string): void;
   join(id: string): void;
@@ -103,6 +105,8 @@ const CSS = `
 .gl-top{background:#2A1C14;border-bottom:3px solid #5A4636;box-shadow:0 3px 0 #1E1618,0 5px 0 #5A4636}
 .gl-top-in{max-width:80rem;margin:0 auto;padding:12px 24px;display:flex;flex-wrap:wrap;align-items:center;gap:12px 28px}
 .gl-mark{font-family:Rye,Georgia,serif;font-size:30px;letter-spacing:2px;color:#F3E7CE}
+.gl-nav{min-height:44px;padding:0 6px;background:transparent;border:0;color:#D9C9A8;font-size:18px;font-weight:700;cursor:pointer}
+.gl-nav:hover{color:#F2B544}
 .gl-right{margin-left:auto;display:flex;flex-wrap:wrap;align-items:center;gap:12px;color:#F3E7CE}
 .gl-net{font-size:15px;font-weight:700;border:2px solid #5A4636;border-radius:999px;padding:4px 12px}
 .gl-session{font-size:15px;font-weight:700;line-height:inherit;background:transparent;color:#F3E7CE;border:2px solid #5A4636;border-radius:999px;padding:4px 12px;cursor:pointer}
@@ -270,6 +274,8 @@ export class LobbyView {
           return this.actions.retry();
         case "quit":
           return this.actions.quit();
+        case "tutorial":
+          return this.actions.tutorial();
         case "copy":
           return this.actions.copyAddress();
         case "open":
@@ -331,7 +337,7 @@ export class LobbyView {
     } else {
       right = `<span class="gl-error">${esc(m.error)}</span><button type="button" class="gl-retry" data-act="retry">Retry</button>`;
     }
-    return `<header class="gl-top"><div class="gl-top-in"><span class="gl-mark">GNOSLINGER</span><div class="gl-right">${right}</div></div></header>`;
+    return `<header class="gl-top"><div class="gl-top-in"><span class="gl-mark">GNOSLINGER</span><button type="button" class="gl-nav" data-act="tutorial">How to play</button><div class="gl-right">${right}</div></div></header>`;
   }
 
   /** The session's pill in the top bar; it opens the session dialog. */
