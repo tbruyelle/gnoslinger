@@ -38,11 +38,13 @@ const (
 	BothHands
 )
 
-// Hand codes used in plan strings: 0 = gun hand, 1 = other hand, 2 = both hands.
+// Hand codes used in plan strings: 0 = gun hand, 1 = other hand, 2 = both
+// hands; HandGround, "g" in a gun move, is the hex the character stands in.
 const (
-	HandGun   = 0
-	HandOther = 1
-	HandBoth  = 2
+	HandGun    = 0
+	HandOther  = 1
+	HandBoth   = 2
+	HandGround = 3
 )
 
 // HandLocation maps a plan hand code to the location it designates.

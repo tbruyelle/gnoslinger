@@ -30,6 +30,32 @@ type Action struct {
 	Opt    string  // shoot option for Cock/Aim/Shoot and Shoot (OptCock...), "" when the side takes none
 	Hex    string  // the hex named by an aim or a shot at a hex
 	Target int     // the seat named by an aim or a shot at a character; -1 otherwise
+	// Moves are the gun moves done when the action is revealed (10.22),
+	// written before it in the plan string.
+	Moves []GunMove
+}
+
+// GunMove is what a character may do with its guns, for free, each time it
+// reveals an action (10.22): move the gun in BOTH HANDS to one hand, or drop
+// a gun from a hand box into its hex. The other hand, like Draw & Cock's,
+// comes with a second gun: Validate refuses it for now. Its plan string entry, "h<gun id>:<to>",
+// comes before the action it goes with: To is HandGun (0) or HandOther (1),
+// or "g" (HandGround) to drop it ("h1:g,1f:ahead": drop the Colt as the
+// Advance is revealed). Whether the gun is there, where the move needs
+// it, is checked when it is done: it may be one picked up earlier in the
+// plan.
+type GunMove struct {
+	Gun int // id of the gun on the character's sheet
+	To  int // HandGun, HandOther or HandGround
+}
+
+// String is the move's plan string entry.
+func (m GunMove) String() string {
+	to := strconv.Itoa(m.To)
+	if m.To == HandGround {
+		to = "g"
+	}
+	return "h" + strconv.Itoa(m.Gun) + ":" + to
 }
 
 // Shoot options: what a Cock/Aim/Shoot does (11.3), or a Shoot (shoot or
@@ -100,7 +126,9 @@ func validOpt(code cards.Code, opt string) bool {
 // hand, "9f:g2:0": the gun lying in its hex with ground id 2; hand codes: 0
 // gun hand, 1 other hand, 2 both hands), or for Cock/Aim/Shoot and
 // Shoot the option ("5f:aim", "7f:shoot"; a bare "7f" does nothing), e.g.
-// "1f:ahead_left,2f:ahead,3f". An empty string is a pass.
+// "1f:ahead_left,2f:ahead,3f"; gun moves ("h1:g", GunMove) come before the
+// action they go with and do not count as actions. An empty string is a
+// pass.
 type Plan []Action
 
 // ParsePlan parses the plan string. It checks the syntax and that every card
@@ -113,18 +141,55 @@ func ParsePlan(s string) (Plan, error) {
 		return nil, errors.New("plan is too long")
 	}
 	entries := strings.Split(s, ",")
-	if len(entries) > MaxPlanEntries {
-		return nil, errors.New("too many actions in plan")
-	}
 	plan := make(Plan, 0, len(entries))
+	var moves []GunMove
 	for _, e := range entries {
+		if strings.HasPrefix(e, "h") {
+			m, err := parseMove(e)
+			if err != nil {
+				return nil, err
+			}
+			if len(moves) >= MaxGuns {
+				return nil, errors.New("too many gun moves before an action")
+			}
+			moves = append(moves, m)
+			continue
+		}
 		a, err := parseEntry(e)
 		if err != nil {
 			return nil, err
 		}
+		a.Moves, moves = moves, nil
 		plan = append(plan, a)
+		if len(plan) > MaxPlanEntries {
+			return nil, errors.New("too many actions in plan")
+		}
+	}
+	if len(moves) > 0 {
+		return nil, errors.New("a gun move goes before an action: it is done when that action comes up")
 	}
 	return plan, nil
+}
+
+// parseMove parses a gun move entry, "h<gun id>:<0|1|g>".
+func parseMove(e string) (GunMove, error) {
+	parts := strings.Split(e[1:], ":")
+	if len(parts) != 2 {
+		return GunMove{}, errors.New("gun move must be h<gun id>:<to> in " + strconv.Quote(e))
+	}
+	id, err := strconv.Atoi(parts[0])
+	if err != nil || id < 1 {
+		return GunMove{}, errors.New("invalid gun id in " + strconv.Quote(e))
+	}
+	switch parts[1] {
+	case "0":
+		return GunMove{Gun: id, To: HandGun}, nil
+	case "1":
+		return GunMove{Gun: id, To: HandOther}, nil
+	case "g":
+		return GunMove{Gun: id, To: HandGround}, nil
+	}
+	return GunMove{}, errors.New("a gun moves to 0 (gun hand), 1 (other hand) or g (the ground) in " + strconv.Quote(e))
 }
 
 func parseEntry(e string) (Action, error) {
@@ -218,6 +283,10 @@ func (p Plan) String() string {
 		if i > 0 {
 			b.WriteByte(',')
 		}
+		for _, m := range a.Moves {
+			b.WriteString(m.String())
+			b.WriteByte(',')
+		}
 		b.WriteString(strconv.Itoa(a.Card))
 		b.WriteByte(a.Side)
 		if a.Gun > 0 || a.Ground > 0 {
@@ -295,6 +364,16 @@ func (p Plan) Validate(c Character) error {
 			return errors.New("you cannot use both sides of a card")
 		}
 		used[a.Card] = true
+		// The gun may be one the plan picks up first (its id is the sheet's
+		// next): whether it is there is checked when the move is done.
+		for _, m := range a.Moves {
+			if m.To == HandOther { // the other hand comes with a second gun, as for Draw & Cock
+				return errors.New("a gun moves to the gun hand or the ground for now")
+			}
+			if m.To != HandGun && m.To != HandGround {
+				return errors.New("a gun moves to the gun hand or the ground")
+			}
+		}
 		switch {
 		case cards.IsShooting(def.Code):
 			if !validOpt(def.Code, a.Opt) {

@@ -18,6 +18,20 @@ export interface PlanEntry {
   /** What an aim or a shot targets: a hex, or a character by seat. */
   hex?: string;
   target?: number;
+  /** The gun moves done when this action is revealed (10.22), before it in the plan string. */
+  moves?: GunMove[];
+}
+
+/**
+ * A free gun move (rule 10.22, the engine's GunMove): when an action is
+ * revealed, the gun in both hands may go to one hand, as it is, and a gun in
+ * a hand may be dropped in the hex. In the plan string, "h<gun id>:<to>"
+ * before the action it goes with: to 0 gun hand, 1 other hand, "g" the
+ * ground (HAND_GROUND).
+ */
+export interface GunMove {
+  gun: number;
+  to: number;
 }
 
 export type ShootOption = "cock" | "uncock" | "aim" | "shoot" | "nothing";
@@ -36,6 +50,8 @@ export function isShooting(entry: { card: CardNumber; side: CardSide }): boolean
 export const HAND_GUN = 0;
 export const HAND_OTHER = 1;
 export const HAND_BOTH = 2;
+/** A gun move's destination "g": the hex the character stands in. */
+export const HAND_GROUND = 3;
 export const HAND_LOCATION: Record<number, GunView["location"]> = { 0: "gun_hand", 1: "other_hand", 2: "both_hands" };
 
 export const MAX_ACTION_POINTS = 5;
@@ -65,6 +81,19 @@ export function drawDestinations(guns: GunView[], gun?: GunView): number[] {
 /** The guns on the sheet a Draw & Cock can move: holstered or in hand, with a free box to go to. */
 export function drawableGuns(guns: GunView[]): GunView[] {
   return guns.filter((g) => drawDestinations(guns, g).length > 0);
+}
+
+/**
+ * Where a gun move can take the gun: from both hands, to the gun hand or the
+ * ground (the other hand comes with a second gun, as for Draw & Cock); from
+ * a hand, to the ground; from the holster, nowhere (nothing in the rules
+ * holsters a gun, nor draws it for free).
+ */
+export function moveDestinations(gun: GunView | undefined): number[] {
+  if (!gun) return [];
+  if (gun.location === "both_hands") return [HAND_GUN, HAND_GROUND];
+  if (gun.location === "gun_hand" || gun.location === "other_hand") return [HAND_GROUND];
+  return [];
 }
 
 /** The gun a Load would load: the one in BOTH HANDS, if it is not blown up and has room for a shell. */
@@ -113,61 +142,88 @@ export function canPlay(entry: { card: CardNumber; side: CardSide }, ranLastTurn
 export function encodePlan(plan: PlanEntry[]): string {
   return plan
     .map((e) => {
-      const def = getActionDef(e);
-      const base = `${e.card}${e.side === "front" ? "f" : "b"}`;
-      if (def.name in SHOOT_OPTIONS) {
-        if (!e.opt || (def.name === "Shoot" && e.opt === "nothing")) return base;
-        if (e.opt !== "aim" && e.opt !== "shoot") return `${base}:${e.opt}`;
-        return e.target !== undefined ? `${base}:${e.opt}:@${e.target}` : `${base}:${e.opt}:${e.hex ?? ""}`;
-      }
-      if (def.choiceType === "gun") {
-        if (e.groundGun !== undefined) return `${base}:g${e.groundGun}:${e.hand ?? HAND_GUN}`;
-        return e.gun !== undefined ? `${base}:${e.gun}:${e.hand ?? HAND_GUN}` : base;
-      }
-      const needsDir = def.choiceType === "move_ahead" || def.choiceType === "move_back" || def.choiceType === "turn_ahead" || def.choiceType === "turn_back";
-      return needsDir && e.dir ? `${base}:${e.dir}` : base;
+      const moves = (e.moves ?? []).map((m) => `${encodeMove(m)},`).join("");
+      return moves + encodeEntry(e);
     })
     .join(",");
 }
 
+/** A gun move's plan string entry: "h1:g", "h1:1". */
+export function encodeMove(m: GunMove): string {
+  return `h${m.gun}:${m.to === HAND_GROUND ? "g" : m.to}`;
+}
+
+function encodeEntry(e: PlanEntry): string {
+  const def = getActionDef(e);
+  const base = `${e.card}${e.side === "front" ? "f" : "b"}`;
+  if (def.name in SHOOT_OPTIONS) {
+    if (!e.opt || (def.name === "Shoot" && e.opt === "nothing")) return base;
+    if (e.opt !== "aim" && e.opt !== "shoot") return `${base}:${e.opt}`;
+    return e.target !== undefined ? `${base}:${e.opt}:@${e.target}` : `${base}:${e.opt}:${e.hex ?? ""}`;
+  }
+  if (def.choiceType === "gun") {
+    if (e.groundGun !== undefined) return `${base}:g${e.groundGun}:${e.hand ?? HAND_GUN}`;
+    return e.gun !== undefined ? `${base}:${e.gun}:${e.hand ?? HAND_GUN}` : base;
+  }
+  const needsDir = def.choiceType === "move_ahead" || def.choiceType === "move_back" || def.choiceType === "turn_ahead" || def.choiceType === "turn_back";
+  return needsDir && e.dir ? `${base}:${e.dir}` : base;
+}
+
 export function decodePlan(s: string): PlanEntry[] {
   if (s === "") return [];
-  return s.split(",").map((token) => {
-    const m = /^(\d{1,2})([fb])(?::([a-zA-Z_0-9:@-]+))?$/.exec(token);
-    if (!m) throw new Error(`invalid plan entry "${token}"`);
-    const card = Number(m[1]);
-    if (card < 1 || card > 12) throw new Error(`invalid card ${card}`);
-    const entry: PlanEntry = { card: card as CardNumber, side: m[2] === "f" ? "front" : "back" };
-    const name = getActionDef(entry).name;
-    if (name in SHOOT_OPTIONS) {
-      const choice = m[3] ?? (name === "Shoot" ? "nothing" : "");
-      const i = choice.indexOf(":");
-      const opt = i >= 0 ? choice.slice(0, i) : choice;
-      const arg = i >= 0 ? choice.slice(i + 1) : "";
-      if (!(SHOOT_OPTIONS[name] as string[]).includes(opt)) throw new Error(`invalid option "${opt}" for ${name}`);
-      if (opt === "aim" || opt === "shoot") {
-        // A character by seat, any seat a game may have (the realm checks it against the game's).
-        if (/^@\d$/.test(arg) && Number(arg.slice(1)) < MAX_SEATS) entry.target = Number(arg.slice(1));
-        else if (/^[A-Z0-9-]{3,8}$/.test(arg)) entry.hex = arg;
-        else throw new Error(`${opt} needs a hex or a character to ${opt} at, e.g. "${token.split(":")[0]}:${opt}:A-F6" or "…:${opt}:@1"`);
-      } else if (arg) throw new Error(`option "${opt}" takes no argument`);
-      entry.opt = opt as ShootOption;
-      return entry;
+  const plan: PlanEntry[] = [];
+  let moves: GunMove[] = [];
+  for (const token of s.split(",")) {
+    const m = /^h([1-9][0-9]*):([01g])$/.exec(token);
+    if (m) {
+      moves.push({ gun: Number(m[1]), to: m[2] === "g" ? HAND_GROUND : Number(m[2]) });
+      continue;
     }
-    if (m[3] !== undefined) {
-      if (getActionDef(entry).choiceType === "gun") {
-        const g = /^(g?)([1-9][0-9]*):([0-2])$/.exec(m[3]);
-        if (!g) throw new Error(`invalid gun choice "${m[3]}" (expected <gun id>:<hand> or g<ground id>:<hand>)`);
-        if (g[1]) entry.groundGun = Number(g[2]);
-        else entry.gun = Number(g[2]);
-        entry.hand = Number(g[3]);
-      } else {
-        if (!ALL_DIRS.has(m[3])) throw new Error(`invalid direction "${m[3]}"`);
-        entry.dir = m[3] as RelativeDirection;
-      }
-    }
+    if (token.startsWith("h")) throw new Error(`invalid gun move "${token}" (expected h<gun id>:<0|1|g>)`);
+    const entry = decodeEntry(token);
+    if (moves.length) entry.moves = moves;
+    moves = [];
+    plan.push(entry);
+  }
+  if (moves.length) throw new Error("a gun move goes before an action: it is done when that action comes up");
+  return plan;
+}
+
+function decodeEntry(token: string): PlanEntry {
+  const m = /^(\d{1,2})([fb])(?::([a-zA-Z_0-9:@-]+))?$/.exec(token);
+  if (!m) throw new Error(`invalid plan entry "${token}"`);
+  const card = Number(m[1]);
+  if (card < 1 || card > 12) throw new Error(`invalid card ${card}`);
+  const entry: PlanEntry = { card: card as CardNumber, side: m[2] === "f" ? "front" : "back" };
+  const name = getActionDef(entry).name;
+  if (name in SHOOT_OPTIONS) {
+    const choice = m[3] ?? (name === "Shoot" ? "nothing" : "");
+    const i = choice.indexOf(":");
+    const opt = i >= 0 ? choice.slice(0, i) : choice;
+    const arg = i >= 0 ? choice.slice(i + 1) : "";
+    if (!(SHOOT_OPTIONS[name] as string[]).includes(opt)) throw new Error(`invalid option "${opt}" for ${name}`);
+    if (opt === "aim" || opt === "shoot") {
+      // A character by seat, any seat a game may have (the realm checks it against the game's).
+      if (/^@\d$/.test(arg) && Number(arg.slice(1)) < MAX_SEATS) entry.target = Number(arg.slice(1));
+      else if (/^[A-Z0-9-]{3,8}$/.test(arg)) entry.hex = arg;
+      else throw new Error(`${opt} needs a hex or a character to ${opt} at, e.g. "${token.split(":")[0]}:${opt}:A-F6" or "…:${opt}:@1"`);
+    } else if (arg) throw new Error(`option "${opt}" takes no argument`);
+    entry.opt = opt as ShootOption;
     return entry;
-  });
+  }
+  if (m[3] !== undefined) {
+    if (getActionDef(entry).choiceType === "gun") {
+      const g = /^(g?)([1-9][0-9]*):([0-2])$/.exec(m[3]);
+      if (!g) throw new Error(`invalid gun choice "${m[3]}" (expected <gun id>:<hand> or g<ground id>:<hand>)`);
+      if (g[1]) entry.groundGun = Number(g[2]);
+      else entry.gun = Number(g[2]);
+      entry.hand = Number(g[3]);
+    } else {
+      if (!ALL_DIRS.has(m[3])) throw new Error(`invalid direction "${m[3]}"`);
+      entry.dir = m[3] as RelativeDirection;
+    }
+  }
+  return entry;
 }
 
 export function planCost(plan: PlanEntry[]): number {
@@ -190,6 +246,11 @@ export function validatePlan(plan: PlanEntry[], budget = MAX_ACTION_POINTS, ranL
     if (used.has(e.card)) return "you cannot use both sides of a card";
     used.add(e.card);
     names.add(def.name);
+    // The gun may be one the plan picks up first: whether it is there is checked when the move is done.
+    for (const m of e.moves ?? []) {
+      if (m.to === HAND_OTHER) return "a gun moves to the gun hand or the ground for now";
+      if (m.to !== HAND_GUN && m.to !== HAND_GROUND) return "a gun moves to the gun hand or the ground";
+    }
     if (def.name in SHOOT_OPTIONS) {
       if (!e.opt || !SHOOT_OPTIONS[def.name].includes(e.opt)) return "choose what to do with the gun";
       if ((e.opt === "aim" || e.opt === "shoot") && !e.hex && e.target === undefined) return `choose what to ${e.opt} at`;

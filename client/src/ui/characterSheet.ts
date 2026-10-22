@@ -66,6 +66,7 @@ const DROP_HANDS: { box: string; hand: number }[] = [
   { box: "gun_hand", hand: 0 },
   { box: "other_hand", hand: 1 },
   { box: "both_hands", hand: 2 },
+  { box: "ground", hand: 3 }, // a gun move dropping the gun in the hex (HAND_GROUND)
 ];
 
 /** The pick a drag reference designates: "<gun id>" or "g<ground id>". */
@@ -97,7 +98,7 @@ export function openCharacterSheet(d: SheetData, onClosed?: () => void, pick?: G
     .replace("{{bothHands}}", gunBox(d.guns, "both_hands", pick))
     .replace("{{gunHand}}", gunBox(d.guns, "gun_hand", pick))
     .replace("{{holstered}}", gunBox(d.guns, "holstered", pick))
-    .replace("{{ground}}", groundBox(d.ground, pick))
+    .replace("{{ground}}", groundBox(d.ground, d.guns, pick))
     .replace("{{serious}}", wound(d.serious, "fatigue card per turn"))
     .replace("{{gunArm}}", wound(d.gunArm, "aim time with the gun hand", "−"))
     .replace("{{otherArm}}", wound(d.otherArm, "aim time with the other hand", "−"))
@@ -365,10 +366,11 @@ function gunBox(guns: GunView[], location: GunView["location"], pick?: GunPick):
   return `<div data-box="${location}" style="flex: 1; padding: 12px; display: flex; flex-wrap: wrap; gap: 10px; align-content: flex-start; min-height: 60px">${cards.join("")}${hint}</div>`;
 }
 
-/** The weapons lying in the character's hex; draggable to the gun hand when being picked. */
-function groundBox(ground: GroundGunView[], pick?: GunPick): string {
+/** The weapons lying in the character's hex; draggable to the gun hand when being picked, and where a gun move drops one. */
+function groundBox(ground: GroundGunView[], guns: GunView[], pick?: GunPick): string {
   const cards = ground.flatMap((gg) => gg.guns.map((g) => gunCard(g, pick && pick.destinations({ ground: gg.id }).length > 0 ? `g${gg.id}` : null)));
-  const hint = cards.length === 0 ? `<div style="font-size: 16px; font-style: italic; opacity: .7">nothing on the ground here</div>` : "";
+  const open = pick && guns.some((g) => pick.destinations({ gun: g.id }).includes(3));
+  const hint = open ? `<div style="font-size: 16px; font-style: italic; opacity: .7">drop a gun here</div>` : cards.length === 0 ? `<div style="font-size: 16px; font-style: italic; opacity: .7">nothing on the ground here</div>` : "";
   return `<div data-box="ground" style="flex: 1; padding: 12px; display: flex; flex-wrap: wrap; gap: 10px; align-content: flex-start; min-height: 60px">${cards.join("")}${hint}</div>`;
 }
 

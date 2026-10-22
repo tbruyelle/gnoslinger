@@ -1561,3 +1561,80 @@ func TestHurtIsPutDownToTheShooter(t *testing.T) {
 		t.Errorf("seat 1 = %+v", c)
 	}
 }
+
+func TestGunMoves(t *testing.T) {
+	// Dropped as the first action is revealed (turn start, 10.22): the
+	// cocked Colt goes off harmlessly and lies in the start hex.
+	st := armed(0)
+	start := st.Chars[0].Hex
+	after, evs := resolve(t, st, "h1:g,1f:ahead", "")
+	if w := ofKind(evs, 0, EvWildShot); len(w) != 1 || w[0].Seg != 0 {
+		t.Errorf("wild shots = %v", w)
+	}
+	if d := ofKind(evs, 0, EvDropGun); len(d) != 1 || d[0].Seg != 0 || d[0].To != start || d[0].From != "gun_hand" {
+		t.Errorf("drops = %v", d)
+	}
+	if after.Chars[0].Guns.Find(1) >= 0 || len(after.Ground) != 1 || after.Ground[0].Hex != start || after.Ground[0].Gun.Cocked || after.Ground[0].Gun.Shells != 5 {
+		t.Errorf("seat 0 = %+v, ground %+v", after.Chars[0].Guns, after.Ground)
+	}
+	if m := ofKind(evs, 0, EvMove); len(m) != 1 || m[0].From != start {
+		t.Errorf("moves = %v", m)
+	}
+
+	// Dropping the gun it aims with loses the AIM points.
+	st = armed(0)
+	st.Chars[0].Aim, st.Chars[0].AimAt = 2, 1
+	after, evs = resolve(t, st, "h1:g,1f:ahead", "")
+	if l := ofKind(evs, 0, EvLoseAim); len(l) != 1 || l[0].Reason != ReasonGunDropped || l[0].Seg != 0 || after.Chars[0].Aim != 0 {
+		t.Errorf("lose aim = %v, aim %d", l, after.Chars[0].Aim)
+	}
+
+	// From both hands to the gun hand as the second action is revealed,
+	// right after the first (segment 2), as it is: uncocked.
+	st = startState()
+	st.Chars[0].Guns[0].Location = BothHands
+	after, evs = resolve(t, st, "1f:ahead,h1:0,3b:ahead_left", "")
+	if m := ofKind(evs, 0, EvMoveGun); len(m) != 1 || m[0].Seg != 2 || m[0].From != "both_hands" || m[0].To != "gun_hand" || m[0].GunID != 1 {
+		t.Errorf("gun moves = %v", m)
+	}
+	if g := after.Chars[0].Guns[0]; g.Location != GunHand || g.Cocked {
+		t.Errorf("gun = %+v", g)
+	}
+
+	// Drawn and dropped in one turn: the drop comes with the next action.
+	after, evs = resolve(t, startState(), "9f:1:0,h1:g,1f:ahead", "")
+	if d := ofKind(evs, 0, EvDropGun); len(d) != 1 || d[0].Seg != 3 {
+		t.Errorf("drops = %v", d)
+	}
+	if after.Chars[0].Guns.Find(1) >= 0 {
+		t.Errorf("the Colt is still on the sheet: %+v", after.Chars[0].Guns)
+	}
+
+	// A gun picked up earlier in the plan takes the sheet's next id, and
+	// a later move names it: picked up into both hands, then to the gun hand.
+	st = startState()
+	st.Chars[0].Guns = Guns{}
+	st.Ground = []GroundGun{{ID: 5, Hex: st.Chars[0].Hex, Gun: Gun{ID: 1, Type: Colt45, Location: Holstered, Shells: 6}}}
+	after, evs = resolve(t, st, "9f:g5:2,h1:0,1f:ahead", "")
+	if m := ofKind(evs, 0, EvMoveGun); len(m) != 1 || m[0].To != "gun_hand" {
+		t.Errorf("gun moves = %v, events %v", m, evs)
+	}
+	if g := after.Chars[0].Guns[after.Chars[0].Guns.Find(1)]; g.Location != GunHand || !g.Cocked {
+		t.Errorf("gun = %+v", g)
+	}
+
+	// A move the gun's place does not allow is cancelled: not in both
+	// hands for a hand, holstered for the ground; no such gun.
+	_, evs = resolve(t, armed(0), "h1:0,1f:ahead", "")
+	if c := ofKind(evs, 0, EvCancel); len(c) != 1 || c[0].Action != ActionGunMove || c[0].Reason != ReasonNotBoth {
+		t.Errorf("cancels = %v", c)
+	}
+	_, evs = resolve(t, startState(), "h1:g,1f:ahead", "")
+	if c := ofKind(evs, 0, EvCancel); len(c) != 1 || c[0].Reason != ReasonNotInHand {
+		t.Errorf("cancels = %v", c)
+	}
+	_, evs = resolve(t, startState(), "h2:g,1f:ahead", "")
+	if c := ofKind(evs, 0, EvCancel); len(c) != 1 || c[0].Reason != ReasonNoGun {
+		t.Errorf("cancels = %v", c)
+	}
+}

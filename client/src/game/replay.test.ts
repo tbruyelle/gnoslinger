@@ -101,4 +101,22 @@ describe("replayPlan", () => {
     const end = replayPlan({ ...start, hex: "A-F12" }, decodePlan("1f:ahead"), BOARD_A);
     expect(end.hex).toBe("A-F12");
   });
+
+  it("does gun moves as their action comes up, dropping guns in the hex", () => {
+    // The cocked Colt in the gun hand dropped as Advance comes up: it goes off harmlessly (a shell less, uncocked) in F1.
+    const armed = { ...start, guns: [{ ...colt, location: "gun_hand" as const, cocked: true }] };
+    const end = replayPlan(armed, decodePlan("h1:g,1f:ahead"), BOARD_A);
+    expect(end.guns).toEqual([]);
+    expect(end.dropped).toEqual([{ hex: "A-F1", gun: { ...colt, cocked: false, shells: 5 } }]);
+    expect(end.hex).toBe("A-F2");
+    // Aiming with it, the aim goes too.
+    const aiming = replayPlan({ ...armed, aim: 2, aimAt: 1 }, decodePlan("h1:g,1f:ahead"), BOARD_A);
+    expect(aiming).toMatchObject({ aim: 0, aimAt: -1, aimHex: "" });
+    // From both hands to the gun hand after the Advance, as it is; a move not tied to an action yet shows last.
+    const both = { ...start, guns: [{ ...colt, location: "both_hands" as const }] };
+    expect(replayPlan(both, decodePlan("1f:ahead,h1:0,3b:ahead_left"), BOARD_A).guns[0].location).toBe("gun_hand");
+    expect(replayPlan(both, decodePlan("1f:ahead"), BOARD_A, [], [], [{ gun: 1, to: 0 }]).guns[0].location).toBe("gun_hand");
+    // A move the gun no longer allows does nothing.
+    expect(replayPlan({ ...armed, guns: [{ ...colt, location: "holstered" as const }] }, decodePlan("h1:0,1f:ahead"), BOARD_A).guns[0].location).toBe("holstered");
+  });
 });

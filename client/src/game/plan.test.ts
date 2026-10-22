@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { GunView } from "../chain/types";
 import { BOARD_A } from "../board/boardA";
-import { canPlay, decodePlan, drawDestinations, drawableGuns, encodePlan, loadableGun, planCost, validatePlan, type PlanEntry } from "./plan";
+import { HAND_GROUND, HAND_GUN, HAND_OTHER, canPlay, decodePlan, drawDestinations, drawableGuns, encodePlan, loadableGun, moveDestinations, planCost, validatePlan, type PlanEntry } from "./plan";
 
 const COLT: GunView = { id: 1, type: "colt45", name: "Colt 45", location: "holstered", cocked: false, shells: 6, capacity: 6, jammed: false, exploded: false };
 
@@ -142,5 +142,30 @@ describe("validatePlan", () => {
     expect(canPlay({ card: 5, side: "front" }, true, [inBoth])).toBe(true);
     expect(canPlay({ card: 5, side: "front" }, true, [{ ...inBoth, cocked: true, exploded: true }])).toBe(false);
     expect(canPlay({ card: 7, side: "front" }, true, [{ ...inBoth, cocked: true, exploded: true }])).toBe(false);
+  });
+});
+
+describe("gun moves", () => {
+  it("go before their action in the plan string, and back", () => {
+    const s = "h1:g,1f:ahead,h1:1,3b:ahead_left";
+    const plan = decodePlan(s);
+    expect(plan).toHaveLength(2);
+    expect(plan[0].moves).toEqual([{ gun: 1, to: HAND_GROUND }]);
+    expect(plan[1].moves).toEqual([{ gun: 1, to: HAND_OTHER }]);
+    expect(encodePlan(plan)).toBe(s);
+    expect(planCost(plan)).toBe(3);
+    expect(() => decodePlan("1f:ahead,h1:g")).toThrow(/before an action/);
+    expect(() => decodePlan("h1:2,1f:ahead")).toThrow(/invalid gun move/);
+  });
+
+  it("move a gun from both hands to a hand or the ground, or from a hand to the ground", () => {
+    expect(moveDestinations({ ...COLT, location: "both_hands" })).toEqual([HAND_GUN, HAND_GROUND]);
+    // The other hand comes with a second gun.
+    expect(validatePlan(decodePlan("h1:1,1f:ahead"), 5, true, [COLT])).toBe("a gun moves to the gun hand or the ground for now");
+    expect(moveDestinations({ ...COLT, location: "gun_hand" })).toEqual([HAND_GROUND]);
+    expect(moveDestinations(COLT)).toEqual([]);
+    // A gun picked up earlier in the plan is not on the sheet yet: accepted.
+    expect(validatePlan(decodePlan("h2:g,1f:ahead"), 5, true, [COLT])).toBeNull();
+    expect(validatePlan(decodePlan("h1:g,1f:ahead"), 5, true, [COLT])).toBeNull();
   });
 });

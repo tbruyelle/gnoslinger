@@ -232,3 +232,14 @@ describe("describeEvent and a shot held", () => {
     expect(describeEvent(ev({ p: 0, kind: "nothing", action: "shoot", to: "A-H6", target: 1, reason: "out_of_fight" }), names)).toBe("marshal holds fire: dude is out of the fight");
   });
 });
+
+describe("gun moves in playback", () => {
+  it("move the gun from both hands to a hand, and say so", () => {
+    const names = ["marshal", "dude"];
+    const start2 = [{ hex: "A-D5", facing: 3, down: false, delay: 0, ...fresh, guns: [{ ...colt, location: "both_hands" as const }] }];
+    const evs = [ev({ seg: 0, p: 0, kind: "move_gun", from: "both_hands", to: "other_hand", gun: "colt45", gunId: 1 })];
+    expect(snapshotAfterSegment(start2, evs, 1)[0].guns[0].location).toBe("other_hand");
+    expect(describeEvent(evs[0], names)).toBe("marshal moves the Colt 45 from both hands to the other hand");
+    expect(describeEvent(ev({ p: 0, kind: "cancel", action: "gun_move", reason: "not_both" }), names)).toBe("marshal: gun move is cancelled (the gun is not in both hands)");
+  });
+});

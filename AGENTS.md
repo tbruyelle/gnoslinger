@@ -309,7 +309,27 @@ after the previous one, so the player would name someone else or do
 nothing (11.3); a hidden plan fixes every choice (targets, directions,
 options) at the start of the turn, and holding the shot is the nearest
 to doing nothing. An aim at a fallen character is cancelled (`no_target`).
-At most 5 entries, empty = pass. Example `1f:ahead_left,2f:ahead,3f`. Rules
+**Gun moves** (10.22, `engine.GunMove`): free, each time an action is
+revealed, the gun in BOTH HANDS may go to the gun hand as it is (the other
+hand, as for Draw & Cock, comes with a second gun: refused for now), and a gun in a
+hand may be dropped in the hex (a cocked one fires harmlessly, `dropGun`).
+A plan carries them as `h<gun id>:<to>` entries (the sheet's gun id, as
+Draw & Cock; `to` 0 gun hand, `g` the ground; 1, the other hand, parses but
+`Validate` refuses it) **before the
+action they go with**, done when that action is revealed (`reveal`: the
+turn start for the first, else right after the previous action), e.g.
+`h1:g,1f:ahead` drops the Colt as the Advance comes up; one after the last
+action is refused (no reveal left); they cost nothing and do not count as
+entries (`Action.Moves`, at most 3 before an action). The gun may be one
+picked up earlier in the plan (it takes the sheet's next id, `NextID`):
+whether it is there, and where, is checked when the move is done: a gun move the gun no longer allows (not in a hand, not in
+both hands) is cancelled (`cancel`, Action `gun_move`, Reason
+`not_in_hand`/`not_both`/`no_gun`); a move to a hand is a `move_gun` event
+(From `both_hands`, To the hand), a drop the usual `drop_gun`; dropping
+the gun the character would fire (gun hand or both hands) also loses its
+aim (`lose_aim`, Reason `gun_dropped`: this project's call, 12.42 lists the
+GUN HAND wound but not a gun let go). Nothing holsters a gun.
+At most 5 actions, empty = pass. Example `1f:ahead_left,2f:ahead,3f`. Rules
 (engine `Plan.Validate`): one side per card, dir required for move/turn
 cards and in the right set, no choice otherwise, Draw & Cock needs a gun of
 the sheet (holstered or in a hand, not already in the box named) or one
@@ -733,7 +753,16 @@ Clicking a token opens the **character
   the GUN HAND or BOTH HANDS box, only the boxes it may go to accepting it
   (`GunPick.destinations`, `drawDestinations`); the plan then
   carries the gun id and hand (`9f:1:0`, `9f:1:2`) and the resolution moves and cocks the gun
-  (`draw` event). **Load** (card 8 front) is playable with a gun in both
+  (`draw` event). **Gun moves**: my own sheet, opened from my panel or token while
+  I plan (`gunMovePick`), takes the free gun moves the same way: the gun in
+  BOTH HANDS dragged to GUN HAND or the GROUND panel, a gun in
+  a hand to the GROUND panel (`moveDestinations`, hand code 3 for the
+  ground, `HAND_GROUND`). A move goes with the next card picked
+  (`looseMoves` until then, `movesByCard` after; taking a card back takes
+  its moves away, and the loose ones made after it), Your plan lists it before that card ("Drop the Colt 45",
+  free), the preview applies it (`replayPlan`, `CharView.dropped` drawn on
+  the ground) and Send waits while one has no action after it
+  (`planProblem`). **Load** (card 8 front) is playable with a gun in both
   hands that has room (`loadableGun`). **Cock/Aim/Shoot** and **Shoot** open a column of option buttons beside my token (`openOptMenu`: Cock,
   Aim, Shoot; `pendingOpts`; with the gun uncocked only Cock is enabled,
   cocked only Aim and Shoot; the Shoot card goes straight to its target;

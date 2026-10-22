@@ -19,7 +19,7 @@ import {
   type ReplayPos,
 } from "../game/playback";
 import { BURST_KEYS, hitBurst } from "../game/bursts";
-import { MAX_ACTION_POINTS, canPlay, drawDestinations, drawableGuns, encodePlan, planCost, validatePlan, type PlanEntry, isEnabled, decodePlan } from "../game/plan";
+import { HAND_GROUND, MAX_ACTION_POINTS, canPlay, drawDestinations, drawableGuns, encodePlan, moveDestinations, planCost, validatePlan, type GunMove, type PlanEntry, isEnabled, decodePlan } from "../game/plan";
 import { firingGun, gunInHand, replayPlan, type CharView } from "../game/replay";
 import { SEGMENTS, segmentFills, turnSegmentCells } from "../game/segments";
 import { COCK_AIM_SHOOT_AIM_TIME, SHOOT_AIM_TIME, shotOdds } from "../game/shotOdds";
@@ -766,6 +766,10 @@ export class GameScene extends Phaser.Scene {
   private optMenu: { card: CardNumber; side: CardSide; objects: Phaser.GameObjects.GameObject[] } | null = null;
   /** The target picked for each aim (a hex, or the seat of a character standing on the clicked hex); the pick overlays while one is pending. */
   private pendingAims: Map<number, { hex?: string; target?: number }> = new Map();
+  /** The gun moves (10.22) each card's action does as it is revealed, dragged on my sheet before picking it. */
+  private movesByCard: Map<number, GunMove[]> = new Map();
+  /** Gun moves dragged since the last card picked: they go with the next one. */
+  private looseMoves: GunMove[] = [];
   /** menuHex: the hex whose target menu is open (several characters in it), "" for none. */
   private aimMode: { card: CardNumber; side: CardSide; objects: Phaser.GameObjects.GameObject[]; menuHex: string; menu: Phaser.GameObjects.GameObject[] } | null = null;
   /** The AIM markers on hexes, by the seat holding the aim. */
@@ -933,7 +937,7 @@ export class GameScene extends Phaser.Scene {
       card: (card, side) => {
         if (this.mode === "select") this.toggleCard(card as CardNumber, side);
       },
-      sheet: (seat) => this.openSheet(seat),
+      sheet: (seat) => this.openSeatSheet(seat),
       segment: (seg) => {
         if (this.playback) this.stepTo({ index: this.playback.index, seg });
       },
@@ -1242,9 +1246,10 @@ export class GameScene extends Phaser.Scene {
     if (!view) return [];
     const pb = this.playback;
     if (!pb) {
-      // A pick-up planned this turn lifts the gun off the ground in the preview.
+      // A pick-up planned this turn lifts the gun off the ground in the preview, a gun move drops one there.
       const picked = new Set(this.preview ? this.currentPlan().map((e) => e.groundGun) : []);
-      return (view.ground ?? []).filter((g) => !picked.has(g.id));
+      const dropped = (this.preview?.dropped ?? []).map((d, i) => ({ id: -(i + 1), hex: d.hex, guns: [d.gun] }));
+      return [...(view.ground ?? []).filter((g) => !picked.has(g.id)), ...dropped];
     }
     const t = pb.turns[pb.index];
     const ground = this.groundBefore();
@@ -1332,7 +1337,7 @@ export class GameScene extends Phaser.Scene {
         // Setting up, my token turns under the clicks: clockwise, the other way with the right button.
         if (this.setup && i === this.setup.seat) return this.turnSetup(pointer.rightButtonReleased() ? -1 : 1);
         if (pointer.rightButtonReleased()) return;
-        this.openSheet(i);
+        this.openSeatSheet(i);
       });
       img.on("pointerover", () => {
         this.tokens[i]?.setHover(this, true, this.arrMask);
@@ -1907,13 +1912,26 @@ export class GameScene extends Phaser.Scene {
       };
     }
     if (!view) return { title: "Loading", points: "", lines: [], empty: "Reading the showdown from the chain…", note: "", warn: false, buttons: [] };
-    const lines = (plan: PlanEntry[]) =>
-      plan.map((e) => ({
-        name: getActionDef(e).name,
-        detail: planDetail(e, names),
-        cost: getActionDef(e).cost,
-        target: e.target !== undefined && names[e.target] ? { name: names[e.target], color: seatColor(e.target) } : undefined,
-      }));
+    // A gun move (10.22) shows before its action, free; loose ones last, waiting for an action.
+    const moveLine = (m: GunMove, loose: boolean) => {
+      const gun = this.gunName(m.gun);
+      return {
+        name: m.to === HAND_GROUND ? `Drop the ${gun}` : `${gun} to the ${m.to === 0 ? "gun hand" : "other hand"}`,
+        detail: loose ? "pick an action: done as it comes up" : "free, as the next action comes up",
+      };
+    };
+    const lines = (plan: PlanEntry[], loose: GunMove[] = []) => [
+      ...plan.flatMap((e) => [
+        ...(e.moves ?? []).map((m) => moveLine(m, false)),
+        {
+          name: getActionDef(e).name,
+          detail: planDetail(e, names),
+          cost: getActionDef(e).cost,
+          target: e.target !== undefined && names[e.target] ? { name: names[e.target], color: seatColor(e.target) } : undefined,
+        },
+      ]),
+      ...loose.map((m) => moveLine(m, true)),
+    ];
     const replay = { id: "replay", label: "Replay", tone: "plain" as const, disabled: !view.lastTurn };
     const me = this.myIndex >= 0 ? view.players[this.myIndex] : null;
     const pending = this.pendingNames();
@@ -1944,7 +1962,8 @@ export class GameScene extends Phaser.Scene {
     if (this.mode === "select" || this.mode === "submitting") {
       const plan = this.currentPlan();
       const budget = this.budget();
-      const problem = validatePlan(plan, budget, this.ranLastTurn(), this.myGuns(), this.groundHere());
+      const problem = this.planProblem(plan);
+      const listed = plan.length + this.looseMoves.length > 0;
       const pending = this.choiceMode
         ? choicePrompt(this.choiceMode.choiceType)
         : this.optMenu
@@ -1962,13 +1981,13 @@ export class GameScene extends Phaser.Scene {
       return {
         title: "Your plan",
         points: `${planCost(plan)} / ${budget} points`,
-        lines: lines(plan),
-        empty: "Pick action cards in your hand, or send an empty plan to pass.",
-        note: submitting ? "Signing your plan in Adena…" : pending || (plan.length > 0 && problem ? problem : carried),
-        warn: !submitting && (!!pending || (plan.length > 0 && !!problem)),
+        lines: lines(plan, this.looseMoves),
+        empty: "Pick action cards in your hand, or send an empty plan to pass. Your sheet (click your panel) drops or moves a gun in hand, for free.",
+        note: submitting ? "Signing your plan in Adena…" : pending || (listed && problem ? problem : carried),
+        warn: !submitting && (!!pending || (listed && !!problem)),
         buttons: [
           { id: "send", label: submitting ? "SIGNING…" : plan.length === 0 ? "PASS THE TURN" : "SEND PLAN", tone: "primary", disabled: submitting || !!pending || !!problem },
-          { id: "clear", label: "Clear", tone: "plain", disabled: submitting || plan.length === 0 },
+          { id: "clear", label: "Clear", tone: "plain", disabled: submitting || !listed },
           replay,
           { id: "surrender", label: "Surrender", tone: "danger", disabled: submitting },
         ],
@@ -2106,8 +2125,54 @@ export class GameScene extends Phaser.Scene {
       const aim = this.pendingAims.get(e.card);
       if (aim?.hex) entry.hex = aim.hex;
       if (aim?.target !== undefined) entry.target = aim.target;
+      const moves = this.movesByCard.get(e.card);
+      if (moves?.length) entry.moves = moves;
       return entry;
     });
+  }
+
+  /** What stops the plan from being sent, as the realm would refuse it, or a gun move with no action after it. */
+  private planProblem(plan: PlanEntry[]): string | null {
+    const problem = validatePlan(plan, this.budget(), this.ranLastTurn(), this.myGuns(), this.groundHere());
+    if (problem) return problem;
+    return this.looseMoves.length ? "Pick an action after the gun move: it is done when that action comes up." : null;
+  }
+
+  /**
+   * The free gun moves my sheet offers while I plan (10.22): the gun in both
+   * hands to a hand or the ground, a gun in a hand to the ground. A move
+   * goes with the next card picked, done as that action comes up; none when
+   * no gun can move.
+   */
+  private gunMovePick(): GunPick | undefined {
+    if (this.mode !== "select" || this.choiceMode || this.optMenu || this.aimMode || this.outOfTime()) return undefined;
+    const planned = this.plannedGuns();
+    if (!planned.some((g) => moveDestinations(g).length > 0)) return undefined;
+    return {
+      prompt: "Free gun move: drop a gun in hand, or move it from both hands to the gun hand",
+      destinations: (pick) => (pick.gun === undefined ? [] : moveDestinations(planned.find((g) => g.id === pick.gun))),
+      onPick: (pick, to) => {
+        if (pick.gun === undefined) return;
+        this.looseMoves = [...this.looseMoves, { gun: pick.gun, to }];
+        this.updatePreview();
+        this.renderView();
+      },
+    };
+  }
+
+  /**
+   * A card taken out of the plan takes its gun moves with it, and the loose
+   * ones made after it, which may need it (a gun it picked up).
+   */
+  private releaseMoves(card: number) {
+    this.movesByCard.delete(card);
+    this.looseMoves = [];
+  }
+
+  /** A gun's name, from the sheet or the plan's preview (a gun picked up this turn, or one it drops). */
+  private gunName(id: number): string {
+    const guns = [...this.myGuns(), ...(this.preview?.guns ?? []), ...(this.preview?.dropped ?? []).map((d) => d.gun)];
+    return guns.find((g) => g.id === id)?.name ?? "gun";
   }
 
   /** My character's guns as the plan leaves them before the next card (the chain's when nothing is planned). */
@@ -2128,6 +2193,11 @@ export class GameScene extends Phaser.Scene {
   /** My character's guns, as the chain shows them. */
   private myGuns() {
     return (this.myIndex >= 0 ? this.view?.players[this.myIndex]?.guns : undefined) ?? [];
+  }
+
+  /** A seat's sheet, from its panel or its token: my own, while I plan, takes the free gun moves (10.22). */
+  private openSeatSheet(seat: number) {
+    this.openSheet(seat, seat === this.myIndex ? this.gunMovePick() : undefined);
   }
 
   /** Shows the character sheet of a seat, with what the board currently displays for it. */
@@ -2193,6 +2263,8 @@ export class GameScene extends Phaser.Scene {
     this.pendingGuns.clear();
     this.pendingOpts.clear();
     this.pendingAims.clear();
+    this.movesByCard.clear();
+    this.looseMoves = [];
     this.preview = null;
     this.previewPlan = "";
     this.choiceMode = null;
@@ -2222,12 +2294,15 @@ export class GameScene extends Phaser.Scene {
       if (!last || last.card !== card || last.side !== side) return;
       this.selectionOrder.pop();
       this.playCues([{ group: "unpickCard", delayMs: 0 }]);
+      this.releaseMoves(card);
       this.pendingChoices.delete(card);
       this.pendingGuns.delete(card);
       this.pendingOpts.delete(card);
       this.pendingAims.delete(card);
     } else {
       this.selectionOrder.push({ card, side });
+      if (this.looseMoves.length) this.movesByCard.set(card, this.looseMoves); // done as this action comes up
+      this.looseMoves = [];
       this.playCues([{ group: "pickCard", delayMs: 0 }]);
       if (isShooting({ card, side })) this.openOptMenu(card, side);
       else if (def.choiceType === "gun") this.enterGunChoice(card, side);
@@ -2274,7 +2349,9 @@ export class GameScene extends Phaser.Scene {
           const last = this.selectionOrder[this.selectionOrder.length - 1];
           if (last && last.card === card && last.side === side) {
             this.selectionOrder.pop();
+            this.releaseMoves(card);
             this.playCues([{ group: "unpickCard", delayMs: 0 }]);
+            this.updatePreview(false);
           }
           this.renderView();
         }
@@ -3038,7 +3115,7 @@ export class GameScene extends Phaser.Scene {
     const plan = this.currentPlan();
     // The chain's ground: the board's (displayGround) has the planned pick-up lifted off already.
     const seatHexes = this.committed.map((c) => c?.hex ?? "");
-    this.preview = replayPlan(me, plan, BOARD_A, this.view?.ground ?? [], seatHexes);
+    this.preview = replayPlan(me, plan, BOARD_A, this.view?.ground ?? [], seatHexes, this.looseMoves);
     this.refreshTokens(true);
     const encoded = encodePlan(plan);
     const prev = this.previewPlan;
@@ -3065,7 +3142,7 @@ export class GameScene extends Phaser.Scene {
     if (this.mode !== "select" || this.choiceMode || this.optMenu || this.aimMode || !this.view) return;
     if (this.outOfTime()) return this.renderView();
     const plan = this.currentPlan();
-    const problem = validatePlan(plan, this.budget(), this.ranLastTurn(), this.myGuns(), this.groundHere());
+    const problem = this.planProblem(plan);
     if (problem) {
       showToast(this, problem, "error");
       return;

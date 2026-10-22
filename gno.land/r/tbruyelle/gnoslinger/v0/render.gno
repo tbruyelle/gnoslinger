@@ -232,8 +232,13 @@ func renderHelp(res *mux.ResponseWriter, _ *mux.Request) {
 // reason code, except a target out of sight, spelled out with the obstacle
 // in the way.
 func cancelReason(e engine.Event) string {
-	if e.Reason == engine.ReasonNoLOS {
+	switch e.Reason {
+	case engine.ReasonNoLOS:
 		return noSight(e)
+	case engine.ReasonNotInHand:
+		return "the gun is not in hand"
+	case engine.ReasonNotBoth:
+		return "the gun is not in both hands"
 	}
 	return e.Reason
 }
@@ -356,6 +361,8 @@ func describeEvent(g *Game, e engine.Event) string {
 		what = who + " draws card " + strconv.Itoa(e.Card) + " as a direction: " + strings.ReplaceAll(e.To, "_", " ")
 	case engine.EvDropGun:
 		what = who + " drops the " + e.Gun.Spec().Name + " in " + e.To
+	case engine.EvMoveGun:
+		what = who + " moves the " + e.Gun.Spec().Name + " from " + strings.ReplaceAll(e.From, "_", " ") + " to the " + strings.ReplaceAll(e.To, "_", " ")
 	case engine.EvPassOut:
 		what = who + " passes out"
 	case engine.EvRunAway:

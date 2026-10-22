@@ -27,6 +27,7 @@ const (
 	EvWound        = "wound"         // Player hit: Result = penalty kind (Kill, Stun...), N
 	EvDirection    = "direction"     // Card drawn as a direction card: To = its HEX line
 	EvDropGun      = "drop_gun"      // Gun fell from From (hand) to the hex To, N = its ground id
+	EvMoveGun      = "move_gun"      // a gun move (10.22): Gun moved from From (both hands) to To (a hand), as it was
 	EvPassOut      = "pass_out"      // end of turn: more delay than endurance two turns in a row
 	EvSeriousCheck = "serious_check" // end of showdown: Card, N = DELAY + SERIOUS points (4 kills)
 	EvVP           = "vp"            // end of turn: victory points (rule 15), N = points (< 0 for a loss), Reason = the award (VPSurvive...)
@@ -48,7 +49,10 @@ const (
 	ReasonLeg        = "leg"          // fatigue cards per hex moved upright (14.12)
 	ReasonOffBoard   = "offboard"     // older records: a move off the board was cancelled (it now runs away, EvRunAway)
 	ReasonTime       = "time"         // not executed by the end of segment 5 (rule 7.53)
-	ReasonNoGun      = "no_gun"       // no gun in the box the action needs (11.3)
+	ReasonNoGun      = "no_gun"       // no gun in the box the action needs (11.3); a gun move of a gun the character no longer has
+	ReasonNotInHand  = "not_in_hand"  // a gun move dropping a gun that is not in a hand box (10.22)
+	ReasonNotBoth    = "not_both"     // a gun move to a hand of a gun that is not in both hands (10.22)
+	ReasonGunDropped = "gun_dropped"  // a gun move dropped the gun the character aims with: its AIM points go
 	ReasonHandFull   = "hand_full"    // the destination hand already holds a gun
 	ReasonNoRoom     = "no_room"      // the character already carries MaxGuns weapons
 	ReasonNotCocked  = "not_cocked"   // shooting an uncocked gun (13.1)
@@ -352,6 +356,9 @@ func runningDelay(evs []Event, start []int) {
 // them into or out of the character's own hex (both targets in it, or
 // both out of it); a shot moves them onto its target.
 func reveal(board *hex.Board, p int, st *State, a Action, seg int, evs *[]Event) {
+	for _, m := range a.Moves {
+		moveGun(p, st, m, seg, evs)
+	}
 	c := &st.Chars[p]
 	if c.Aim == 0 {
 		return
@@ -800,6 +807,48 @@ func dropHand(p int, c *Character, hand, other GunLocation, seg int, st *State, 
 	if i := c.Guns.At(BothHands); i >= 0 {
 		c.Guns[i].Location = other
 	}
+}
+
+// ActionGunMove names a gun move in its cancel event.
+const ActionGunMove cards.Code = "gun_move"
+
+// moveGun does a gun move as its action is revealed (10.22): the gun in
+// BOTH HANDS to one hand, as it is, or a gun in a hand box dropped in the
+// hex (a cocked one going off harmlessly). Dropping the gun it would fire
+// (gun hand or both hands) loses the aim, the points spent aiming it (as a
+// GUN HAND wound does, 12.42). A move the gun no longer allows (gone, not
+// in a hand, not in both hands) is cancelled.
+func moveGun(p int, st *State, m GunMove, seg int, evs *[]Event) {
+	c := &st.Chars[p]
+	cancel := func(reason string) {
+		*evs = append(*evs, Event{Seg: seg, Player: p, Kind: EvCancel, Action: ActionGunMove, Reason: reason, GunID: m.Gun})
+	}
+	i := c.Guns.Find(m.Gun)
+	if i < 0 {
+		cancel(ReasonNoGun)
+		return
+	}
+	g := &c.Guns[i]
+	if m.To == HandGround {
+		if g.Location == Holstered {
+			cancel(ReasonNotInHand)
+			return
+		}
+		aimed := g.Location == GunHand || g.Location == BothHands
+		dropGun(p, c, i, true, seg, st, evs)
+		if aimed && c.Aim > 0 {
+			loseAim(p, c, seg, ReasonGunDropped, evs)
+		}
+		return
+	}
+	if g.Location != BothHands {
+		cancel(ReasonNotBoth)
+		return
+	}
+	// A gun in BOTH HANDS leaves no hand to another gun: the hand is free.
+	to, _ := HandLocation(m.To)
+	*evs = append(*evs, Event{Seg: seg, Player: p, Kind: EvMoveGun, From: g.Location.String(), To: to.String(), Gun: g.Type, GunID: g.ID})
+	g.Location = to
 }
 
 // dropGun lets the gun in slot i fall in the character's hex, where it lies

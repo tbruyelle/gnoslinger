@@ -50,7 +50,7 @@ func TestParsePlanRoundTrip(t *testing.T) {
 		t.Fatalf("got %d actions", len(p))
 	}
 	for i := range want {
-		if p[i] != want[i] {
+		if !sameAction(p[i], want[i]) {
 			t.Errorf("action %d = %+v, want %+v", i, p[i], want[i])
 		}
 	}
@@ -204,5 +204,52 @@ func TestDrawAndCockPlan(t *testing.T) {
 	// A direction card given a slot token is a parse error.
 	if _, err := ParsePlan("3b:0"); err == nil || !strings.Contains(err.Error(), "invalid direction") {
 		t.Errorf("expected a parse error: %v", err)
+	}
+}
+
+// sameAction compares two actions, their gun moves included.
+func sameAction(a, b Action) bool {
+	if len(a.Moves) != len(b.Moves) {
+		return false
+	}
+	for i := range a.Moves {
+		if a.Moves[i] != b.Moves[i] {
+			return false
+		}
+	}
+	a.Moves, b.Moves = nil, nil
+	return a.Card == b.Card && a.Side == b.Side && a.Code == b.Code && a.Cost == b.Cost && a.Dir == b.Dir &&
+		a.Gun == b.Gun && a.Ground == b.Ground && a.Hand == b.Hand && a.Opt == b.Opt && a.Hex == b.Hex && a.Target == b.Target
+}
+
+func TestGunMovePlan(t *testing.T) {
+	// Gun moves come before their action, in the string as in the plan.
+	p := mustPlan(t, "h1:g,1f:ahead,h2:1,h3:0,5f:aim:@1")
+	if len(p) != 2 || len(p[0].Moves) != 1 || p[0].Moves[0] != (GunMove{Gun: 1, To: HandGround}) ||
+		len(p[1].Moves) != 2 || p[1].Moves[0] != (GunMove{Gun: 2, To: HandOther}) || p[1].Moves[1] != (GunMove{Gun: 3, To: HandGun}) {
+		t.Fatalf("plan = %+v", p)
+	}
+	if got := p.String(); got != "h1:g,1f:ahead,h2:1,h3:0,5f:aim:@1" {
+		t.Errorf("String() = %q", got)
+	}
+	if p.Cost() != 4 {
+		t.Errorf("Cost() = %d: a gun move is free", p.Cost())
+	}
+	// They are not actions: five actions and moves fit.
+	mustPlan(t, "h1:g,3b:ahead_left,4b,7f,10b,2b")
+	for _, bad := range []string{"1f:ahead,h1:g", "h1:g", "h0:g", "hx:g", "h1:2", "h1", "h1:g:0", "h1:g,h1:g,h1:g,h1:g,1f:ahead"} {
+		if _, err := ParsePlan(bad); err == nil {
+			t.Errorf("ParsePlan(%q) accepted", bad)
+		}
+	}
+	// The gun need not be on the sheet yet: a gun picked up earlier in the
+	// plan gets the sheet's next id.
+	c := newCharacter()
+	if err := mustPlan(t, "h2:g,1f:ahead").Validate(c); err != nil {
+		t.Errorf("Validate: %v", err)
+	}
+	// The other hand comes with a second gun.
+	if err := mustPlan(t, "h1:1,1f:ahead").Validate(c); err == nil {
+		t.Error("a move to the other hand was accepted")
 	}
 }

@@ -108,6 +108,9 @@ export function snapshotAfterSegment(start: CharView[], events: TurnEvent[], seg
           gun.jammed = true;
         } else if (gun && e.result === "explodes") gun.exploded = true;
         break;
+      case "move_gun": // a gun move (10.22): from both hands to a hand, as it is
+        if (gun) gun.location = e.to as GunLocation;
+        break;
       case "drop_gun":
         if (gun && ground) ground.push({ id: e.n, hex: e.to, guns: [{ ...gun, location: "holstered" }] });
         c.guns = c.guns.filter((x) => x.id !== e.gunId);
@@ -202,6 +205,9 @@ const MISS_REASONS: Record<string, string> = { out_of_zone: "out of the aim zone
 function reasonText(e: TurnEvent): string {
   if (e.reason === "no_los") return e.to ? `no line of sight, ${e.to} in the way` : "no line of sight";
   if (e.reason === "own_hex") return "the markers cannot move into or out of its own hex";
+  if (e.reason === "not_in_hand") return "the gun is not in hand";
+  if (e.reason === "not_both") return "the gun is not in both hands";
+  if (e.reason === "gun_dropped") return "the gun was dropped";
   return e.reason.replace(/_/g, " ");
 }
 
@@ -295,6 +301,8 @@ export function describeEvent(e: TurnEvent, names: string[]): string {
       return `${who} draws card ${e.card} as a direction: ${e.to.replace(/_/g, " ")}`;
     case "drop_gun":
       return `${who} drops the ${GUN_NAMES[e.gun] ?? e.gun} in ${e.to}`;
+    case "move_gun":
+      return `${who} moves the ${GUN_NAMES[e.gun] ?? e.gun} from both hands to the ${e.to.replace(/_/g, " ")}`;
     case "pass_out":
       return `${who} passes out`;
     case "run_away":
