@@ -1,4 +1,4 @@
-import { END_OF_TURN_SEG, type GroundGunView, type GunLocation, type TurnEvent, type TurnResult } from "../chain/types";
+import { END_OF_TURN_SEG, type GroundGunView, type GunLocation, type GunView, type TurnEvent, type TurnResult } from "../chain/types";
 import { copyChar, type CharView } from "./replay";
 import { signedVP, vpReason } from "./vp";
 
@@ -32,6 +32,26 @@ export function startOfTurn(t: TurnResult, fallback: CharView[]): CharView[] {
     aim: c.aim ?? 0, aimAt: c.aimAt ?? -1, aimHex: c.aimHex ?? "", endurance: c.endurance ?? 20, serious: c.serious ?? 0, gunArm: c.gunArm ?? 0, otherArm: c.otherArm ?? 0, leg: c.leg ?? 0,
     guns: (c.guns ?? []).map((g) => ({ ...g })),
   }));
+}
+
+/**
+ * The guns lying on the board when a turn began, from the chain's ground
+ * once it resolved: minus what the turn dropped, plus what it picked up,
+ * back in the hex where it lay, the one its character stood in when it
+ * picked it up (it may have walked there first). players are the chain's,
+ * holding the guns picked up; fallback stands for a turn recorded without
+ * its start.
+ */
+export function groundAtTurnStart(t: TurnResult, ground: GroundGunView[], players: { guns: GunView[] }[], fallback: CharView[]): GroundGunView[] {
+  const base = ground.filter((g) => !t.events.some((e) => e.kind === "drop_gun" && e.n === g.id));
+  const start = startOfTurn(t, fallback);
+  for (const [i, e] of t.events.entries()) {
+    if (e.kind !== "draw" || e.from !== "ground") continue;
+    const owner = players[e.p]?.guns.find((x) => x.id === e.gunId);
+    const hex = snapshotAfterSegment(start, t.events, e.seg, undefined, i)[e.p]?.hex ?? "";
+    if (owner) base.push({ id: e.n, hex, guns: [{ ...owner, location: "holstered", cocked: false }] });
+  }
+  return base;
 }
 
 /**

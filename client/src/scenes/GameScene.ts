@@ -11,6 +11,7 @@ import {
   describeEvents,
   endOfTurnEvents,
   eventsForSegment,
+  groundAtTurnStart,
   snapshotAfterSegment,
   splitSteps,
   startOfTurn,
@@ -1265,13 +1266,7 @@ export class GameScene extends Phaser.Scene {
     const t = pb.turns[pb.index];
     let base: GroundGunView[];
     if (pb.live) {
-      // The chain's ground, minus what this turn dropped, plus what it picked up.
-      base = (view.ground ?? []).filter((g) => !t.events.some((e) => e.kind === "drop_gun" && e.n === g.id));
-      for (const e of t.events) {
-        if (e.kind !== "draw" || e.from !== "ground") continue;
-        const owner = view.players[e.p]?.guns.find((x) => x.id === e.gunId);
-        if (owner) base.push({ id: e.n, hex: t.start[e.p]?.hex ?? "", guns: [{ ...owner, location: "holstered", cocked: false }] });
-      }
+      base = groundAtTurnStart(t, view.ground ?? [], view.players, this.committed);
     } else {
       base = [];
       for (let i = 0; i < pb.index; i++) {
