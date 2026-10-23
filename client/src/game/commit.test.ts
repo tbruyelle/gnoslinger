@@ -51,9 +51,17 @@ describe("hidden plans", () => {
   });
 
   it("remembers the last turn played back, per game", () => {
-    expect(loadSeenTurn(SCOPE, "0000003")).toBe(0);
-    saveSeenTurn(SCOPE, "0000003", 2);
-    expect(loadSeenTurn(SCOPE, "0000003")).toBe(2);
-    expect(loadSeenTurn({ ...SCOPE, realmPath: "gno.land/r/x/v1" }, "0000003")).toBe(0);
+    expect(loadSeenTurn(SCOPE, "0000003", "g1a", 1700)).toBe(0);
+    saveSeenTurn(SCOPE, "0000003", "g1a", 1700, 2);
+    expect(loadSeenTurn(SCOPE, "0000003", "g1a", 1700)).toBe(2);
+    expect(loadSeenTurn({ ...SCOPE, realmPath: "gno.land/r/x/v1" }, "0000003", "g1a", 1700)).toBe(0);
+    expect(loadSeenTurn(SCOPE, "0000003", "g1b", 1700)).toBe(0); // another account of the same browser
+  });
+
+  it("does not take the turns of a game with the same id on a chain started over as seen", () => {
+    saveSeenTurn(SCOPE, "0000004", "g1a", 1700, 13);
+    expect(loadSeenTurn(SCOPE, "0000004", "g1a", 1800)).toBe(0);
+    localStorage.setItem(`gnoslinger.seen.${SCOPE.chainId}.${SCOPE.realmPath}.0000005`, "13"); // written before the creation time was kept
+    expect(loadSeenTurn(SCOPE, "0000005", "g1a", 1700)).toBe(0);
   });
 });

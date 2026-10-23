@@ -1019,10 +1019,10 @@ export class GameScene extends Phaser.Scene {
       this.shownResultTurn = view.lastTurn?.turn ?? 0;
       this.applyState(true);
       // A game over: its whole replay, from the final turn when this browser has not played it back yet.
-      if (view.phase === "finished") void this.showFinalReplay(!!view.lastTurn && view.lastTurn.turn > loadSeenTurn(this.revealScope(), this.gameID));
+      if (view.phase === "finished") void this.showFinalReplay(!!view.lastTurn && view.lastTurn.turn > loadSeenTurn(this.revealScope(), this.gameID, this.chain.wallet.address, view.createdAt));
       // A turn that resolved while this browser was elsewhere (in the lobby,
       // which reveals by itself with auto-sign, or on another account): play it back.
-      else if (view.lastTurn && !this.setup && view.lastTurn.turn > loadSeenTurn(this.revealScope(), this.gameID)) this.startPlayback([view.lastTurn], true);
+      else if (view.lastTurn && !this.setup && view.lastTurn.turn > loadSeenTurn(this.revealScope(), this.gameID, this.chain.wallet.address, view.createdAt)) this.startPlayback([view.lastTurn], true);
       return;
     }
     // The game just ended: its whole history replaces the board, from the
@@ -3245,7 +3245,7 @@ export class GameScene extends Phaser.Scene {
     // A turn where nothing happened (nobody's plan in, time called) has nothing to show: say so and move on.
     const only = turns.length === 1 ? turns[0] : null;
     if (live && only && only.events.length === 0) {
-      saveSeenTurn(this.revealScope(), this.gameID, only.turn);
+      saveSeenTurn(this.revealScope(), this.gameID, this.chain.wallet.address, this.view?.createdAt ?? 0, only.turn);
       this.shownResultTurn = only.turn;
       showToast(this, `Turn ${only.turn} passed: nothing happened`, "info");
       this.applyState(false);
@@ -3255,7 +3255,7 @@ export class GameScene extends Phaser.Scene {
     this.clearSelection();
     this.playback = { turns, index, seg: 0, cut: null, anim: 0, live, auto: null };
     // Seen from the moment it starts: leaving for the lobby during or after it does not replay it again.
-    if (live) saveSeenTurn(this.revealScope(), this.gameID, turns[turns.length - 1].turn);
+    if (live) saveSeenTurn(this.revealScope(), this.gameID, this.chain.wallet.address, this.view?.createdAt ?? 0, turns[turns.length - 1].turn);
     this.hideAimZone();
     this.mode = "playback";
     this.refreshTokens(true);
@@ -3273,7 +3273,7 @@ export class GameScene extends Phaser.Scene {
       if (!this.scene.isActive() || history.turns.length === 0) return;
       const last = history.turns.length - 1;
       this.shownResultTurn = history.turns[last].turn;
-      if (atLast) saveSeenTurn(this.revealScope(), this.gameID, this.shownResultTurn);
+      if (atLast) saveSeenTurn(this.revealScope(), this.gameID, this.chain.wallet.address, this.view?.createdAt ?? 0, this.shownResultTurn);
       this.startPlayback(history.turns, false, atLast ? last : 0);
     } catch (e) {
       // Let a later poll try again.

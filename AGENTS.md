@@ -745,8 +745,9 @@ played, victory points, since). `game/lobby.ts` sorts the games into
   the whole history (`json/history/{id}`) with turn navigation and
   play/pause; a cross at the replay panel's top right closes it (or ends a
   live turn's playback). A running game opened with a resolved turn this
-  browser has not played back yet (`loadSeenTurn`, `gnoslinger.seen.<chainId>.<realm>.<game>`,
-  saved when a live playback starts, so leaving it for the lobby does not replay it again) opens on that turn's playback: it may
+  browser has not played back yet (`loadSeenTurn`, `gnoslinger.seen.<chainId>.<realm>.<game>.<addr>`, one per account, holding
+  `<createdAt>:<turn>`, so a game of a chain started over, given the same
+  id again, does not take the old game's turns as seen; saved when a live playback starts, so leaving it for the lobby does not replay it again) opens on that turn's playback: it may
   have resolved while the player was in the lobby, whose auto-sign reveals
   by themselves, or on another account. A finished game opens straight on its whole
   replay, from the final turn when the game ends while watched or when this

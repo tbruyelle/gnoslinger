@@ -81,18 +81,26 @@ export function prunePending(scope: RevealScope, game: string, turn: number): vo
   }
 }
 
-/** The last resolved turn of a game this browser played back (0 for none): opening the game replays a later one. */
-export function loadSeenTurn(scope: RevealScope, game: string): number {
+/**
+ * The last resolved turn of a game this browser played back for the account
+ * addr (0 for none): opening the game replays a later one, each account
+ * keeping its own (two accounts may play from one browser). The entry is stored with the game's
+ * creation time ("<createdAt>:<turn>"): a chain started over (gnodev) hands
+ * the same ids out again, and the new game must not take the old one's
+ * turns as seen; an entry of another game, or written before, counts as none.
+ */
+export function loadSeenTurn(scope: RevealScope, game: string, addr: string, createdAt: number): number {
   try {
-    return Number(localStorage.getItem(`gnoslinger.seen.${scope.chainId}.${scope.realmPath}.${game}`)) || 0;
+    const [at, turn] = (localStorage.getItem(seenKey(scope, game, addr)) ?? "").split(":");
+    return turn !== undefined && Number(at) === createdAt ? Number(turn) || 0 : 0;
   } catch {
     return 0;
   }
 }
 
-export function saveSeenTurn(scope: RevealScope, game: string, turn: number): void {
+export function saveSeenTurn(scope: RevealScope, game: string, addr: string, createdAt: number, turn: number): void {
   try {
-    localStorage.setItem(`gnoslinger.seen.${scope.chainId}.${scope.realmPath}.${game}`, String(turn));
+    localStorage.setItem(seenKey(scope, game, addr), `${createdAt}:${turn}`);
   } catch {
     // no storage: the turn may be replayed again
   }
@@ -131,4 +139,8 @@ export async function lockSealed(round: number, sealed: Sealed): Promise<string>
 export async function openLocked(locked: string): Promise<Sealed> {
   const t = await tlock();
   return unpackSealed((await t.timelockDecrypt(locked, t.mainnetClient())).toString());
+}
+
+function seenKey(scope: RevealScope, game: string, addr: string): string {
+  return `gnoslinger.seen.${scope.chainId}.${scope.realmPath}.${game}.${addr}`;
 }
