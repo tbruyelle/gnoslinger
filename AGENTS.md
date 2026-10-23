@@ -684,7 +684,9 @@ played, victory points, since). `game/lobby.ts` sorts the games into
   dialog, kept up to date while the replay moves, Esc or the cross
   closing it), and a timeline (one row per character,
   `turnSegmentCells`, thinner rows past two, the blue pointer over the segment shown, a click on a
-  segment jumps there) with the controls along the bottom. Every seat has
+  segment jumps there; the turn number between the turn arrows stands for
+  segment 0, the turn start, a click jumping to it; the pointer then
+  stands at the start of segment 1) with the controls along the bottom. Every seat has
   a colour (`ui/seats.ts`, `SEAT_COLORS`: indigo, brick, green, teal,
   apart in hue and lightness): the panels' rule, the token rings (mine wider
   and growing and shrinking while it is my move, `setPulse`; never another colour,

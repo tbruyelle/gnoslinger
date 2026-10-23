@@ -321,6 +321,7 @@ const CSS = `
 .gv-dot{width:10px;height:10px;flex-shrink:0;border-radius:50%;border:2px solid #F3E7CE}
 .gv-head{min-height:44px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:2px;background:transparent;border:0;color:#F3E7CE;font-family:Rye,Georgia,serif;font-size:18px;cursor:pointer}
 .gv-head:hover{color:#F2B544}
+.gv-start{align-self:flex-start;display:flex;transform:translateX(-50%)}
 .gv-rowname{display:flex;align-items:center;gap:9px;font-size:17px;font-weight:700;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .gv-rowname img{width:36px;height:36px;flex-shrink:0}
 .gv-cell{height:var(--cell);border:2px solid #5A4636;border-radius:9px;display:flex;align-items:center;justify-content:center;padding:0 6px;font-size:16px;font-weight:700;color:#F3E7CE;text-align:center;line-height:1.1;overflow:hidden}
@@ -331,6 +332,8 @@ const CSS = `
 .gv-ctl{flex:1 1 280px;display:flex;flex-direction:column;justify-content:center;gap:8px}
 .gv-ctl-row{display:flex;gap:8px}
 .gv-turn{flex:0 0 auto;min-width:3.5em;display:flex;align-items:center;justify-content:center;font-family:Rye,Georgia,serif;font-size:18px;color:#F3E7CE;white-space:nowrap}
+.gv-turn{background:transparent;border:0;padding:0 6px;cursor:pointer}
+.gv-turn:hover{color:#F2B544}
 .gv-ghost{flex:1;min-height:44px;background:transparent;color:#F3E7CE;border:2px solid #5A4636;border-radius:10px;font-size:16px;font-weight:700;cursor:pointer}
 .gv-ghost:hover:not(:disabled){border-color:#F3E7CE}
 .gv-icon{width:50px;min-height:50px;background:#F3E7CE;border:3px solid #F3E7CE;border-radius:12px;display:flex;align-items:center;justify-content:center;cursor:pointer}
@@ -706,7 +709,7 @@ export class ShowdownView {
   private replayHtml(m: ShowdownModel): string {
     const r = m.replay!;
     const heads = [1, 2, 3, 4, 5]
-      .map((n) => `<button type="button" class="gv-head" data-act="seg" data-seg="${n}" aria-label="Show segment ${n}"${n === r.seg ? ' aria-current="step"' : ""}>${n === r.seg ? POINTER_SVG : ""}${n}</button>`)
+      .map((n) => `<button type="button" class="gv-head" data-act="seg" data-seg="${n}" aria-label="Show segment ${n}"${n === r.seg ? ' aria-current="step"' : ""}>${n === r.seg ? POINTER_SVG : n === 1 && r.seg === 0 ? `<span class="gv-start">${POINTER_SVG}</span>` : ""}${n}</button>`)
       .join("");
     const rows = r.rows
       .map(
@@ -720,7 +723,8 @@ export class ShowdownView {
       `<div class="gv-rp"><div class="gv-tl${r.rows.length > 2 ? " compact" : ""}"><span></span>${heads}${rows}</div>` +
       '<div class="gv-ctl"><div class="gv-ctl-row">' +
       `<button type="button" class="gv-ghost" data-act="btn" data-id="prevTurn"${dis(r.prevTurn)}>◀ Turn</button>` +
-      `<span class="gv-turn" aria-label="Turn ${esc(r.turnLabel)}">${esc(r.turnLabel)}</span>` +
+      // The turn number stands for segment 0, the turn start (the plans, SERIOUS fatigue).
+      `<button type="button" class="gv-turn" data-act="seg" data-seg="0" aria-label="Turn ${esc(r.turnLabel)}: show its start">${esc(r.turnLabel)}</button>` +
       `<button type="button" class="gv-ghost" data-act="btn" data-id="nextTurn"${dis(r.nextTurn)}>Turn ▶</button></div>` +
       '<div class="gv-ctl-row">' +
       `<button type="button" class="gv-icon" data-act="btn" data-id="prevSeg" aria-label="Previous segment"${dis(r.prevSeg)}><svg width="20" height="20" viewBox="0 0 24 24" fill="#2A1C14" aria-hidden="true"><path d="M17 5 L7 12 L17 19 Z"></path></svg></button>` +
