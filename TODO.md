@@ -9,6 +9,7 @@
 - add report bug button
 
 ## General
+- address showdown by url & turn by num
 - remove unused assets
 - Replace the tbruyelle realm to sthing else
 - upgrade architecture
@@ -70,10 +71,6 @@
   - walls 
   - doors except saloon
   - windows
-- Games "open" (plans in clear, one transaction a turn), a lobby option
-  next to the hidden plans (DESIGN_HIDDEN_PLANS.md)?
-- Sounds
-  - Add western music
     
 ## Special Events
 - allow temparory events like "rob the bank" with rewards from realm funds
