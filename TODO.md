@@ -40,6 +40,9 @@
     - poker game with money
 
 ## Showdown
+- replay: add segment 0 between the arrows to represent the initial phase where
+  serious wounds happen. Problem, this is also where turn number appears in
+  pure replay mod (segment number appear in single turn replay mode)
 - some screen size hides the run away hexes
 - add winning/losing burst
 - show tips (or highlight a card with some text)
@@ -53,7 +56,6 @@
 - Movements
   - Check possible to move around a building corner
 - Cards
-  - add drop weapon action cards (show waepon on the ground)
   - enable throw and strength cards
   - add brawling
     - add knifes and others
