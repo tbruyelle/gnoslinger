@@ -25,8 +25,8 @@ import { firingGun, gunInHand, replayPlan, type CharView } from "../game/replay"
 import { SEGMENTS, segmentFills, turnSegmentCells } from "../game/segments";
 import { COCK_AIM_SHOOT_AIM_TIME, SHOOT_AIM_TIME, shotOdds } from "../game/shotOdds";
 import { canSee, standingOn } from "../game/sight";
-import { SOUND_FILES, SOUND_VOLUME, aimTaken, shotDelays, soundKey, soundsForDelay, soundsForEvents, soundsForPreview, woundDelays, type SoundCue, type SoundGroup } from "../game/sounds";
-import { SHOOT_OPTIONS, isShooting, type ShootOption } from "../game/plan";
+import { SOUND_FILES, SOUND_VOLUME, THROW_FLIGHT_MS, aimTaken, shotDelays, soundKey, soundsForDelay, soundsForEvents, soundsForPreview, throwLandings, woundDelays, type SoundCue, type SoundGroup } from "../game/sounds";
+import { SHOOT_OPTIONS, STRENGTH_DAMAGE, STRENGTH_WIELD, TARGET_OPTIONS, isShooting, isStrength, planAllows, throwReach, type ShootOption, type StrengthOption } from "../game/plan";
 import { closeCharacterSheet, openCharacterSheet, type GunPick } from "../ui/characterSheet";
 import { ShowdownView, showdownLayout, type BoardRect, type CharPanel, type HandSide, type ShowdownLayout, type ShowdownModel, type TimelineRow } from "../ui/showdownView";
 import { showToast } from "../ui/toast";
@@ -203,7 +203,9 @@ function paintGun(gun: GunView, img: Phaser.GameObjects.Image, dots: Phaser.Game
 }
 
 /** The option buttons offered for each gun action (uncocking stays possible in the plan string, not in the menu). */
-const MENU_OPTIONS: Record<string, ShootOption[]> = { "Cock/Aim/Shoot": ["cock", "aim", "shoot"], Shoot: ["shoot"] };
+const MENU_OPTIONS: Record<string, ShootOption[]> = { "Cock/Aim/Shoot": ["cock", "aim", "shoot"], Shoot: ["shoot"], Throw: ["throw"] };
+/** Aim time printed on Throw for a one-handed weapon (17.3). */
+const THROW_AIM_TIME = 2;
 
 /** How far a gun on the ground lies from its hex centre toward the lower-right, as a fraction of the token diameter. */
 const GROUND_ASIDE = 0.28;
@@ -762,7 +764,7 @@ export class GameScene extends Phaser.Scene {
   /** Gun id and destination hand chosen for cards that draw a gun (Draw & Cock). */
   private pendingGuns: Map<number, { gun?: number; ground?: number; hand: number }> = new Map();
   /** Shoot option picked for Cock/Aim/Shoot and Shoot cards. */
-  private pendingOpts: Map<number, ShootOption> = new Map();
+  private pendingOpts: Map<number, ShootOption | StrengthOption> = new Map();
   /** The option buttons shown while a gun action waits for its option. */
   private optMenu: { card: CardNumber; side: CardSide; objects: Phaser.GameObjects.GameObject[] } | null = null;
   /** The target picked for each aim (a hex, or the seat of a character standing on the clicked hex); the pick overlays while one is pending. */
@@ -1962,10 +1964,14 @@ export class GameScene extends Phaser.Scene {
       const pending = this.choiceMode
         ? choicePrompt(this.choiceMode.choiceType)
         : this.optMenu
-          ? "Choose what to do with the gun, beside your token."
+          ? isStrength(this.optMenu)
+            ? "Choose what the strength adds to the throw, beside your token."
+            : "Choose what to do with the gun, beside your token."
           : this.aimMode
-            ? `Click the hex to ${this.pendingOpts.get(this.aimMode.card) === "shoot" ? "shoot at (chance of hitting, bullseye in red)" : "aim at"}.`
-            : "";
+            ? `Click the hex to ${this.pendingOpts.get(this.aimMode.card) === "shoot" ? "shoot at (chance of hitting, bullseye in red)" : this.pendingOpts.get(this.aimMode.card) === "throw" ? "throw the gun at (chance of hitting, bullseye in red)" : "aim at"}.`
+            : plan.length > 0 && isStrength(plan[plan.length - 1])
+              ? "Pick Throw: the strength goes with the throw played right after it."
+              : "";
       const carried = [
         me && me.delay > 0 ? `${me.delay} delay carried from last turn: ${budget} of your ${MAX_ACTION_POINTS} points are left to plan.` : "",
         me?.missed ? `You let ${me.missed} turn${me.missed > 1 ? "s" : ""} in a row time out: at ${MAX_MISSED}, you are out of the fight.` : "",
@@ -2066,12 +2072,12 @@ export class GameScene extends Phaser.Scene {
               def.choiceType !== "none" &&
               !this.pendingChoices.has(card) &&
               !this.pendingGuns.has(card) &&
-              !(this.pendingOpts.has(card) && (!["aim", "shoot"].includes(this.pendingOpts.get(card) ?? "") || this.pendingAims.has(card)));
+              !(this.pendingOpts.has(card) && (!TARGET_OPTIONS.has(this.pendingOpts.get(card) ?? "") || this.pendingAims.has(card)));
             const isLast = !!last && last.card === card && last.side === side;
             state = needsChoice ? "choice" : isLast && selecting ? "last" : "picked";
           } else {
             const blocked = !!pendingCard || this.isSelected(card, side === "front" ? "back" : "front");
-            const usable = selecting && !blocked && cost + def.cost <= budget && canPlay({ card, side }, this.ranLastTurn(), this.plannedGuns(), this.groundHere());
+            const usable = selecting && !blocked && cost + def.cost <= budget && canPlay({ card, side }, this.ranLastTurn(), this.plannedGuns(), this.groundHere()) && planAllows(plan, { card, side }, budget);
             state = usable ? "open" : "off";
           }
           return { card, side, name: def.name, cost: def.cost, tag: CATEGORY_TAGS[def.category], state, order, image: getActionCardAsset(card, side) };
@@ -2279,6 +2285,7 @@ export class GameScene extends Phaser.Scene {
     const otherSelected = this.isSelected(card, side === "front" ? "back" : "front");
     if (!wasSelected) {
       if (otherSelected || !canPlay({ card, side }, this.ranLastTurn(), this.plannedGuns(), this.groundHere())) return;
+      if (!planAllows(this.currentPlan(), { card, side }, this.budget())) return;
       if (planCost(this.currentPlan()) + def.cost > this.budget()) return;
     }
     this.exitChoiceMode();
@@ -2299,7 +2306,7 @@ export class GameScene extends Phaser.Scene {
       if (this.looseMoves.length) this.movesByCard.set(card, this.looseMoves); // done as this action comes up
       this.looseMoves = [];
       this.playCues([{ group: "pickCard", delayMs: 0 }]);
-      if (isShooting({ card, side })) this.openOptMenu(card, side);
+      if (isShooting({ card, side }) || isStrength({ card, side })) this.openOptMenu(card, side);
       else if (def.choiceType === "gun") this.enterGunChoice(card, side);
       else if (def.choiceType !== "none") this.enterChoiceMode(card, side, def.choiceType);
     }
@@ -2639,9 +2646,15 @@ export class GameScene extends Phaser.Scene {
     if (!me) return;
     const r = (BOARD_A.hexRadius * this.displayTransform().scale * Math.sqrt(3)) / 2; // centre to side
     const objects: Phaser.GameObjects.GameObject[] = [];
-    // When shooting, the chance of hitting each hex.
-    const shooting = this.pendingOpts.get(card) === "shoot";
-    const cardAimTime = getActionDef({ card, side }).name === "Shoot" ? SHOOT_AIM_TIME : COCK_AIM_SHOOT_AIM_TIME;
+    // When shooting or throwing, the chance of hitting each hex; a throw
+    // reaches no farther than the weapon's wielding factor, plus the
+    // Strength played on top of it (17.2, 20.22).
+    const throwing = this.pendingOpts.get(card) === "throw";
+    const shooting = this.pendingOpts.get(card) === "shoot" || throwing;
+    const name = getActionDef({ card, side }).name;
+    const cardAimTime = throwing ? THROW_AIM_TIME : name === "Shoot" ? SHOOT_AIM_TIME : COCK_AIM_SHOOT_AIM_TIME;
+    const plan = this.currentPlan();
+    const reach = throwing ? throwReach(plan, plan.findIndex((e) => e.card === card && e.side === side)) : Infinity;
     // Where my AIM markers sit: on the character they follow, or on a hex.
     const markersHex = me.aim > 0 && me.aimAt >= 0 ? (chars[me.aimAt]?.hex ?? "") : me.aimHex;
     const fontPx = Math.round(Phaser.Math.Clamp(r * 0.62, 10, 22));
@@ -2661,6 +2674,7 @@ export class GameScene extends Phaser.Scene {
       // occupant gets up, a shot is held until someone in sight stands
       // there (the odds read 0).
       if (!hexSight.clear) continue;
+      if (BOARD_A.distance(me.hex, hex) > reach) continue;
       const hexOnly = !!standing && !sight.clear;
       const odds = shooting ? shotOdds(me, cardAimTime, hex, markersHex, BOARD_A, standing) : null;
       const who = standing ? charName(this.view?.players[chars.indexOf(standing)]?.char) : "";
@@ -2698,9 +2712,10 @@ export class GameScene extends Phaser.Scene {
         if (!odds) return;
         const lines: string[] = [];
         if (!odds.los) lines.push(`${standing ? who : hex} is out of sight (${odds.blocker} in the way)`);
-        lines.push(`Hit ${odds.hit}%  ·  bullseye ${odds.bullseye}%`, `range ${odds.range}  ·  aim time ${odds.aimTime}`);
+        lines.push(`Hit ${odds.hit}%  ·  bullseye ${odds.bullseye}%`, `range ${odds.range}${throwing ? ` of ${reach}` : ""}  ·  aim time ${odds.aimTime}`);
         // A shot at a hex is held when nobody stands there as it comes up, or when whoever does is out of sight.
         if (!standing) lines.push("held if nobody stands there when it comes up");
+        else if (throwing) lines.push("the gun lands there on a hit, next to it on a miss");
         else if (hexOnly) lines.push(`held while ${who} lies hidden, or if nobody is there`);
         detail = this.hoverDetail(sx, sy, r, lines);
         objects.push(detail);
@@ -2759,7 +2774,8 @@ export class GameScene extends Phaser.Scene {
     if (!this.aimMode) return;
     const chars = this.displayChars();
     this.pendingAims.set(this.aimMode.card, aim);
-    if (this.pendingOpts.get(this.aimMode.card) === "shoot") {
+    if (this.pendingOpts.get(this.aimMode.card) === "throw") this.playCues([{ group: "select", delayMs: 0 }]);
+    else if (this.pendingOpts.get(this.aimMode.card) === "shoot") {
       // The plan alone tells a gun with no shell left: the shot will only click.
       const gun = this.myIndex >= 0 ? firingGun(chars[this.myIndex]?.guns ?? []) : undefined;
       this.playCues([{ group: gun && gun.shells === 0 ? "emptyGun" : "planShoot", delayMs: 0 }]);
@@ -3019,8 +3035,11 @@ export class GameScene extends Phaser.Scene {
   /**
    * Buttons for the option of a gun action, in a column to the right of my
    * token: Cock / Aim / Shoot for Cock/Aim/Shoot; the Shoot card has a
-   * single option and goes straight to its target. With the gun uncocked (as the plan leaves it before this card)
-   * only Cock is enabled; cocked, Cock is disabled and the others enabled.
+   * single option and goes straight to its target. Aim is always enabled
+   * (an aim serves a throw as well as a shot, so an uncocked or jammed gun
+   * may aim); with the gun uncocked (as the plan leaves it before this
+   * card) Cock is enabled and Shoot disabled, cocked the other way round.
+   * A jammed gun cannot be cocked until completely reloaded (13.31).
    */
   private openOptMenu(card: CardNumber, side: CardSide) {
     this.closeOptMenu();
@@ -3028,6 +3047,16 @@ export class GameScene extends Phaser.Scene {
     const me = this.myIndex >= 0 ? chars[this.myIndex] : null;
     const gun = me ? firingGun(me.guns) : undefined;
     const name = getActionDef({ card, side }).name;
+    const center = me ? this.tokenScreenPos(chars, this.myIndex) : { sx: this.board.x + this.board.w / 2, sy: this.board.y + this.board.h / 2 };
+    if (name === "Strength") {
+      // What the Strength adds to the throw played right after it (20.2).
+      const items = [
+        { label: `+${STRENGTH_DAMAGE} to the penalties`, enabled: true, pick: () => this.resolveOpt("damage") },
+        { label: `+${STRENGTH_WIELD} hexes of range`, enabled: true, pick: () => this.resolveOpt("wield") },
+      ];
+      this.optMenu = { card, side, objects: this.menuButtons(center.sx + this.tokenDiameter() * 0.8, center.sy, items) };
+      return;
+    }
     const opts = MENU_OPTIONS[name] ?? [];
     if (opts.length === 1) {
       // A single option (Shoot): straight to the target pick, no menu.
@@ -3035,10 +3064,8 @@ export class GameScene extends Phaser.Scene {
       this.resolveOpt(opts[0]);
       return;
     }
-    // A jammed gun cannot be cocked until completely reloaded (13.31).
-    const enabled = (o: ShootOption) => !gun || (o === "cock" ? !gun.cocked && !gun.jammed : o === "nothing" ? true : gun.cocked);
-    const labels: Record<ShootOption, string> = { cock: "Cock", uncock: "Uncock", aim: "Aim", shoot: "Shoot", nothing: "Do nothing" };
-    const center = me ? this.tokenScreenPos(chars, this.myIndex) : { sx: this.board.x + this.board.w / 2, sy: this.board.y + this.board.h / 2 };
+    const enabled = (o: ShootOption) => !gun || (o === "cock" ? !gun.cocked && !gun.jammed : o === "shoot" ? gun.cocked : true);
+    const labels: Record<ShootOption, string> = { cock: "Cock", uncock: "Uncock", aim: "Aim", shoot: "Shoot", throw: "Throw", nothing: "Do nothing" };
     const items = opts.map((o) => ({ label: labels[o], enabled: enabled(o), pick: () => this.resolveOpt(o) }));
     this.optMenu = { card, side, objects: this.menuButtons(center.sx + this.tokenDiameter() * 0.8, center.sy, items) };
   }
@@ -3087,12 +3114,12 @@ export class GameScene extends Phaser.Scene {
     this.optMenu = null;
   }
 
-  private resolveOpt(opt: ShootOption) {
+  private resolveOpt(opt: ShootOption | StrengthOption) {
     if (!this.optMenu) return;
     const { card, side } = this.optMenu;
     this.pendingOpts.set(card, opt);
     this.closeOptMenu();
-    if (opt === "aim" || opt === "shoot") this.enterAimMode(card, side);
+    if (TARGET_OPTIONS.has(opt)) this.enterAimMode(card, side);
     this.updatePreview();
     if (opt === "cock") this.tokens[this.myIndex]?.cockGun(this.tweens);
     this.renderView();
@@ -3316,7 +3343,12 @@ export class GameScene extends Phaser.Scene {
     // A character hit reacts when its groan or death cry plays (woundDelays):
     // its token, and the guns it drops, wait for that.
     const reacts = woundDelays(events);
-    const hold: Hold = { seats: reacts, ground: new Map(events.flatMap((e) => (e.kind === "drop_gun" && reacts.has(e.p) ? [[e.n, reacts.get(e.p)!] as const] : []))) };
+    // A thrown weapon shows on the ground once it lands there.
+    const landings = throwLandings(events);
+    const hold: Hold = {
+      seats: reacts,
+      ground: new Map([...events.flatMap((e) => (e.kind === "drop_gun" && reacts.has(e.p) ? [[e.n, reacts.get(e.p)!] as const] : [])), ...landings]),
+    };
     const settle = () => {
       const before = this.tokens.map((t) => t?.delayShown() ?? 0);
       this.refreshTokens(true, hold);
@@ -3374,7 +3406,7 @@ export class GameScene extends Phaser.Scene {
     // The tokens move in 450 ms once settled, the characters hit once they
     // react (woundDelays); the guns going off one after the other
     // (shotDelays), their bullets and bursts need a beat more.
-    const lastShot = Math.max(-1, ...shotDelays(events).filter((d): d is number => d !== undefined));
+    const lastShot = Math.max(-1, ...shotDelays(events).filter((d): d is number => d !== undefined), ...landings.values());
     const lastReact = Math.max(0, ...reacts.values());
     return fade + (aim ? 150 : 0) + lastReact + STEP_MOVE_MS + (lastShot >= 0 ? lastShot + STEP_SHOT_MS : 0);
   }
@@ -3422,6 +3454,10 @@ export class GameScene extends Phaser.Scene {
         });
         return;
       }
+      if (e.kind === "throw" && chars[e.p]) {
+        this.flyThrow(e, events, chars, at, later, same);
+        return;
+      }
       if (e.kind !== "shot" || !chars[e.p]) return;
       // A misfire shows as a missed shot, unless the second card jams or blows
       // up the gun: then no bullet, the jam has its own burst.
@@ -3464,6 +3500,70 @@ export class GameScene extends Phaser.Scene {
             }
           }
         });
+      });
+    });
+  }
+
+  /**
+   * A thrown weapon (17.4) spinning in an arc from the thrower's hand: onto
+   * the target on a hit, where it strikes with the hit location's burst and
+   * some blood, as a bullet does; past it to the hex where it lands on a
+   * miss ("MISSED!" beside the target as it goes by). It lands
+   * THROW_FLIGHT_MS after it leaves, when the impact sounds and the gun
+   * shows on the ground (throwLandings).
+   */
+  private flyThrow(e: TurnEvent, events: TurnEvent[], chars: CharView[], at: number, later: (ms: number, fire: () => void) => void, same: () => boolean) {
+    const gun = this.gunCentre(e.p);
+    const from = { sx: gun.x, sy: gun.y };
+    const atToken = e.target >= 0 && !!chars[e.target];
+    const sprite = atToken ? this.tokens[e.target]?.sprite : undefined;
+    const centre = sprite ? { sx: sprite.x, sy: sprite.y } : atToken ? this.tokenScreenPos(chars, e.target) : this.hexToScreen(e.to);
+    const hit = e.hit !== "-";
+    const angle = Math.random() * Math.PI * 2;
+    const spread = Math.random() * this.tokenDiameter() * 0.3;
+    const near = { sx: centre.sx + Math.cos(angle) * spread, sy: centre.sy + Math.sin(angle) * spread };
+    const lands = events.find((x) => x.kind === "drop_gun" && x.p === e.p && x.reason === "throw");
+    const to = hit || !lands ? near : this.hexToScreen(lands.to);
+    const along = { x: centre.sx - from.sx, y: centre.sy - from.sy };
+    const key = `gun_${e.gun}`;
+    later(at, () => {
+      const size = this.tokenDiameter() * GUN_SIZE * 1.3;
+      const icon = this.textures.exists(key) ? this.add.image(from.sx, from.sy, key).setDisplaySize(size, size) : this.add.rectangle(from.sx, from.sy, size, size / 2, 0x2a1c14);
+      icon.setMask(this.arrMask).setDepth(25);
+      const base = icon.scaleX;
+      // The arc rises off the straight line by a third of its length, at most a token and a half.
+      const length = Math.hypot(to.sx - from.sx, to.sy - from.sy);
+      const rise = Math.min(length / 3, this.tokenDiameter() * 1.5);
+      const flight = { t: 0 };
+      const spin = (Math.random() < 0.5 ? -1 : 1) * 720;
+      // On a miss the weapon passes the target about when it is nearest to it.
+      const passing = hit || length === 0 ? 1 : Math.min(1, Math.hypot(centre.sx - from.sx, centre.sy - from.sy) / length);
+      let struck = false;
+      this.tweens.add({
+        targets: flight,
+        t: 1,
+        duration: THROW_FLIGHT_MS,
+        ease: "Sine.easeIn",
+        onUpdate: () => {
+          const t = flight.t;
+          icon.setPosition(from.sx + (to.sx - from.sx) * t, from.sy + (to.sy - from.sy) * t - rise * 4 * t * (1 - t));
+          icon.setAngle(spin * t);
+          icon.setScale(base * (1 + 0.35 * Math.sin(Math.PI * t))); // higher in the arc, nearer the eye
+          if (!struck && t >= passing) {
+            struck = true;
+            if (!same()) return;
+            this.popBurst(hit ? hitBurst(e.hit) : "missed", centre, along);
+            if (hit) {
+              this.spurtBlood(near, along);
+              this.cameras.main.shake(200, 0.005);
+              if (atToken) {
+                this.tokens[e.target]?.flinch(this.tweens);
+                this.tokens[e.target]?.hurtFlash(this);
+              }
+            }
+          }
+        },
+        onComplete: () => icon.destroy(),
       });
     });
   }
@@ -3882,7 +3982,8 @@ function planDetail(e: PlanEntry, names: string[]): string {
     if (e.groundGun === undefined && e.gun === undefined) return "pick the gun…";
     return e.groundGun !== undefined ? `from the ground to the ${HAND_NAMES[e.hand ?? 0]}` : `gun ${e.gun} to the ${HAND_NAMES[e.hand ?? 0]}`;
   }
-  if (e.opt === "aim" || e.opt === "shoot") return target ? `${e.opt} at ${target}` : `${e.opt} at…`;
+  if (def.name === "Strength") return e.opt === "wield" ? `+${STRENGTH_WIELD} range to the throw` : e.opt ? `+${STRENGTH_DAMAGE} to the throw's penalties` : "choose…";
+  if (e.opt && TARGET_OPTIONS.has(e.opt)) return target ? `${e.opt} at ${target}` : `${e.opt} at…`;
   if (e.opt === "nothing") return "do nothing";
   if (e.opt) return `${e.opt} the gun`;
   if (def.choiceType !== "none" && def.choiceType !== "gun" && !e.dir && !isShooting(e)) return "choose…";
@@ -3896,6 +3997,7 @@ function shortAction(e: PlanEntry | undefined): string {
   const def = getActionDef(e);
   if (isShooting(e)) return e.opt === "nothing" ? "Nothing" : e.opt ? e.opt.charAt(0).toUpperCase() + e.opt.slice(1) : def.name;
   if (def.name === "Draw & Cock") return "Draw";
+  if (def.name === "Strength") return e.opt === "wield" ? `+${STRENGTH_WIELD} range` : `+${STRENGTH_DAMAGE} dmg`;
   return def.name;
 }
 
@@ -3912,6 +4014,10 @@ function describePlanEntry(e: PlanEntry, names: string[]): string {
       return `Cock/Aim/Shoot: ${e.opt ?? "?"} the gun`;
     case "Shoot":
       return e.opt === "shoot" ? `Shoot at ${target}` : "Shoot: do nothing";
+    case "Throw":
+      return e.opt === "throw" ? `Throw the gun at ${target}` : "Throw: do nothing";
+    case "Strength":
+      return e.opt === "wield" ? `Strength: +${STRENGTH_WIELD} to the throw's range` : `Strength: +${STRENGTH_DAMAGE} to the throw's penalties`;
     default:
       return e.dir ? `${def.name} ${e.dir.replace(/_/g, " ")}` : def.name;
   }

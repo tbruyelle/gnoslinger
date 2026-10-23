@@ -18,12 +18,13 @@ marshal, the kid, the reb, the yankee), each player picking where its character
 stands when calling or joining,
 the foot actions (advance, back up, run, spin around, sprint, turn,
 leap/drop, get up/down) and the Colt 45 gun play (Draw & Cock,
-Cock/Aim/Shoot, Shoot, Load) with the full hit, wound and penalty rules, and
+Cock/Aim/Shoot, Shoot, Load) with the full hit, wound and penalty rules,
+throwing the gun in hand (Throw, with Strength on top), and
 victory points (rule 15). Plans are hidden: each player commits a hash of
 its plan, then reveals it once every plan is committed, with a copy
 timelocked to drand for anyone to open if it vanishes
-(`DESIGN_HIDDEN_PLANS.md`); throwing, brawling and multi-board layouts come
-later.
+(`DESIGN_HIDDEN_PLANS.md`); brawling, other weapons and multi-board layouts
+come later.
 
 ## Tech Stack
 
@@ -329,6 +330,15 @@ both hands) is cancelled (`cancel`, Action `gun_move`, Reason
 the gun the character would fire (gun hand or both hands) also loses its
 aim (`lose_aim`, Reason `gun_dropped`: this project's call, 12.42 lists the
 GUN HAND wound but not a gun let go). Nothing holsters a gun.
+**Throw** (card 6 back, 17) names its target like a shot, `6b:throw:@1` or
+`6b:throw:A-F6`, a bare `6b` doing nothing. **Strength** (card 7 back, 20)
+is `7b:damage` (+2 to the penalties; also a bare `7b`, what an unstated
+Strength does, 20.2) or `7b:wield` (+4 to the wielding factor, the range),
+and must come **just before a Throw** (`Validate`: "strength is played
+just before a throw"); `Plan.Combine` folds it into that Throw (its cost
+added, `Action.Wield`/`Damage`, its gun moves done as the Throw is
+revealed), which is how `Resolve` plays it: revealed, executed or
+cancelled with the Throw (20.1).
 At most 5 actions, empty = pass. Example `1f:ahead_left,2f:ahead,3f`. Rules
 (engine `Plan.Validate`): one side per card, dir required for move/turn
 cards and in the right set, no choice otherwise, Draw & Cock needs a gun of
@@ -403,7 +413,7 @@ gun (from a holster or a hand) to the gun hand or both hands, cocked.
 limit, else `full`), the gun uncocks (`load` event, N = shells); a jammed
 gun can neither shoot nor be cocked (`jammed`) until completely reloaded:
 Draw & Cock moves it uncocked (`draw` Result `jammed`), the client offers
-no gun card for it, and the load that fills it clears the jam (Result
+only Cock/Aim/Shoot's Aim (for a throw) and Throw for it, and the load that fills it clears the jam (Result
 `unjammed`, 13.31); an exploded gun cannot be loaded, cocked, aimed or
 fired (`broken`). Cock/Aim/Shoot cocks, uncocks, aims
 or shoots; Shoot shoots or does nothing. Aims and shots name a target the
@@ -478,8 +488,31 @@ the hex, `State.Ground`, firing harmlessly if cocked); GUN ARM n / OTHER ARM
 n (aim time); LEG n (n fatigue cards per hex moved upright); LIGHT n (n
 fatigue cards). Endurance starts at 20 (`StartEndurance`). A character killed or passed
 out drops every weapon in the hex as it is (14.6, `drop_gun` events, no
-wild shot), where the other may pick them up. Fanfiring, aim transfer on a Shoot doing nothing, and picking guns up from
-the ground are not played.
+wild shot), where the other may pick them up. Fanfiring and aim transfer
+on a Shoot doing nothing are not played.
+
+**Throwing** (rule 17, `throw` in `resolve.gno`): a Throw goes off with the
+shots, at the start of the segment (16.14), and throws the weapon in the
+proper box (a one-handed gun in the gun hand or both hands; jammed or
+blown up guns too; bare hands cannot, `no_gun`). Its target is found as a
+shot's, and held the same way (empty hex, out of sight, out of the fight:
+`nothing`, the gun kept). A range beyond the weapon's wielding factor
+(`GunSpec.Wielding`, 4 for the Colt) plus the Strength's +4 cancels it
+(`out_of_range`, 17.2). Aim time: 2 one-handed / 1 two-handed + AIM
+points − arm wounds (the aim moves onto the target on reveal as a shot's,
+17.11, and is lost after, Reason `throw`). One hit card, MALFUNCTIONs
+skipped (17.3), Target Status as for a shot, out of the aim zone a miss
+(17.12); a bullseye is the thrower's choice, `StrikingBullseye` (HEAD on
+line B: LIGHT 6, LOSE AIM). The `throw` event has the shot's fields. The
+damage comes from the **STRIKING TABLE** (`Striking`, line B: the
+one-handed guns' row; `lose_aim` is a penalty of its own), plus the
+Strength's +2 to each GUN ARM, OTHER ARM, LEG, SERIOUS, LIGHT and STUN
+(`Strengthen`, 20.21), applied at the end of the segment. The weapon
+lands as it is (no wild shot) in the target's hex on a hit, else next to
+it in the direction a drawn card names (17.4, a `direction` event): from
+the facing of a character named, from the direction towards the thrower
+for a hex named, `long` along the thrower's line; `same` or off the map,
+the target's hex. Landing is a `drop_gun` event with Reason `throw`.
 
 **Result deck** (`engine/v0/deck.gno`): the 108 result cards are transcribed
 as data (`engine.Cards`: DELAY, WOUND and HEX lines; TAC is unused and the
@@ -766,8 +799,9 @@ Clicking a token opens the **character
   the ground) and Send waits while one has no action after it
   (`planProblem`). **Load** (card 8 front) is playable with a gun in both
   hands that has room (`loadableGun`). **Cock/Aim/Shoot** and **Shoot** open a column of option buttons beside my token (`openOptMenu`: Cock,
-  Aim, Shoot; `pendingOpts`; with the gun uncocked only Cock is enabled,
-  cocked only Aim and Shoot; the Shoot card goes straight to its target;
+  Aim, Shoot; `pendingOpts`; Aim is always enabled (an aim serves a throw
+  too), Cock only with the gun uncocked and not jammed, Shoot only cocked;
+  the Shoot card goes straight to its target;
   uncocking and a Shoot doing nothing are only reachable through the plan
   string). Aim then highlights the aim zone (`BoardMap.aimZone`,
   same axial maths as the realm) and the clicked hex goes into the plan
@@ -800,7 +834,7 @@ Clicking a token opens the **character
   the board; the hit location's burst, `assets/hit_<location>.png` (arm,
   body, critical, gun, head, leg, side, vital, picked by `game/bursts.ts`
   from the shot's final `hit`; `hit.png`, a plain "HIT!", only for a
-  location without an image), or `missed.png` bursts beside the target (`jammed.png` or `exploded.png` beside the shooter when the second MALFUNCTION jams or blows up the gun; an exploded gun's icon is struck through in red and no gun card can use it). Throwing and brawling stay disabled.
+  location without an image), or `missed.png` bursts beside the target (`jammed.png` or `exploded.png` beside the shooter when the second MALFUNCTION jams or blows up the gun; an exploded gun's icon is struck through in red and only Throw can use it). A **throw** (`flyThrow`) flies the gun's icon spinning in an arc from the thrower's hand: onto the target on a hit, with the same burst and blood as a bullet, or past it to the hex where it lands on a miss; the gun shows on the ground once it lands (`throwLandings`, in the step's hold). Planning, **Throw** goes straight to its target among the hexes of the aim zone within reach (`throwReach`: 4, 8 with a `wield` Strength; the hover shows the odds with aim time 2 and the range out of the reach), **Strength** opens two buttons (+2 to the penalties, +4 hexes of range) and is only offered with the Throw free and the points for both, after which only the Throw can be picked (`planAllows`). Brawling stays disabled.
 - **How to play** (`tutorial/`): a guided showdown, the player's Marshal
   against a scripted Kid, on the game screen with no chain and no wallet;
   opened by **How to play** beside Connect with Adena on the splash, in the
@@ -901,7 +935,9 @@ moment to fall, grey out, lose its endurance and drop its guns
 an empty gun (reason `empty`) plays `empty-gun*`, as does picking the target
 of a shot whose gun the preview shows empty, instead of `plan-shoot.wav`; SERIOUS fatigue
 costing endurance at the turn start plays a `wounded*` groan, crossing a
-fence or going onto or off an obstacle an `obstacle*` sound) and while planning,
+fence or going onto or off an obstacle an `obstacle*` sound, a thrown
+weapon `impact*` as it lands, `THROW_FLIGHT_MS` after it leaves the hand,
+the target reacting then) and while planning,
 for what the plan alone decides (`soundsForPreview`: steps, climbing over a
 fence or an obstacle, turns, going down,
 drawing, picking a gun up from the ground (`ground_pick1.wav`, in

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { GunView, TurnEvent } from "../chain/types";
 import type { CharView } from "./replay";
-import { shotDelays, soundsForDelay, soundsForEvents, soundsForPreview, woundDelays } from "./sounds";
+import { THROW_FLIGHT_MS, shotDelays, soundsForDelay, soundsForEvents, soundsForPreview, throwLandings, woundDelays } from "./sounds";
 
 const ev = (partial: Partial<TurnEvent>): TurnEvent => ({
   seg: 1, p: 0, kind: "move", action: "", from: "", to: "", facing: 0, down: false, n: 0, delay: 0, reason: "", card: 0, result: "", endurance: 0, target: 1, hit: "", range: 0, gun: "", gunId: 0, step: 0, ...partial,
@@ -24,6 +24,22 @@ describe("soundsForEvents", () => {
     expect(groups([ev({ kind: "wound", result: "stun" }), ev({ kind: "pass_out" })])).toEqual(["wounded", "fall"]);
     // A shot with an empty gun only clicks; other cancels are silent.
     expect(groups([ev({ kind: "cancel", action: "shoot", reason: "empty" }), ev({ kind: "cancel", reason: "not_cocked" })])).toEqual(["emptyGun"]);
+  });
+
+  it("strikes as a thrown weapon lands, the target reacting then, the gun on the ground then", () => {
+    const events = [
+      ev({ kind: "shot", hit: "-" }),
+      ev({ p: 1, kind: "throw", target: 0, hit: "BODY" }),
+      ev({ p: 1, kind: "drop_gun", reason: "throw", n: 3, to: "A-F6" }),
+      ev({ p: 0, kind: "wound", result: "light", n: 3 }),
+    ];
+    expect(soundsForEvents(events).map((c) => [c.group, c.delayMs])).toEqual([
+      ["gunshot", 0],
+      ["ricochet", 350],
+      ["impact", 220 + THROW_FLIGHT_MS],
+      ["wounded", 220 + THROW_FLIGHT_MS + 350],
+    ]);
+    expect(throwLandings(events)).toEqual(new Map([[3, 220 + THROW_FLIGHT_MS]]));
   });
 
   it("spaces out empty guns clicking together, and after a shot fired with them", () => {

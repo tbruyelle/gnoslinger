@@ -22,11 +22,12 @@ const (
 	EvLoseAim      = "lose_aim"      // Reason (To = the obstacle in the way for no_los)
 	EvNothing      = "nothing"       // a Shoot used to do nothing, or a shot held at a hex nobody stands in (Reason empty_hex, To = the hex) or at a target out of sight (Reason no_los, To = its hex, Target = its seat) or out of the fight (Reason out_of_fight, To = its hex, Target = its seat): keeps the aim
 	EvShot         = "shot"          // Card, Target = the seat shot at (whoever stood in the hex named, for a shot at a hex), To = the hex shot at, Hit (final location or Miss), Range, N = aim time, Reason "" | out_of_zone | misfire (older records: Target -1 and empty_hex for a shot wasted on an empty hex)
+	EvThrow        = "throw"         // like a shot: Card, Target, To = the hex thrown at, Hit, Range, N = aim time, Chart, Status, Gun, GunID, Reason "" | out_of_zone; the weapon then lands (EvDropGun, Reason throw)
 	EvMalfunction  = "malfunction"   // Card, Result (no_effect, misfire, jams, explodes, no_penalty), Gun, GunID
 	EvWildShot     = "wild_shot"     // Gun went off without hitting anything: uncocked, one shell less
 	EvWound        = "wound"         // Player hit: Result = penalty kind (Kill, Stun...), N
 	EvDirection    = "direction"     // Card drawn as a direction card: To = its HEX line
-	EvDropGun      = "drop_gun"      // Gun fell from From (hand) to the hex To, N = its ground id
+	EvDropGun      = "drop_gun"      // Gun fell from From (hand) to the hex To, N = its ground id; Reason throw for a thrown weapon landing
 	EvMoveGun      = "move_gun"      // a gun move (10.22): Gun moved from From (both hands) to To (a hand), as it was
 	EvPassOut      = "pass_out"      // end of turn: more delay than endurance two turns in a row
 	EvSeriousCheck = "serious_check" // end of showdown: Card, N = DELAY + SERIOUS points (4 kills)
@@ -72,6 +73,8 @@ const (
 	ReasonMisfire    = "misfire"      // the shot was cancelled by a MALFUNCTION
 	ReasonEmptyHex   = "empty_hex"    // a shot at a hex nobody stood in: held (EvNothing)
 	ReasonOutOfFight = "out_of_fight" // a shot at a character killed, passed out, surrendered or run away: held (EvNothing)
+	ReasonOutOfRange = "out_of_range" // a throw farther than the weapon's wielding factor (17.2)
+	ReasonThrow      = "throw"        // aim spent by a throw (16.13); a thrown weapon landing (17.4)
 )
 
 // Malfunction results.
@@ -160,9 +163,12 @@ type pending struct {
 func Resolve(board *hex.Board, st State, plans []Plan, d Drawer) (State, []Event) {
 	st.Chars = CloneChars(st.Chars)
 	n := len(st.Chars)
-	for len(plans) < n { // a seat without a plan passes
-		plans = append(plans, nil)
+	// A STRENGTH is part of the Throw it is played on top of (20.1).
+	combined := make([]Plan, n)
+	for p := 0; p < n && p < len(plans); p++ { // a seat without a plan passes
+		combined[p] = plans[p].Combine()
 	}
+	plans = combined
 	var (
 		used = make([]int, n)
 		idx  = make([]int, n)
@@ -208,12 +214,21 @@ func Resolve(board *hex.Board, st State, plans []Plan, d Drawer) (State, []Event
 			results = make([][]pending, n)
 			first   = len(evs) // events of this segment start here
 		)
-		// Shots are resolved before the other actions (7.52).
+		// Shots and throws are resolved before the other actions (7.52,
+		// 16.14), simultaneously.
 		for p := 0; p < n; p++ {
-			if !due(p, seg) || !plans[p][idx[p]].IsShot() {
+			if !due(p, seg) || !(plans[p][idx[p]].IsShot() || plans[p][idx[p]].IsThrow()) {
 				continue
 			}
-			target, pens := shoot(board, p, &st, plans[p][idx[p]], seg, d, &evs)
+			var (
+				target int
+				pens   []Penalty
+			)
+			if plans[p][idx[p]].IsThrow() {
+				target, pens = throw(board, p, &st, plans[p][idx[p]], seg, d, &evs)
+			} else {
+				target, pens = shoot(board, p, &st, plans[p][idx[p]], seg, d, &evs)
+			}
 			if target >= 0 && len(pens) > 0 {
 				results[target] = append(results[target], pending{from: p, pens: pens})
 			}
@@ -348,13 +363,14 @@ func runningDelay(evs []Event, start []int) {
 	}
 }
 
-// reveal applies rules 12.44 and 12.5 when an action becomes the next one:
-// the aim is lost unless the action is a Turn, an aim or a shot (which
-// spends it when it goes off); cocking, uncocking or doing nothing with a
-// gun lose it like any other action. An aim or a shot naming a new target
-// keeps the markers only within one hex of their place, and never moves
-// them into or out of the character's own hex (both targets in it, or
-// both out of it); a shot moves them onto its target.
+// reveal applies rules 12.44, 12.5 and 17.11 when an action becomes the
+// next one: the aim is lost unless the action is a Turn, an aim, a shot or
+// a throw (which spend it when they go off); cocking, uncocking or doing
+// nothing with a gun lose it like any other action. An aim, a shot or a
+// throw naming a new target keeps the markers only within one hex of their
+// place, and never moves them into or out of the character's own hex (both
+// targets in it, or both out of it); a shot or a throw moves them onto its
+// target.
 func reveal(board *hex.Board, p int, st *State, a Action, seg int, evs *[]Event) {
 	for _, m := range a.Moves {
 		moveGun(p, st, m, seg, evs)
@@ -365,9 +381,9 @@ func reveal(board *hex.Board, p int, st *State, a Action, seg int, evs *[]Event)
 	}
 	switch {
 	case a.Code == cards.Turn:
-	case !cards.IsShooting(a.Code) || (a.Opt != OptAim && a.Opt != OptShoot):
+	case !cards.TakesTarget(a.Code) || !takesTarget(a.Opt):
 		loseAim(p, c, seg, ReasonReveal, evs)
-	case a.Opt == OptAim || a.Opt == OptShoot:
+	default:
 		// The target named: the markers move onto it within one hex (12.5).
 		named := a.Hex
 		if t := st.char(a.Target); a.Target >= 0 && t != nil {
@@ -379,7 +395,7 @@ func reveal(board *hex.Board, p int, st *State, a Action, seg int, evs *[]Event)
 			loseAim(p, c, seg, ReasonTransfer, evs)
 		} else if !same && (old == c.Hex) != (named == c.Hex) {
 			loseAim(p, c, seg, ReasonOwnHex, evs)
-		} else if a.Opt == OptShoot {
+		} else if a.Opt == OptShoot || a.Opt == OptThrow {
 			c.AimHex = a.Hex // "" when the shot names a character
 			c.AimAt = a.Target
 		}
@@ -658,6 +674,123 @@ func shoot(board *hex.Board, p int, st *State, a Action, seg int, d Drawer, evs 
 	return target, Impact(spec.Impact, hit)
 }
 
+// throw resolves a THROW (17): the weapon in the proper box (one-handed in
+// the gun hand or both hands, 16.2) is thrown at the target named, a
+// character or whoever stands in the hex named when it comes up, held like
+// a shot when there is nobody to hit (an empty hex, a target out of sight
+// or out of the fight: nothing thrown, the aim kept). Bare hands cannot
+// throw, and a target farther than the weapon's wielding factor (plus
+// STRENGTH, 20.22) cannot be thrown at (17.2): both cancel it. A hit card
+// is drawn, MALFUNCTION cards ignored (17.3); aim time and range read the
+// hit chart, Target Status applies, a bullseye goes where it hurts most,
+// and a target out of the aim zone is missed (17.12). The weapon lands in
+// the target's hex on a hit, else in the hex next to it a direction card
+// names (17.4): from the target's facing for a character named, towards
+// the thrower being ahead for a hex named; "long" carries on the thrower's
+// line, "same" and a hex off the map leave it in the target's hex. The
+// thrower then loses its aim (16.13). It returns the seat thrown at and
+// the STRIKING TABLE results of a hit, with STRENGTH's damage (20.21),
+// inflicted at the end of the segment.
+func throw(board *hex.Board, p int, st *State, a Action, seg int, d Drawer, evs *[]Event) (int, []Penalty) {
+	c := &st.Chars[p]
+	cancel := func(reason string) []Penalty {
+		*evs = append(*evs, Event{Seg: seg, Player: p, Kind: EvCancel, Action: a.Code, Reason: reason})
+		return nil
+	}
+	target := a.Target
+	at := a.Hex
+	if target < 0 {
+		if !board.Has(at) {
+			return NoSeat, cancel(ReasonNoHex)
+		}
+		target = standingIn(st, at, p)
+		if target < 0 {
+			*evs = append(*evs, Event{Seg: seg, Player: p, Kind: EvNothing, Action: a.Code, To: at, Reason: ReasonEmptyHex})
+			return NoSeat, nil
+		}
+	}
+	t := st.char(target)
+	if t == nil || target == p {
+		return NoSeat, cancel(ReasonNoTarget)
+	}
+	at = t.Hex
+	if t.Status != Alive {
+		*evs = append(*evs, Event{Seg: seg, Player: p, Kind: EvNothing, Action: a.Code, To: at, Target: target, Reason: ReasonOutOfFight})
+		return NoSeat, nil
+	}
+	if clear, _ := canSee(board, c, at, t); !clear {
+		*evs = append(*evs, Event{Seg: seg, Player: p, Kind: EvNothing, Action: a.Code, To: at, Target: target, Reason: ReasonNoLOS})
+		return target, nil
+	}
+	slot := c.Guns.Firing()
+	if slot < 0 {
+		return target, cancel(ReasonNoGun)
+	}
+	g := c.Guns[slot]
+	spec := g.Type.Spec()
+	rng := board.Distance(c.Hex, at)
+	if rng > spec.Wielding+a.Wield {
+		return target, cancel(ReasonOutOfRange)
+	}
+	aim := a.AimTime(spec.OneHanded) + c.Aim
+	if g.Location == GunHand || g.Location == BothHands {
+		aim -= c.GunArm
+	}
+	if g.Location == OtherHand || g.Location == BothHands {
+		aim -= c.OtherArm
+	}
+	inZone := board.InAimZone(c.Hex, c.Facing, at)
+	var card ResultCard
+	for tries := 0; tries < DeckSize; tries++ {
+		if card = d.Draw(); card.IsFire() {
+			break
+		}
+	}
+	hit := Miss
+	ev := Event{Seg: seg, Player: p, Kind: EvThrow, Action: a.Code, Card: card.N, Target: target, To: at, Range: rng, N: aim, Gun: g.Type, GunID: g.ID}
+	if !inZone {
+		ev.Reason = ReasonOutOfZone
+	} else if card.IsFire() {
+		prelim := card.Fire.Lookup(aim, rng)
+		ev.Chart = string(prelim)
+		hit, ev.Status = targetStatus(card, prelim, t)
+		if hit == Bullseye { // the thrower's choice
+			hit = StrikingBullseye(spec.Striking)
+		}
+	}
+	ev.Hit = string(hit)
+	*evs = append(*evs, ev)
+	lands := at
+	if hit == Miss {
+		dirCard := d.Draw()
+		*evs = append(*evs, Event{Seg: seg, Player: p, Kind: EvDirection, Card: dirCard.N, To: string(dirCard.Hex)})
+		if dir, ok := landing(board, c, t, a.Target >= 0, dirCard.Hex); ok {
+			if to, ok := board.Neighbor(at, dir); ok {
+				lands = to
+			}
+		}
+	}
+	putDown(p, c, slot, lands, ReasonThrow, seg, st, evs)
+	loseAim(p, c, seg, ReasonThrow, evs)
+	if hit == Miss {
+		return target, nil
+	}
+	return target, Strengthen(Striking(spec.Striking, hit), a.Damage)
+}
+
+// landing turns the direction card drawn for a missed throw into the
+// direction from the target to the hex where the weapon lands (17.4):
+// relative to the facing of a character named, or to the direction
+// towards the thrower for a hex named; "long" carries on the thrower's
+// line, "same" names no direction.
+func landing(board *hex.Board, thrower, t *Character, named bool, h hex.Rel) (hex.Dir, bool) {
+	if named || h == hex.Same || h == hex.Long {
+		return directionOf(board, t, thrower, h)
+	}
+	back := (board.LongDir(thrower.Hex, t.Hex, thrower.Facing) + 3) % 6
+	return hex.Resolve(back, h), true
+}
+
 // targetStatus applies the card's Target Status entries to a preliminary
 // hit (13.6): for Move and Run, a bullseye becomes the card's lesser hit
 // and any other hit a miss; for Down, any hit but a bullseye misses. Head
@@ -736,6 +869,8 @@ func applyPenalties(board *hex.Board, p int, st *State, r pending, seg int, d Dr
 			for i := 0; i < pen.N; i++ {
 				gained += drawCard(p, c, seg, ReasonLight, fatigueLine, r.from, d, evs)
 			}
+		case LoseAimHit:
+			loseAim(p, c, seg, string(LoseAimHit), evs)
 		}
 	}
 	return gained
@@ -855,15 +990,21 @@ func moveGun(p int, st *State, m GunMove, seg int, evs *[]Event) {
 // unowned with a fresh ground id; fire makes a cocked gun go off as it
 // falls (a released or knocked-out gun, 10.22, 14.11).
 func dropGun(p int, c *Character, i int, fire bool, seg int, st *State, evs *[]Event) {
-	g := &c.Guns[i]
-	if fire && g.Cocked {
-		fireHarmlessly(p, g, seg, evs)
+	if fire && c.Guns[i].Cocked {
+		fireHarmlessly(p, &c.Guns[i], seg, evs)
 	}
+	putDown(p, c, i, c.Hex, "", seg, st, evs)
+}
+
+// putDown takes the gun in slot i off c's sheet and lays it in hex at,
+// unowned with a fresh ground id, as it is.
+func putDown(p int, c *Character, i int, at, reason string, seg int, st *State, evs *[]Event) {
+	g := &c.Guns[i]
 	dropped := *g
 	dropped.Location = Holstered
 	st.GroundSeq++
-	st.Ground = append(st.Ground, GroundGun{ID: st.GroundSeq, Hex: c.Hex, Gun: dropped})
-	*evs = append(*evs, Event{Seg: seg, Player: p, Kind: EvDropGun, From: g.Location.String(), To: c.Hex, Gun: g.Type, GunID: g.ID, N: st.GroundSeq})
+	st.Ground = append(st.Ground, GroundGun{ID: st.GroundSeq, Hex: at, Gun: dropped})
+	*evs = append(*evs, Event{Seg: seg, Player: p, Kind: EvDropGun, From: g.Location.String(), To: at, Gun: g.Type, GunID: g.ID, N: st.GroundSeq, Reason: reason})
 	*g = Gun{}
 }
 
@@ -1010,6 +1151,9 @@ func execute(board *hex.Board, p int, a Action, st *State, seg int, d Drawer, ev
 			ev.Result = LoadUnjammed
 		}
 		*evs = append(*evs, ev)
+		return 0, true
+	case cards.Throw: // a throw resolves with the shots; this one does nothing (17.1)
+		*evs = append(*evs, Event{Seg: seg, Player: p, Kind: EvNothing, Action: a.Code})
 		return 0, true
 	case cards.CockAimShoot, cards.Shoot:
 		if a.Opt == OptNothing {

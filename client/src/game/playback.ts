@@ -109,6 +109,11 @@ export function snapshotAfterSegment(start: CharView[], events: TurnEvent[], seg
           c.aimHex = "";
         }
         break;
+      case "throw":
+        // Revealing the throw moved the markers onto its target (17.11); the weapon goes with drop_gun, the aim with lose_aim.
+        c.aimAt = e.target;
+        c.aimHex = "";
+        break;
       case "cock":
         if (gun) gun.cocked = true;
         break;
@@ -254,6 +259,13 @@ export function describeEvents(events: TurnEvent[], names: string[]): string[] {
   for (const e of events) {
     if (e.kind === "malfunction" && shooters.has(e.p)) continue;
     lines.push(describeEvent(e, names));
+    if (e.kind === "throw") {
+      // A throw's hit card (MALFUNCTION cards are ignored, 17.3).
+      let outcome = e.hit === "-" ? "miss" + (e.reason ? ` (${MISS_REASONS[e.reason] ?? e.reason.replace(/_/g, " ")})` : "") : `${e.hit} hit`;
+      if (e.status) outcome = `${e.chart} → ${outcome} (target ${targetStatusNames(e.status)})`;
+      lines.push(`${CARD_INDENT}card ${e.card}: FIRE, ${outcome}`);
+      continue;
+    }
     if (e.kind !== "shot") continue;
     for (const m of events) {
       if (m.kind === "malfunction" && m.p === e.p) lines.push(`${CARD_INDENT}card ${m.card}: ${MALFUNCTION_LINES[m.result] ?? `MALFUNCTION, ${m.result.replace(/_/g, " ")}`}`);
@@ -302,12 +314,19 @@ export function describeEvent(e: TurnEvent, names: string[]): string {
       return `${who} aims at ${e.to}${e.target >= 0 ? ` (${names[e.target] ?? `seat ${e.target}`})` : ""}: ${e.n} AIM points`;
     case "lose_aim":
       return `${who} loses the aim (${reasonText(e)})`;
-    case "nothing":
-      // A shot at a hex nobody stands in, at a target out of sight or out of the fight, is held, like a Shoot doing nothing.
-      if (e.reason === "empty_hex") return `${who} holds fire: nobody in ${e.to}`;
-      if (e.reason === "no_los") return `${who} holds fire: ${names[e.target] ?? `seat ${e.target}`} in ${e.to} is out of sight`;
-      if (e.reason === "out_of_fight") return `${who} holds fire: ${names[e.target] ?? `seat ${e.target}`} is out of the fight`;
+    case "nothing": {
+      // A shot or a throw at a hex nobody stands in, at a target out of sight or out of the fight, is held, like a Shoot doing nothing.
+      const hold = e.action === "throw" ? "holds the throw" : "holds fire";
+      if (e.reason === "empty_hex") return `${who} ${hold}: nobody in ${e.to}`;
+      if (e.reason === "no_los") return `${who} ${hold}: ${names[e.target] ?? `seat ${e.target}`} in ${e.to} is out of sight`;
+      if (e.reason === "out_of_fight") return `${who} ${hold}: ${names[e.target] ?? `seat ${e.target}`} is out of the fight`;
       return `${who} does nothing (${action})`;
+    }
+    case "throw": {
+      // The card it drew follows on its own line (describeEvents).
+      const at = e.target >= 0 ? `${names[e.target] ?? `seat ${e.target}`} in ${e.to}` : `${e.to}`;
+      return `${who} throws the ${GUN_NAMES[e.gun] ?? e.gun} at ${at} (aim time ${e.n}, range ${e.range})`;
+    }
     case "shot": {
       // The cards it drew follow on their own lines (describeEvents).
       const at = e.target >= 0 ? `${names[e.target] ?? `seat ${e.target}`} in ${e.to}` : `at ${e.to}`;
@@ -320,6 +339,7 @@ export function describeEvent(e: TurnEvent, names: string[]): string {
     case "direction":
       return `${who} draws card ${e.card} as a direction: ${e.to.replace(/_/g, " ")}`;
     case "drop_gun":
+      if (e.reason === "throw") return `${who}'s ${GUN_NAMES[e.gun] ?? e.gun} lands in ${e.to}`;
       return `${who} drops the ${GUN_NAMES[e.gun] ?? e.gun} in ${e.to}`;
     case "move_gun":
       return `${who} moves the ${GUN_NAMES[e.gun] ?? e.gun} from both hands to the ${e.to.replace(/_/g, " ")}`;

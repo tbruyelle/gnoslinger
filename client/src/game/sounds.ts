@@ -40,13 +40,15 @@ export const SOUND_FILES = {
   dead: ["dead1.wav", "dead2.wav", "dead3.wav", "dead4.wav", "dead5.wav"],
   // A character leaving the map (15.5).
   runAway: ["run-away.wav"],
+  // A thrown weapon striking its target or the ground.
+  impact: ["impact1.wav", "impact2.wav"],
 } as const;
 
 export type SoundGroup = keyof typeof SOUND_FILES;
 
 /** Volume per group: gunshots stand out, footsteps stay in the background. */
 export const SOUND_VOLUME: Record<SoundGroup, number> = {
-  pickCard: 0.6, unpickCard: 0.6, select: 0.6, step: 0.5, turn: 0.5, unholster: 0.8, groundPick: 0.8, cock: 0.8, aim: 0.8, planShoot: 0.8, gunshot: 1, ricochet: 0.8, emptyGun: 0.9, reload: 0.8, delay: 0.7, undelay: 0.7, fall: 0.8, obstacle: 0.8, wounded: 0.9, dead: 0.9, runAway: 0.8,
+  pickCard: 0.6, unpickCard: 0.6, select: 0.6, step: 0.5, turn: 0.5, unholster: 0.8, groundPick: 0.8, cock: 0.8, aim: 0.8, planShoot: 0.8, gunshot: 1, ricochet: 0.8, emptyGun: 0.9, reload: 0.8, delay: 0.7, undelay: 0.7, fall: 0.8, obstacle: 0.8, wounded: 0.9, dead: 0.9, runAway: 0.8, impact: 0.9,
 };
 
 /** The Phaser audio key of one variant of a group. */
@@ -62,6 +64,8 @@ export interface SoundCue {
 const COCK_AFTER_DRAW_MS = 350;
 /** Hits apply when the bullet lands, after the gunshot. */
 const WOUND_AFTER_SHOT_MS = 350;
+/** How long a thrown weapon takes to fly, spinning, to where it lands. */
+export const THROW_FLIGHT_MS = 550;
 /** A miss ricochets once the bullet has passed the target. */
 const RICOCHET_AFTER_SHOT_MS = 350;
 /** The token reaches the hexside it climbs over halfway through its move. */
@@ -83,8 +87,8 @@ function silentMisfire(e: TurnEvent, events: TurnEvent[]): boolean {
 
 /**
  * When each gun of a step goes off, in ms after the step is shown, by
- * event index: the shots fired, the empty guns clicking and the wild shots,
- * in event order, SIMULTANEOUS_GAP_MS apart so they can be told apart;
+ * event index: the shots fired, the empty guns clicking, the wild shots and
+ * the weapons thrown (as they leave the hand), in event order, SIMULTANEOUS_GAP_MS apart so they can be told apart;
  * undefined for the other events and for a shot whose misfire jams or blows
  * up the gun. The sounds and the bullets on the board share this timing.
  */
@@ -97,6 +101,7 @@ export function shotDelays(events: TurnEvent[]): (number | undefined)[] {
       case "cancel":
         return e.reason === "empty" ? shots++ * SIMULTANEOUS_GAP_MS : undefined;
       case "wild_shot":
+      case "throw":
         return shots++ * SIMULTANEOUS_GAP_MS;
       default:
         return undefined;
@@ -107,7 +112,8 @@ export function shotDelays(events: TurnEvent[]): (number | undefined)[] {
 /**
  * When each character hit in a step reacts, in ms after the step is shown,
  * by seat: WOUND_AFTER_SHOT_MS after the shot that hit it when that shot is
- * in the step (the bullet lands), else after the step is shown; two
+ * in the step (the bullet lands), or after the thrown weapon lands, else
+ * after the step is shown; two
  * characters due at the same instant react one after the other,
  * SIMULTANEOUS_GAP_MS apart, in event order. One reaction per character,
  * however many effects its hits have (a GUN hit is STUN, GUN HAND, SERIOUS
@@ -115,10 +121,11 @@ export function shotDelays(events: TurnEvent[]): (number | undefined)[] {
  * this timing.
  */
 export function woundDelays(events: TurnEvent[]): Map<number, number> {
-  const shotAt = new Map<number, number>(); // the seat hit -> when the shot went off
+  const shotAt = new Map<number, number>(); // the seat hit -> when the shot went off (or the throw landed)
   shotDelays(events).forEach((d, i) => {
     const e = events[i];
-    if (d !== undefined && e.kind === "shot" && e.hit !== "-" && e.target >= 0 && !shotAt.has(e.target)) shotAt.set(e.target, d);
+    if (d === undefined || (e.kind !== "shot" && e.kind !== "throw") || e.hit === "-" || e.target < 0 || shotAt.has(e.target)) return;
+    shotAt.set(e.target, e.kind === "throw" ? d + THROW_FLIGHT_MS : d);
   });
   const out = new Map<number, number>();
   const taken = new Set<number>();
@@ -179,6 +186,10 @@ export function soundsForEvents(events: TurnEvent[]): SoundCue[] {
         break;
       case "wild_shot":
         cues.push({ group: "gunshot", delayMs: at });
+        break;
+      case "throw":
+        // The weapon strikes the target, or the ground beside it, as it lands.
+        cues.push({ group: "impact", delayMs: at + THROW_FLIGHT_MS });
         break;
       case "wound": {
         // A kill among a character's wounds makes its groan the death cry.
@@ -272,4 +283,20 @@ export function soundsForDelay(before: number[], after: CharView[]): SoundCue[] 
   if (up) cues.push({ group: "delay", delayMs: 0 });
   if (down) cues.push({ group: "undelay", delayMs: 0 });
   return cues;
+}
+
+/**
+ * When each weapon thrown in a step lands, in ms after the step is shown,
+ * by its ground id (the drop_gun of the throw): it shows on the ground
+ * then, not before.
+ */
+export function throwLandings(events: TurnEvent[]): Map<number, number> {
+  const out = new Map<number, number>();
+  const delays = shotDelays(events);
+  events.forEach((e, i) => {
+    if (e.kind !== "throw" || delays[i] === undefined) return;
+    const lands = events.find((x) => x.kind === "drop_gun" && x.p === e.p && x.reason === "throw");
+    if (lands) out.set(lands.n, delays[i]! + THROW_FLIGHT_MS);
+  });
+  return out;
 }

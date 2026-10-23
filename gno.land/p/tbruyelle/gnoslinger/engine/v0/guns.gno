@@ -17,13 +17,15 @@ type GunSpec struct {
 	Capacity  int
 	OneHanded bool
 	Impact    byte // its line of the IMPACT TABLE (see Impact)
+	Wielding  int  // its wielding factor: how far it can be thrown (16.21, 17.2)
+	Striking  byte // its line of the STRIKING TABLE (see Striking)
 }
 
 // Spec returns the model's static data.
 func (t GunType) Spec() GunSpec {
 	switch t {
 	case Colt45:
-		return GunSpec{Name: "Colt 45", Capacity: 6, OneHanded: true, Impact: 'B'}
+		return GunSpec{Name: "Colt 45", Capacity: 6, OneHanded: true, Impact: 'B', Wielding: 4, Striking: 'B'}
 	}
 	return GunSpec{}
 }

@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { GunView } from "../chain/types";
 import { BOARD_A } from "../board/boardA";
-import { HAND_GROUND, HAND_GUN, HAND_OTHER, canPlay, decodePlan, drawDestinations, drawableGuns, encodePlan, loadableGun, moveDestinations, planCost, validatePlan, type PlanEntry } from "./plan";
+import { HAND_GROUND, HAND_GUN, HAND_OTHER, canPlay, planAllows, throwReach, decodePlan, drawDestinations, drawableGuns, encodePlan, loadableGun, moveDestinations, planCost, validatePlan, type PlanEntry } from "./plan";
 
 const COLT: GunView = { id: 1, type: "colt45", name: "Colt 45", location: "holstered", cocked: false, shells: 6, capacity: 6, jammed: false, exploded: false };
 
 describe("plan encoding", () => {
   it("round-trips the realm's format", () => {
-    for (const s of ["", "1f:ahead_left", "1f:ahead_left,2f:ahead,3f", "4b", "1b:back_right,3b:ahead", "12b", "9f:1:0", "1f:ahead,9f:12:2", "9f:g3:0", "5f:cock", "6f:aim:A-F6,7f:shoot:@1", "7f", "9f:1:0,7f:shoot:@1", "5f:aim:@1", "5f:aim:@3", "7f:shoot:@2"]) {
+    for (const s of ["", "1f:ahead_left", "1f:ahead_left,2f:ahead,3f", "4b", "1b:back_right,3b:ahead", "12b", "9f:1:0", "1f:ahead,9f:12:2", "9f:g3:0", "5f:cock", "6f:aim:A-F6,7f:shoot:@1", "7f", "9f:1:0,7f:shoot:@1", "5f:aim:@1", "5f:aim:@3", "7f:shoot:@2", "6b", "6b:throw:@1", "6b:throw:A-F6", "7b:damage,6b:throw:@1", "7b:wield,6b:throw:A-F6"]) {
       expect(encodePlan(decodePlan(s))).toBe(s);
     }
   });
@@ -18,7 +18,7 @@ describe("plan encoding", () => {
   });
 
   it("rejects malformed strings", () => {
-    for (const s of ["13f", "1x", "1f:north", "1f,", "1f, 2f", "0f", "1f:", "9f:1", "9f:0:0", "9f:1:3", "9f:ahead", "1f:0", "9f:g0:0", "9f:gx:0", "5f", "5f:nothing", "5f:ahead", "7f:aim", "7f:cock", "1f:shoot", "5f:aim", "5f:aim:", "5f:aim:a-f6", "5f:cock:A-F6", "5f:aim:@4", "5f:aim:@x", "5f:aim:@-1", "7f:shoot", "7f:shoot:", "7f:shoot:@4"]) {
+    for (const s of ["13f", "1x", "1f:north", "1f,", "1f, 2f", "0f", "1f:", "9f:1", "9f:0:0", "9f:1:3", "9f:ahead", "1f:0", "9f:g0:0", "9f:gx:0", "5f", "5f:nothing", "5f:ahead", "7f:aim", "7f:cock", "1f:shoot", "5f:aim", "5f:aim:", "5f:aim:a-f6", "5f:cock:A-F6", "5f:aim:@4", "5f:aim:@x", "5f:aim:@-1", "7f:shoot", "7f:shoot:", "7f:shoot:@4", "6b:throw", "6b:shoot:@1", "6b:throw:@4", "7b:aim", "7b:wield:@1"]) {
       expect(() => decodePlan(s), s).toThrow();
     }
   });
@@ -53,7 +53,15 @@ describe("validatePlan", () => {
     ["5f:aim:A-F6,6f:aim:A-F7", 5, null],
     ["7f", 5, null],
     ["7f:shoot:@1", 5, null],
-    ["6b", 5, "that action is not available yet"],
+    ["10f", 5, "that action is not available yet"],
+    ["6b", 5, null],
+    ["6b:throw:@1", 5, null],
+    ["7b,6b:throw:@1", 5, null],
+    ["7b:wield,6b:throw:A-F6", 5, null],
+    ["7b", 5, "strength is played just before a throw"],
+    ["6b:throw:@1,7b", 5, "strength is played just before a throw"],
+    ["7b,1f:ahead,6b:throw:@1", 5, "strength is played just before a throw"],
+    ["7b,6b:throw:@1", 3, "those actions cost more time points than you have"],
     ["12b", 5, "that action is not available yet"],
   ];
   for (const [plan, budget, want] of cases) {
@@ -136,8 +144,8 @@ describe("validatePlan", () => {
     expect(canPlay({ card: 8, side: "front" }, true, [{ ...inBoth, shells: inBoth.capacity }])).toBe(false);
     expect(canPlay({ card: 8, side: "front" }, true, [{ ...inBoth, exploded: true }])).toBe(false);
     expect(loadableGun([COLT, inBoth])).toEqual(inBoth);
-    // A jammed gun can neither be cocked nor fire: the gun cards are out until it is full again.
-    expect(canPlay({ card: 5, side: "front" }, true, [{ ...inBoth, jammed: true }])).toBe(false);
+    // A jammed gun can neither be cocked nor fire until it is full again, but Cock/Aim/Shoot can still aim it (for a throw).
+    expect(canPlay({ card: 5, side: "front" }, true, [{ ...inBoth, jammed: true }])).toBe(true);
     expect(canPlay({ card: 7, side: "front" }, true, [{ ...inBoth, jammed: true }])).toBe(false);
     expect(canPlay({ card: 5, side: "front" }, true, [inBoth])).toBe(true);
     expect(canPlay({ card: 5, side: "front" }, true, [{ ...inBoth, cocked: true, exploded: true }])).toBe(false);
@@ -167,5 +175,34 @@ describe("gun moves", () => {
     // A gun picked up earlier in the plan is not on the sheet yet: accepted.
     expect(validatePlan(decodePlan("h2:g,1f:ahead"), 5, true, [COLT])).toBeNull();
     expect(validatePlan(decodePlan("h1:g,1f:ahead"), 5, true, [COLT])).toBeNull();
+  });
+});
+
+describe("throw and strength", () => {
+  const inHand: GunView = { ...COLT, location: "gun_hand", cocked: true };
+  const side = (card: number, side: "front" | "back") => ({ card: card as PlanEntry["card"], side });
+
+  it("throws any gun in hand, even jammed or blown up", () => {
+    expect(canPlay(side(6, "back"), true, [COLT])).toBe(false);
+    expect(canPlay(side(6, "back"), true, [inHand])).toBe(true);
+    expect(canPlay(side(6, "back"), true, [{ ...inHand, exploded: true }])).toBe(true);
+    expect(canPlay(side(7, "back"), true, [inHand])).toBe(true);
+  });
+
+  it("puts a Strength just before a Throw, with the points for both", () => {
+    expect(planAllows([], side(7, "back"), 5)).toBe(true);
+    expect(planAllows([], side(7, "back"), 3)).toBe(false);
+    expect(planAllows(decodePlan("6b:throw:@1"), side(7, "back"), 5)).toBe(false);
+    expect(planAllows(decodePlan("6f:cock"), side(7, "back"), 5)).toBe(false);
+    const after = decodePlan("7b:wield");
+    expect(planAllows(after, side(6, "back"), 5)).toBe(true);
+    expect(planAllows(after, side(1, "front"), 5)).toBe(false);
+  });
+
+  it("decodes a bare Strength as damage and reaches farther with wield", () => {
+    expect(decodePlan("7b")[0].opt).toBe("damage");
+    expect(throwReach(decodePlan("6b:throw:@1"), 0)).toBe(4);
+    expect(throwReach(decodePlan("7b:wield,6b:throw:@1"), 1)).toBe(8);
+    expect(throwReach(decodePlan("7b:damage,6b:throw:@1"), 1)).toBe(4);
   });
 });

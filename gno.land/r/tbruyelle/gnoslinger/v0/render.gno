@@ -323,13 +323,17 @@ func describeEvent(g *Game, e engine.Event) string {
 			what = who + " loses the aim (" + strings.ReplaceAll(e.Reason, "_", " ") + ")"
 		}
 	case engine.EvNothing:
+		hold := " holds fire: "
+		if e.Action == cards.Throw {
+			hold = " holds the throw: "
+		}
 		switch e.Reason {
 		case engine.ReasonEmptyHex:
-			what = who + " holds fire: nobody in " + e.To
+			what = who + hold + "nobody in " + e.To
 		case engine.ReasonNoLOS:
-			what = who + " holds fire: " + seatLabel(g, e.Target) + " in " + e.To + " is out of sight"
+			what = who + hold + seatLabel(g, e.Target) + " in " + e.To + " is out of sight"
 		case engine.ReasonOutOfFight:
-			what = who + " holds fire: " + seatLabel(g, e.Target) + " is out of the fight"
+			what = who + hold + seatLabel(g, e.Target) + " is out of the fight"
 		default:
 			what = who + " does nothing (" + action + ")"
 		}
@@ -350,6 +354,20 @@ func describeEvent(g *Game, e engine.Event) string {
 		default:
 			what += e.Hit + " hit"
 		}
+	case engine.EvThrow:
+		at := "at " + e.To
+		if e.Target >= 0 {
+			at = "at " + seatLabel(g, e.Target) + " in " + e.To
+		}
+		what = who + " throws the " + e.Gun.Spec().Name + " " + at + " (card " + strconv.Itoa(e.Card) + ", aim time " + strconv.Itoa(e.N) + ", range " + strconv.Itoa(e.Range) + "): "
+		if e.Hit == string(engine.Miss) {
+			what += "miss"
+			if e.Reason != "" {
+				what += " (" + strings.ReplaceAll(e.Reason, "_", " ") + ")"
+			}
+		} else {
+			what += e.Hit + " hit"
+		}
 	case engine.EvMalfunction:
 		what = who + " draws card " + strconv.Itoa(e.Card) + ": MALFUNCTION, " + strings.ReplaceAll(e.Result, "_", " ")
 	case engine.EvWound:
@@ -361,6 +379,9 @@ func describeEvent(g *Game, e engine.Event) string {
 		what = who + " draws card " + strconv.Itoa(e.Card) + " as a direction: " + strings.ReplaceAll(e.To, "_", " ")
 	case engine.EvDropGun:
 		what = who + " drops the " + e.Gun.Spec().Name + " in " + e.To
+		if e.Reason == engine.ReasonThrow {
+			what = who + "'s " + e.Gun.Spec().Name + " lands in " + e.To
+		}
 	case engine.EvMoveGun:
 		what = who + " moves the " + e.Gun.Spec().Name + " from " + strings.ReplaceAll(e.From, "_", " ") + " to the " + strings.ReplaceAll(e.To, "_", " ")
 	case engine.EvPassOut:

@@ -1,7 +1,7 @@
 import { getActionDef, relativeToAbsoluteDir } from "../rules";
 import type { BoardMap } from "../board/boardA";
 import type { GroundGunView, GunLocation, GunView, PlayerStatus, WoundFields } from "../chain/types";
-import { HAND_GROUND, MAX_AIM, gunInFiringBox, type GunMove, type PlanEntry } from "./plan";
+import { HAND_GROUND, MAX_AIM, TARGET_OPTIONS, gunInFiringBox, type GunMove, type PlanEntry } from "./plan";
 
 /** What the board shows for one character. */
 export interface CharView extends WoundFields {
@@ -87,10 +87,12 @@ export function replayPlan(
     if (s.status === "ran_away") break; // off the map: nothing more happens
     applyMoves(s, e.moves ?? []); // done as the action is revealed
     const def = getActionDef(e);
-    // Revealing anything but a Turn, an aim or a shot loses the aim (12.44 as played here).
-    const gunAction = def.name === "Cock/Aim/Shoot" || def.name === "Shoot";
+    // A Strength is part of the Throw it is played on top of (20.1): revealed with it.
+    if (def.name === "Strength") continue;
+    // Revealing anything but a Turn, an aim, a shot or a throw loses the aim (12.44 as played here).
+    const gunAction = def.name === "Cock/Aim/Shoot" || def.name === "Shoot" || def.name === "Throw";
     if (gunAction && !e.opt) continue; // option not picked yet: nothing to show
-    if (!(def.name === "Turn" || (gunAction && (e.opt === "aim" || e.opt === "shoot")))) {
+    if (!(def.name === "Turn" || (gunAction && TARGET_OPTIONS.has(e.opt ?? "")))) {
       s.aim = 0;
       s.aimAt = -1;
       s.aimHex = "";
@@ -129,6 +131,14 @@ export function replayPlan(
             g.cocked = false;
             g.shells--;
           }
+          s.aim = 0;
+          s.aimAt = -1;
+          s.aimHex = "";
+          break;
+        case "throw":
+          // The weapon leaves the hand; where it lands waits for the cards (17.4).
+          if (!e.hex && e.target === undefined) break;
+          s.guns = s.guns.filter((x) => x !== g);
           s.aim = 0;
           s.aimAt = -1;
           s.aimHex = "";

@@ -41,6 +41,7 @@
     - poker game with money
 
 ## Showdown
+- Seed sound randomness with game/turn/seq
 - some screen size hides the run away hexes
 - add winning/losing burst
 - show tips (or highlight a card with some text)
@@ -54,7 +55,6 @@
 - Movements
   - Check possible to move around a building corner
 - Cards
-  - enable throw and strength cards
   - add brawling
     - add knifes and others
 - Aim/Shoots

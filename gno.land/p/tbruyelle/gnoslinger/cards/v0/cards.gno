@@ -121,11 +121,11 @@ func Lookup(number int, side byte) (Side, bool) {
 }
 
 // Enabled reports whether the action is implemented by the engine: the foot
-// actions, Draw & Cock, Cock/Aim/Shoot, Shoot and Load; throwing and
-// brawling come later.
+// actions, Draw & Cock, Cock/Aim/Shoot, Shoot, Load, Throw and Strength;
+// brawling comes later.
 func Enabled(c Code) bool {
 	switch c {
-	case Advance, BackUp, Run, SpinAround, Sprint, Turn, LeapDrop, GetUpDown, DrawAndCock, CockAimShoot, Shoot, Load:
+	case Advance, BackUp, Run, SpinAround, Sprint, Turn, LeapDrop, GetUpDown, DrawAndCock, CockAimShoot, Shoot, Load, Throw, Strength:
 		return true
 	}
 	return false
@@ -135,6 +135,10 @@ func Enabled(c Code) bool {
 // takes a shoot option (cock, uncock, aim, shoot, nothing) and names the
 // target (rules 11.3, 11.31).
 func IsShooting(c Code) bool { return c == CockAimShoot || c == Shoot }
+
+// TakesTarget reports whether the action may name a target, a hex or a
+// character: the gun actions and Throw (11.31, 17.11).
+func TakesTarget(c Code) bool { return IsShooting(c) || c == Throw }
 
 // IsMove reports whether the action moves the character to another hex.
 func IsMove(c Code) bool {

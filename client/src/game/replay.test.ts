@@ -37,6 +37,16 @@ describe("replayPlan", () => {
     expect(gunInHand([colt])).toBeNull();
   });
 
+  it("throws the gun in hand away, the strength on top keeping the aim until then", () => {
+    const armed = { ...start, guns: [{ ...colt, location: "gun_hand" as const, cocked: true }], aim: 2, aimAt: 1, aimHex: "" };
+    const seats = ["A-F1", "A-F3"];
+    expect(replayPlan(armed, decodePlan("7b:wield"), BOARD_A, [], seats).aim).toBe(2);
+    const end = replayPlan(armed, decodePlan("7b:wield,6b:throw:@1"), BOARD_A, [], seats);
+    expect(end.guns).toEqual([]);
+    expect(end.aim).toBe(0);
+    expect(replayPlan(armed, decodePlan("6b"), BOARD_A, [], seats)).toMatchObject({ aim: 0, guns: armed.guns });
+  });
+
   it("previews gun actions and the aim", () => {
     const armed = { ...colt, location: "gun_hand" as const, cocked: true };
     // Aim twice, then shoot: the aim shows while aiming and goes with the shot.

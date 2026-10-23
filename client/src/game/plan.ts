@@ -13,9 +13,9 @@ export interface PlanEntry {
   groundGun?: number;
   /** Destination hand for Draw & Cock: 0 gun hand, 1 other hand, 2 both hands. */
   hand?: number;
-  /** What a Cock/Aim/Shoot does, or a Shoot (shoot or nothing). */
-  opt?: ShootOption;
-  /** What an aim or a shot targets: a hex, or a character by seat. */
+  /** What a Cock/Aim/Shoot does, a Shoot or a Throw (shoot or throw, or nothing), or what a Strength adds to. */
+  opt?: ShootOption | StrengthOption;
+  /** What an aim, a shot or a throw targets: a hex, or a character by seat. */
   hex?: string;
   target?: number;
   /** The gun moves done when this action is revealed (10.22), before it in the plan string. */
@@ -34,17 +34,46 @@ export interface GunMove {
   to: number;
 }
 
-export type ShootOption = "cock" | "uncock" | "aim" | "shoot" | "nothing";
+export type ShootOption = "cock" | "uncock" | "aim" | "shoot" | "throw" | "nothing";
 
-/** The options each gun action offers, in display order. */
+/** The options each action naming a target offers, in display order: the gun actions and Throw (17.1). */
 export const SHOOT_OPTIONS: Record<string, ShootOption[]> = {
   "Cock/Aim/Shoot": ["cock", "uncock", "aim", "shoot"],
   Shoot: ["shoot", "nothing"],
+  Throw: ["throw", "nothing"],
 };
 
-/** Whether the side is a gun action taking a shoot option. */
+/** The options that name a target. */
+export const TARGET_OPTIONS = new Set<string>(["aim", "shoot", "throw"]);
+
+/** The sides whose bare entry ("7f", "6b") does nothing. */
+const BARE_NOTHING = new Set(["Shoot", "Throw"]);
+
+/** Whether the side takes a shoot option (Cock/Aim/Shoot, Shoot, Throw), naming its target. */
 export function isShooting(entry: { card: CardNumber; side: CardSide }): boolean {
   return getActionDef(entry).name in SHOOT_OPTIONS;
+}
+
+/**
+ * What a Strength adds (20.2): two to the penalties of the Throw it is
+ * played on top of, or four to its wielding factor (how far it goes).
+ */
+export type StrengthOption = "damage" | "wield";
+export const STRENGTH_OPTIONS: StrengthOption[] = ["damage", "wield"];
+export const STRENGTH_DAMAGE = 2;
+export const STRENGTH_WIELD = 4;
+/** How far a Colt 45 can be thrown: its wielding factor (16.21, 17.2). */
+export const COLT_WIELDING = 4;
+
+export function isStrength(entry: { card: CardNumber; side: CardSide }): boolean {
+  return getActionDef(entry).name === "Strength";
+}
+
+/** How far the Throw at plan[i] reaches: the wielding factor plus the Strengths played on top of it (20.22). */
+export function throwReach(plan: PlanEntry[], i: number): number {
+  let reach = COLT_WIELDING;
+  for (let j = i - 1; j >= 0 && isStrength(plan[j]); j--) if (plan[j].opt === "wield") reach += STRENGTH_WIELD;
+  return reach;
 }
 
 export const HAND_GUN = 0;
@@ -60,7 +89,7 @@ export const MAX_AIM = 8;
 export const MAX_PLAN_ENTRIES = 5;
 
 /** Actions the realm implements so far: the foot actions and the gun actions. */
-export const ENABLED_ACTIONS = new Set(["Advance", "Back Up", "Run", "Spin Around", "Sprint", "Turn", "Leap/Drop", "Get Up/Down", "Draw & Cock", "Cock/Aim/Shoot", "Shoot", "Load"]);
+export const ENABLED_ACTIONS = new Set(["Advance", "Back Up", "Run", "Spin Around", "Sprint", "Turn", "Leap/Drop", "Get Up/Down", "Draw & Cock", "Cock/Aim/Shoot", "Shoot", "Load", "Throw", "Strength"]);
 
 /** The boxes a Draw & Cock can put a gun in for now (the other hand comes with a second gun). */
 export const DRAW_HANDS = [HAND_GUN, HAND_BOTH];
@@ -118,24 +147,44 @@ export function gunInFiringBox(guns: GunView[]): GunView | undefined {
 /**
  * Whether a side can be picked now: implemented, Sprint only after a Run on
  * the previous turn, Draw & Cock only with a gun that can move to a free
- * hand box or a weapon lying in the hex (groundHere), Cock/Aim/Shoot and Shoot
- * only with a gun in hand that is not jammed or blown up, Load only with a gun in both
+ * hand box or a weapon lying in the hex (groundHere), Cock/Aim/Shoot only
+ * with a gun in hand that is not blown up (a jammed one can still aim, for
+ * a throw), Shoot only with one that is not jammed or blown up, Throw with any
+ * gun in hand (jammed or blown up too), Load only with a gun in both
  * hands that has room (guns is the state the plan leaves before the
- * card, so a Draw & Cock earlier in the plan counts).
+ * card, so a Draw & Cock earlier in the plan counts). Where a side may go
+ * in the plan (a Strength just before a Throw) is planAllows's.
  */
 export function canPlay(entry: { card: CardNumber; side: CardSide }, ranLastTurn: boolean, guns: GunView[] = [], groundHere: GroundGunView[] = []): boolean {
   if (!isEnabled(entry)) return false;
   const name = getActionDef(entry).name;
   if (name === "Sprint") return ranLastTurn;
   if (name === "Draw & Cock") return drawableGuns(guns).length > 0 || (groundHere.length > 0 && drawDestinations(guns).length > 0);
+  if (name === "Throw" || name === "Strength") return gunInFiringBox(guns) !== undefined;
   if (name in SHOOT_OPTIONS) {
     // A jammed gun can neither be cocked nor fire until completely reloaded,
-    // a blown-up one never again (13.31).
+    // but can aim (for a throw); a blown-up one is good for nothing but
+    // throwing (13.31).
     const g = gunInFiringBox(guns);
-    return g !== undefined && !g.exploded && !(g.jammed && !g.cocked);
+    if (!g || g.exploded) return false;
+    return name === "Cock/Aim/Shoot" || !(g.jammed && !g.cocked);
   }
   if (name === "Load") return loadableGun(guns) !== undefined;
   return true;
+}
+
+/**
+ * Whether side may come next in plan, as Strength goes (20.1): played just
+ * before a Throw, like Sprint after Run but in a fixed place. After a
+ * Strength only the Throw may come; a Strength needs the Throw still free
+ * (its card unused) and the points for both.
+ */
+export function planAllows(plan: PlanEntry[], side: { card: CardNumber; side: CardSide }, budget: number): boolean {
+  const last = plan[plan.length - 1];
+  if (last && isStrength(last) && getActionDef(side).name !== "Throw") return false;
+  if (!isStrength(side)) return true;
+  const THROW_CARD = 6;
+  return !plan.some((e) => e.card === THROW_CARD) && planCost(plan) + getActionDef(side).cost + getActionDef({ card: THROW_CARD, side: "back" }).cost <= budget;
 }
 
 /** The realm's plan string: "<card><f|b>[:<choice>]" entries joined by commas (a direction, or "<gun id>:<hand>" for Draw & Cock). */
@@ -156,9 +205,10 @@ export function encodeMove(m: GunMove): string {
 function encodeEntry(e: PlanEntry): string {
   const def = getActionDef(e);
   const base = `${e.card}${e.side === "front" ? "f" : "b"}`;
+  if (def.name === "Strength") return `${base}:${e.opt ?? "damage"}`;
   if (def.name in SHOOT_OPTIONS) {
-    if (!e.opt || (def.name === "Shoot" && e.opt === "nothing")) return base;
-    if (e.opt !== "aim" && e.opt !== "shoot") return `${base}:${e.opt}`;
+    if (!e.opt || (BARE_NOTHING.has(def.name) && e.opt === "nothing")) return base;
+    if (!TARGET_OPTIONS.has(e.opt)) return `${base}:${e.opt}`;
     return e.target !== undefined ? `${base}:${e.opt}:@${e.target}` : `${base}:${e.opt}:${e.hex ?? ""}`;
   }
   if (def.choiceType === "gun") {
@@ -196,13 +246,20 @@ function decodeEntry(token: string): PlanEntry {
   if (card < 1 || card > 12) throw new Error(`invalid card ${card}`);
   const entry: PlanEntry = { card: card as CardNumber, side: m[2] === "f" ? "front" : "back" };
   const name = getActionDef(entry).name;
+  if (name === "Strength") {
+    // A Strength whose use is not stated adds to the damage (20.2).
+    const opt = m[3] ?? "damage";
+    if (!(STRENGTH_OPTIONS as string[]).includes(opt)) throw new Error(`invalid option "${opt}" for Strength (damage or wield)`);
+    entry.opt = opt as StrengthOption;
+    return entry;
+  }
   if (name in SHOOT_OPTIONS) {
-    const choice = m[3] ?? (name === "Shoot" ? "nothing" : "");
+    const choice = m[3] ?? (BARE_NOTHING.has(name) ? "nothing" : "");
     const i = choice.indexOf(":");
     const opt = i >= 0 ? choice.slice(0, i) : choice;
     const arg = i >= 0 ? choice.slice(i + 1) : "";
     if (!(SHOOT_OPTIONS[name] as string[]).includes(opt)) throw new Error(`invalid option "${opt}" for ${name}`);
-    if (opt === "aim" || opt === "shoot") {
+    if (TARGET_OPTIONS.has(opt)) {
       // A character by seat, any seat a game may have (the realm checks it against the game's).
       if (/^@\d$/.test(arg) && Number(arg.slice(1)) < MAX_SEATS) entry.target = Number(arg.slice(1));
       else if (/^[A-Z0-9-]{3,8}$/.test(arg)) entry.hex = arg;
@@ -240,7 +297,7 @@ export function validatePlan(plan: PlanEntry[], budget = MAX_ACTION_POINTS, ranL
   if (plan.length > MAX_PLAN_ENTRIES) return "too many actions in plan";
   const used = new Set<number>();
   const names = new Set<string>();
-  for (const e of plan) {
+  for (const [i, e] of plan.entries()) {
     const def = getActionDef(e);
     if (!ENABLED_ACTIONS.has(def.name)) return "that action is not available yet";
     if (used.has(e.card)) return "you cannot use both sides of a card";
@@ -251,9 +308,15 @@ export function validatePlan(plan: PlanEntry[], budget = MAX_ACTION_POINTS, ranL
       if (m.to === HAND_OTHER) return "a gun moves to the gun hand or the ground for now";
       if (m.to !== HAND_GUN && m.to !== HAND_GROUND) return "a gun moves to the gun hand or the ground";
     }
+    if (def.name === "Strength") {
+      if (!e.opt || !(STRENGTH_OPTIONS as string[]).includes(e.opt)) return "choose what the strength adds to";
+      // Played just before (on top of) the action it combines with (20.1).
+      if (plan[i + 1] === undefined || getActionDef(plan[i + 1]).name !== "Throw") return "strength is played just before a throw";
+      continue;
+    }
     if (def.name in SHOOT_OPTIONS) {
-      if (!e.opt || !SHOOT_OPTIONS[def.name].includes(e.opt)) return "choose what to do with the gun";
-      if ((e.opt === "aim" || e.opt === "shoot") && !e.hex && e.target === undefined) return `choose what to ${e.opt} at`;
+      if (!e.opt || !(SHOOT_OPTIONS[def.name] as string[]).includes(e.opt)) return def.name === "Throw" ? "choose whether to throw" : "choose what to do with the gun";
+      if (TARGET_OPTIONS.has(e.opt) && !e.hex && e.target === undefined) return `choose what to ${e.opt} at`;
       continue;
     }
     switch (def.choiceType) {

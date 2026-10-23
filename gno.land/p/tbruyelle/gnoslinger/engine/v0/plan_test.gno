@@ -34,6 +34,11 @@ func TestParsePlanRoundTrip(t *testing.T) {
 		"5f:aim:@1",
 		"7f",
 		"9f:1:0,7f:shoot:@1",
+		"6b",
+		"6b:throw:@1",
+		"6b:throw:A-F6",
+		"7b:damage,6b:throw:@1",
+		"7b:wield,6b:throw:A-F6",
 	} {
 		p := mustPlan(t, s)
 		if got := p.String(); got != s {
@@ -73,6 +78,7 @@ func TestParsePlanRejects(t *testing.T) {
 		"1f,", ",1f", "1f,,2f", "1f, 2f", " 1f", "1f ",
 		"1f:ahead:ahead", "9f:1", "9f:0:0", "9f:-1:0", "9f:ahead", "1f:0", "9f:1:3", "9f:1:x", "9f:1:0:0", "9f:g0:0", "9f:gx:0", "9f:g:0", "9f:g1",
 		"5f", "5f:nothing", "5f:ahead", "5f:fire", "7f:aim", "7f:cock", "7f:ahead", "6f:1:0", "1f:shoot",
+		"6b:throw", "6b:shoot:@1", "6b:aim:@1", "6b:throw:@4", "6b:nothing:@1", "7b:aim", "7b:damage:2", "7b:wield:@1",
 		"5f:aim", "5f:aim:", "5f:aim:a-f6", "5f:aim:A-F6:x", "5f:cock:A-F6", "5f:aim:@4", "5f:aim:@-1", "5f:aim:@x", "5f:aim:@", "7f:shoot", "5f:shoot", "7f:shoot:", "7f:shoot:@4",
 		strings.Repeat("1f,", 60),
 	} {
@@ -112,7 +118,16 @@ func TestValidate(t *testing.T) {
 		{"4b:back", 0, "takes no direction"},
 		{"8f", 0, ""},
 		{"8b", 0, "not available"},
-		{"6b", 0, "not available"},
+		{"10f", 0, "not available"},
+		{"6b", 0, ""},
+		{"6b:throw:@1", 0, ""},
+		{"7b,6b:throw:@1", 0, ""},
+		{"7b:wield,6b:throw:A-F6", 0, ""},
+		{"7b", 0, "just before a throw"},
+		{"6b:throw:@1,7b", 0, "just before a throw"},
+		{"7b,1f:ahead,6b:throw:@1", 0, "just before a throw"},
+		{"7b,6b:throw:@1,7f", 0, "both sides"},
+		{"7b,6b:throw:@1", 2, "more time points"},
 		{"12b", 0, "not available"},
 		{"5f:cock", 0, ""},
 		{"5f:uncock", 0, ""},
@@ -251,5 +266,20 @@ func TestGunMovePlan(t *testing.T) {
 	// The other hand comes with a second gun.
 	if err := mustPlan(t, "h1:1,1f:ahead").Validate(c); err == nil {
 		t.Error("a move to the other hand was accepted")
+	}
+}
+
+func TestStrengthDefaultsToDamageAndCombines(t *testing.T) {
+	p := mustPlan(t, "7b,6b:throw:@1")
+	if p[0].Opt != OptDamage || p.String() != "7b:damage,6b:throw:@1" {
+		t.Errorf("bare strength = %+v, %q", p[0], p.String())
+	}
+	c := mustPlan(t, "1f:ahead,h1:g,7b:wield,6b:throw:@1,7f").Combine()
+	if len(c) != 3 || c[1].Code != cards.Throw || c[1].Cost != 4 || c[1].Wield != StrengthWield || c[1].Damage != 0 ||
+		len(c[1].Moves) != 1 || c[1].Moves[0].To != HandGround || c[2].Code != cards.Shoot {
+		t.Errorf("combined = %+v", c)
+	}
+	if c := mustPlan(t, "7b:damage,6b").Combine(); len(c) != 1 || c[0].Damage != StrengthDamage || c[0].Cost != 4 {
+		t.Errorf("combined = %+v", c)
 	}
 }

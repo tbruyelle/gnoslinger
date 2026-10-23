@@ -27,9 +27,14 @@ type Action struct {
 	Gun    int     // id of the character's gun for a gun choice (Draw & Cock), 0 when none
 	Ground int     // id of the gun on the ground to pick up (Draw & Cock, "g<id>"), 0 when none
 	Hand   int     // destination hand code for a gun choice (HandGun...), -1 when the side takes none
-	Opt    string  // shoot option for Cock/Aim/Shoot and Shoot (OptCock...), "" when the side takes none
-	Hex    string  // the hex named by an aim or a shot at a hex
-	Target int     // the seat named by an aim or a shot at a character; -1 otherwise
+	Opt    string  // option of Cock/Aim/Shoot, Shoot and Throw (OptCock...) or Strength (OptDamage, OptWield), "" when the side takes none
+	Hex    string  // the hex named by an aim, a shot or a throw at a hex
+	Target int     // the seat named by an aim, a shot or a throw at a character; -1 otherwise
+	// Wield and Damage are what the STRENGTHs played on top of a Throw add
+	// to the weapon's wielding factor and to the penalties (20.2), set by
+	// Combine.
+	Wield  int
+	Damage int
 	// Moves are the gun moves done when the action is revealed (10.22),
 	// written before it in the plan string.
 	Moves []GunMove
@@ -69,15 +74,40 @@ const (
 	OptAim     = "aim"
 	OptShoot   = "shoot"
 	OptNothing = "nothing"
+	// OptThrow is what a Throw does instead of nothing (17.1), naming its
+	// target like a shot ("6b:throw:@1"; a bare "6b" does nothing).
+	OptThrow = "throw"
+)
+
+// Strength options (20.2): a STRENGTH adds to the penalties ("7b:damage",
+// also a bare "7b", what a STRENGTH does when its use is not stated) or
+// to the wielding factor ("7b:wield") of the Throw it is played on top of.
+const (
+	OptDamage = "damage"
+	OptWield  = "wield"
+)
+
+// Card 7's STRENGTH adds 4 to the wielding factor or 2 to the penalties.
+const (
+	StrengthWield  = 4
+	StrengthDamage = 2
 )
 
 // IsShot reports whether the action fires the gun.
 func (a Action) IsShot() bool { return cards.IsShooting(a.Code) && a.Opt == OptShoot }
 
-// AimTime is the aim time printed on a shooting action for a one- or
-// two-handed gun (13.52).
+// IsThrow reports whether the action throws the weapon in hand (17.1).
+func (a Action) IsThrow() bool { return a.Code == cards.Throw && a.Opt == OptThrow }
+
+// AimTime is the aim time printed on a shooting action or a Throw for a
+// one- or two-handed weapon (13.52, 17.3).
 func (a Action) AimTime(oneHanded bool) int {
 	switch a.Code {
+	case cards.Throw:
+		if oneHanded {
+			return 2
+		}
+		return 1
 	case cards.CockAimShoot:
 		if oneHanded {
 			return 2
@@ -113,9 +143,16 @@ func validOpt(code cards.Code, opt string) bool {
 		return opt == OptCock || opt == OptUncock || opt == OptAim || opt == OptShoot
 	case cards.Shoot:
 		return opt == OptShoot || opt == OptNothing
+	case cards.Throw:
+		return opt == OptThrow || opt == OptNothing
+	case cards.Strength:
+		return opt == OptDamage || opt == OptWield
 	}
 	return false
 }
+
+// takesTarget reports whether the option names a target.
+func takesTarget(opt string) bool { return opt == OptAim || opt == OptShoot || opt == OptThrow }
 
 // Plan is the ordered stack of actions a player committed for the turn.
 //
@@ -125,7 +162,9 @@ func validOpt(code cards.Code, opt string) bool {
 // gun and the hand it goes to ("9f:1:0": the character's gun 1 to the gun
 // hand, "9f:g2:0": the gun lying in its hex with ground id 2; hand codes: 0
 // gun hand, 1 other hand, 2 both hands), or for Cock/Aim/Shoot and
-// Shoot the option ("5f:aim", "7f:shoot"; a bare "7f" does nothing), e.g.
+// Shoot the option ("5f:aim:A-F6", "7f:shoot:@1"; a bare "7f" does
+// nothing), for Throw the same ("6b:throw:@1", a bare "6b" does nothing),
+// for Strength its use ("7b:damage", "7b:wield"), e.g.
 // "1f:ahead_left,2f:ahead,3f"; gun moves ("h1:g", GunMove) come before the
 // action they go with and do not count as actions. An empty string is a
 // pass.
@@ -217,8 +256,16 @@ func parseEntry(e string) (Action, error) {
 	}
 	a := Action{Card: num, Side: side, Code: def.Code, Cost: def.Cost, Hand: -1, Target: -1}
 	switch {
-	case cards.IsShooting(def.Code):
-		if choice == "" && def.Code == cards.Shoot {
+	case def.Code == cards.Strength:
+		if choice == "" { // a STRENGTH whose use is not stated adds to the damage (20.2)
+			choice = OptDamage
+		}
+		if !validOpt(def.Code, choice) {
+			return Action{}, errors.New("invalid option " + strconv.Quote(choice) + " for " + def.Name + " (damage or wield)")
+		}
+		a.Opt = choice
+	case cards.TakesTarget(def.Code):
+		if choice == "" && (def.Code == cards.Shoot || def.Code == cards.Throw) {
 			choice = OptNothing
 		}
 		opt, arg := choice, ""
@@ -228,7 +275,7 @@ func parseEntry(e string) (Action, error) {
 		if !validOpt(def.Code, opt) {
 			return Action{}, errors.New("invalid option " + strconv.Quote(opt) + " for " + def.Name)
 		}
-		if opt == OptAim || opt == OptShoot {
+		if takesTarget(opt) {
 			switch {
 			case strings.HasPrefix(arg, "@"):
 				seat, err := strconv.Atoi(arg[1:])
@@ -299,10 +346,10 @@ func (p Plan) String() string {
 			}
 			b.WriteByte(':')
 			b.WriteString(strconv.Itoa(a.Hand))
-		} else if a.Opt != "" && !(a.Code == cards.Shoot && a.Opt == OptNothing) {
+		} else if a.Opt != "" && !((a.Code == cards.Shoot || a.Code == cards.Throw) && a.Opt == OptNothing) {
 			b.WriteByte(':')
 			b.WriteString(a.Opt)
-			if a.Opt == OptAim || a.Opt == OptShoot {
+			if takesTarget(a.Opt) {
 				b.WriteByte(':')
 				if a.Target >= 0 {
 					b.WriteByte('@')
@@ -352,7 +399,7 @@ func (p Plan) PlayedFoot() bool {
 // that will play it (port of the BGA actConfirmPlan checks).
 func (p Plan) Validate(c Character) error {
 	used := map[int]bool{}
-	for _, a := range p {
+	for i, a := range p {
 		def, ok := cards.Lookup(a.Card, a.Side)
 		if !ok {
 			return errors.New("invalid action card")
@@ -375,11 +422,23 @@ func (p Plan) Validate(c Character) error {
 			}
 		}
 		switch {
-		case cards.IsShooting(def.Code):
+		case def.Code == cards.Strength:
 			if !validOpt(def.Code, a.Opt) {
+				return errors.New("choose what the strength adds to")
+			}
+			// Played just before (on top of) the action it combines with
+			// (20.1): a Throw, until the attacks come.
+			if i+1 >= len(p) || p[i+1].Code != cards.Throw {
+				return errors.New("strength is played just before a throw")
+			}
+		case cards.TakesTarget(def.Code):
+			if !validOpt(def.Code, a.Opt) {
+				if def.Code == cards.Throw {
+					return errors.New("choose whether to throw")
+				}
 				return errors.New("choose what to do with the gun")
 			}
-			if (a.Opt == OptAim || a.Opt == OptShoot) && a.Hex == "" && a.Target < 0 {
+			if takesTarget(a.Opt) && a.Hex == "" && a.Target < 0 {
 				return errors.New("choose what to " + a.Opt + " at")
 			}
 		case def.Choice.IsAheadRel():
@@ -436,4 +495,40 @@ func (p Plan) Validate(c Character) error {
 		}
 	}
 	return nil
+}
+
+// Combine folds each run of STRENGTHs into the Throw it is played on top
+// of (20.1): treated as part of that action, revealed with it, their time
+// points added to its own, their bonuses in its Wield and Damage, their
+// gun moves done as it is revealed. Validate has checked that each
+// STRENGTH comes just before a Throw; one that does not is dropped.
+func (p Plan) Combine() Plan {
+	out := make(Plan, 0, len(p))
+	var (
+		cost, wield, damage int
+		moves               []GunMove
+	)
+	for _, a := range p {
+		if a.Code == cards.Strength {
+			cost += a.Cost
+			if a.Opt == OptWield {
+				wield += StrengthWield
+			} else {
+				damage += StrengthDamage
+			}
+			moves = append(moves, a.Moves...)
+			continue
+		}
+		if a.Code == cards.Throw {
+			a.Cost += cost
+			a.Wield += wield
+			a.Damage += damage
+			if len(moves) > 0 {
+				a.Moves = append(moves, a.Moves...)
+			}
+		}
+		cost, wield, damage, moves = 0, 0, 0, nil
+		out = append(out, a)
+	}
+	return out
 }

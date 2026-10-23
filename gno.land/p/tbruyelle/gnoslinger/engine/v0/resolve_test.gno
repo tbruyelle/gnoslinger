@@ -1638,3 +1638,149 @@ func TestGunMoves(t *testing.T) {
 		t.Errorf("cancels = %v", c)
 	}
 }
+
+func TestThrowHits(t *testing.T) {
+	// Point blank (F5 to F6), nothing aimed: aim time 2. Card 21 at range 1,
+	// aim 1-2: BODY, LIGHT 3 on line B; the Colt lands in the Kid's hex.
+	st := armed(0)
+	st.Chars[0].Hex, st.Chars[1].Hex = "A-F5", "A-F6"
+	seq := Sequence{21, 37}
+	st, evs := resolveWith(t, st, "6b:throw:@1", "", &seq)
+	th := ofKind(evs, 0, EvThrow)
+	if len(th) != 1 || th[0].Seg != 2 || th[0].Card != 21 || th[0].Target != 1 || th[0].Range != 1 || th[0].N != 2 || th[0].Hit != string(BodyHit) || th[0].Step != StepShots {
+		t.Fatalf("throw = %v", th)
+	}
+	dg := ofKind(evs, 0, EvDropGun)
+	if len(dg) != 1 || dg[0].To != "A-F6" || dg[0].From != "gun_hand" || dg[0].Reason != ReasonThrow {
+		t.Errorf("landing = %v", dg)
+	}
+	if st.Chars[0].Guns.Count() != 0 || len(st.Ground) != 1 || st.Ground[0].Hex != "A-F6" || !st.Ground[0].Gun.Cocked {
+		t.Errorf("guns %+v, ground %+v", st.Chars[0].Guns, st.Ground)
+	}
+	w := ofKind(evs, 1, EvWound)
+	if len(w) != 1 || w[0].Result != string(Light) || w[0].N != 3 {
+		t.Errorf("wounds = %v", w)
+	}
+	kid := st.Chars[1]
+	if kid.Endurance != 17 || kid.Delay != 3 || kid.Hurt[0] != 3 {
+		t.Errorf("kid = %+v", kid)
+	}
+
+	// STRENGTH on top adds two to the LIGHT (20.21) and its time: the
+	// throw goes off in segment 4.
+	st = armed(0)
+	st.Chars[0].Hex, st.Chars[1].Hex = "A-F5", "A-F6"
+	seq = Sequence{21, 37}
+	st, evs = resolveWith(t, st, "7b,6b:throw:@1", "", &seq)
+	if th := ofKind(evs, 0, EvThrow); len(th) != 1 || th[0].Seg != 4 {
+		t.Errorf("throw = %v", th)
+	}
+	if w := ofKind(evs, 1, EvWound); len(w) != 1 || w[0].N != 5 || st.Chars[1].Endurance != 15 {
+		t.Errorf("wounds = %v, kid %+v", w, st.Chars[1])
+	}
+
+	// A bullseye is the thrower's choice: the HEAD, LIGHT 6 and LOSE AIM.
+	// Card 21 at range 1 with aim 3-8 (2 + 2 AIM points): BE.
+	st = armed(0)
+	st.Chars[0].Hex, st.Chars[1].Hex = "A-F5", "A-F6"
+	st.Chars[0].Aim, st.Chars[0].AimAt = 2, 1
+	st.Chars[1].Aim, st.Chars[1].AimAt = 2, 0
+	seq = Sequence{21, 37}
+	st, evs = resolveWith(t, st, "6b:throw:@1", "", &seq)
+	if th := ofKind(evs, 0, EvThrow); len(th) != 1 || th[0].N != 4 || th[0].Chart != string(Bullseye) || th[0].Hit != string(HeadHit) {
+		t.Errorf("throw = %v", th)
+	}
+	w = ofKind(evs, 1, EvWound)
+	if len(w) != 2 || w[0].Result != string(Light) || w[0].N != 6 || w[1].Result != string(LoseAimHit) {
+		t.Errorf("wounds = %v", w)
+	}
+	if st.Chars[0].Aim != 0 || st.Chars[1].Aim != 0 {
+		t.Errorf("aims %d %d", st.Chars[0].Aim, st.Chars[1].Aim)
+	}
+	if la := ofKind(evs, 0, EvLoseAim); len(la) != 1 || la[0].Reason != ReasonThrow {
+		t.Errorf("thrower lose aim = %v", la)
+	}
+}
+
+func TestThrowMissesAndLands(t *testing.T) {
+	// Card 1 at range 1, aim 2: a miss. The direction card 55 (Ahead Left)
+	// is read from the Kid's facing (N): the Colt lands in E6.
+	st := armed(0)
+	st.Chars[0].Hex, st.Chars[1].Hex = "A-F5", "A-F6"
+	seq := Sequence{1, 55}
+	st, evs := resolveWith(t, st, "6b:throw:@1", "", &seq)
+	if th := ofKind(evs, 0, EvThrow); len(th) != 1 || th[0].Hit != string(Miss) {
+		t.Errorf("throw = %v", th)
+	}
+	if dir := ofKind(evs, 0, EvDirection); len(dir) != 1 || dir[0].Card != 55 {
+		t.Errorf("direction = %v", dir)
+	}
+	if len(st.Ground) != 1 || st.Ground[0].Hex != "A-E6" || len(ofKind(evs, 1, EvWound)) != 0 {
+		t.Errorf("ground = %+v", st.Ground)
+	}
+
+	// At a hex, ahead is towards the thrower: thrown from F5 at F6, the
+	// Ahead Left of N (towards F5) is NW again, E6.
+	st = armed(0)
+	st.Chars[0].Hex, st.Chars[1].Hex = "A-F5", "A-F6"
+	st.Chars[1].Facing = hex.S
+	seq = Sequence{1, 55}
+	st, _ = resolveWith(t, st, "6b:throw:A-F6", "", &seq)
+	if len(st.Ground) != 1 || st.Ground[0].Hex != "A-E6" {
+		t.Errorf("ground = %+v", st.Ground)
+	}
+
+	// Out of the aim zone: the card is drawn, the throw misses (17.12) and
+	// the weapon is thrown all the same. The Kid behind the Marshal.
+	st = armed(0)
+	st.Chars[0].Hex, st.Chars[1].Hex = "A-F5", "A-F4"
+	seq = Sequence{21, 61}
+	st, evs = resolveWith(t, st, "6b:throw:@1", "", &seq)
+	if th := ofKind(evs, 0, EvThrow); len(th) != 1 || th[0].Hit != string(Miss) || th[0].Reason != ReasonOutOfZone {
+		t.Errorf("throw = %v", th)
+	}
+	if len(st.Ground) != 1 || st.Ground[0].Hex != "A-F4" {
+		t.Errorf("ground = %+v", st.Ground)
+	}
+}
+
+func TestThrowRangeAndCancels(t *testing.T) {
+	// F3 to F9 is 6 hexes, beyond the Colt's wielding factor of 4 (17.2):
+	// cancelled, the gun kept.
+	st := armed(0)
+	st, evs := resolve(t, st, "6b:throw:@1", "")
+	if c := ofKind(evs, 0, EvCancel); len(c) != 1 || c[0].Action != cards.Throw || c[0].Reason != ReasonOutOfRange {
+		t.Errorf("cancel = %v", c)
+	}
+	if st.Chars[0].Guns.Count() != 1 || len(st.Ground) != 0 {
+		t.Errorf("guns %+v", st.Chars[0].Guns)
+	}
+	// STRENGTH adding four to the wielding factor reaches 8 (20.22).
+	st = armed(0)
+	seq := Sequence{1, 61}
+	st, evs = resolveWith(t, st, "7b:wield,6b:throw:@1", "", &seq)
+	if th := ofKind(evs, 0, EvThrow); len(th) != 1 || th[0].Range != 6 || th[0].Seg != 4 {
+		t.Errorf("throw = %v", th)
+	}
+	if len(st.Ground) != 1 || st.Ground[0].Hex != "A-F9" {
+		t.Errorf("ground = %+v", st.Ground)
+	}
+	// Bare hands cannot throw.
+	st = startState()
+	st.Chars[1].Hex = "A-F4"
+	_, evs = resolve(t, st, "6b:throw:@1", "")
+	if c := ofKind(evs, 0, EvCancel); len(c) != 1 || c[0].Reason != ReasonNoGun {
+		t.Errorf("cancel = %v", c)
+	}
+	// Doing nothing, or nobody in the hex: nothing thrown.
+	st = armed(0)
+	st, evs = resolve(t, st, "6b", "")
+	if n := ofKind(evs, 0, EvNothing); len(n) != 1 || n[0].Action != cards.Throw || st.Chars[0].Guns.Count() != 1 {
+		t.Errorf("nothing = %v", n)
+	}
+	st = armed(0)
+	st, evs = resolve(t, st, "6b:throw:A-F4", "")
+	if n := ofKind(evs, 0, EvNothing); len(n) != 1 || n[0].Reason != ReasonEmptyHex || st.Chars[0].Guns.Count() != 1 {
+		t.Errorf("nothing = %v", n)
+	}
+}

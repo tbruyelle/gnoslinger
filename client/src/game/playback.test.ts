@@ -160,6 +160,15 @@ describe("describeEvents", () => {
     ]);
   });
 
+  it("lists a throw with its card, and the weapon landing", () => {
+    expect(log([ev({ seg: 2, p: 0, kind: "throw", target: 1, to: "A-F6", n: 2, range: 1, card: 21, hit: "BODY", gun: "colt45" }), ev({ seg: 2, p: 0, kind: "drop_gun", reason: "throw", to: "A-F6", gun: "colt45" })])).toEqual([
+      "marshal throws the Colt 45 at kid in A-F6 (aim time 2, range 1)",
+      "    card 21: FIRE, BODY hit",
+      "marshal's Colt 45 lands in A-F6",
+    ]);
+    expect(describeEvent(ev({ kind: "nothing", action: "throw", reason: "empty_hex", to: "A-F4" }), names)).toBe("marshal holds the throw: nobody in A-F4");
+  });
+
   it("reads turns logged with the MALFUNCTION cards before the shot the same way", () => {
     expect(log([malf(101, "no_effect"), shot({ card: 9, hit: "-" }), ev({ seg: 5, p: 0, kind: "aim", to: "A-D6", target: -1, n: 2 })])).toEqual([
       "kid shoots marshal in A-F4 (aim time 2, range 5)",
