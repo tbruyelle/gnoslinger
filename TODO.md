@@ -41,7 +41,7 @@
     - poker game with money
 
 ## Showdown
-- Seed sound randomness with game/turn/seq
+- differentiate blood beetwen serious/throw and bullet
 - some screen size hides the run away hexes
 - add winning/losing burst
 - show tips (or highlight a card with some text)
