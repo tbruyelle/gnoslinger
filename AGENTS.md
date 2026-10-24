@@ -832,10 +832,12 @@ Clicking a token opens the **character
   going off one after the other when their sounds play (`shotDelays` in
   `game/sounds.ts`, 220 ms apart, shared by the sounds and the bullets;
   the step lasts that much longer); a miss flies on off
-  the board; the hit location's burst, `assets/hit_<location>.png` (arm,
+  the board, a hit spurts blood out along the bullet's line, leaving a
+  spray of streaks on the board (`sprayBlood`; a thrown weapon and the
+  SERIOUS bleeding keep round drops and stains); the hit location's burst, `assets/hit_<location>.png` (arm,
   body, critical, gun, head, leg, side, vital, picked by `game/bursts.ts`
   from the shot's final `hit`; `hit.png`, a plain "HIT!", only for a
-  location without an image), or `missed.png` bursts beside the target (`jammed.png` or `exploded.png` beside the shooter when the second MALFUNCTION jams or blows up the gun; an exploded gun's icon is struck through in red and only Throw can use it). A **throw** (`flyThrow`) flies the gun's icon spinning in a straight line from the thrower's hand: onto the target on a hit, with the same burst and blood as a bullet, or past it to the hex where it lands on a miss; the gun shows on the ground once it lands (`throwLandings`, in the step's hold). Planning, **Throw** goes straight to its target among the hexes of the aim zone within reach (`throwReach`: 4, 8 with a `wield` Strength; the hover shows the odds with aim time 2 and the range out of the reach), **Strength** opens two buttons (+2 to the penalties, +4 hexes of range) and is only offered with the Throw free and the points for both, after which only the Throw can be picked (`planAllows`). Brawling stays disabled.
+  location without an image), or `missed.png` bursts beside the target (`jammed.png` or `exploded.png` beside the shooter when the second MALFUNCTION jams or blows up the gun; an exploded gun's icon is struck through in red and only Throw can use it). A **throw** (`flyThrow`) flies the gun's icon spinning in a straight line from the thrower's hand: onto the target on a hit, with the same burst as a bullet and blood splashing round it, or past it to the hex where it lands on a miss; the gun shows on the ground once it lands (`throwLandings`, in the step's hold). Planning, **Throw** goes straight to its target among the hexes of the aim zone within reach (`throwReach`: 4, 8 with a `wield` Strength; the hover shows the odds with aim time 2 and the range out of the reach), **Strength** opens two buttons (+2 to the penalties, +4 hexes of range) and is only offered with the Throw free and the points for both, after which only the Throw can be picked (`planAllows`). Brawling stays disabled.
 - **How to play** (`tutorial/`): a guided showdown, the player's Marshal
   against a scripted Kid, on the game screen with no chain and no wallet;
   opened by **How to play** beside Connect with Adena on the splash, in the

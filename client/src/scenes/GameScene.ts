@@ -2879,6 +2879,55 @@ export class GameScene extends Phaser.Scene {
     this.time.delayedCall(1800, () => emitter.destroy());
   }
 
+  /**
+   * A bullet's blood: a jet spurting out of the target along the bullet's
+   * line, in a narrow cone, and the spray it leaves on the board, streaks
+   * aligned with the line that thin out and spread with the distance.
+   */
+  private sprayBlood(at: { sx: number; sy: number }, along: { x: number; y: number }) {
+    if (!this.textures.exists("blood_streak")) {
+      const g = this.make.graphics({ x: 0, y: 0 }, false);
+      g.fillStyle(0xb0120e, 1).fillEllipse(8, 2, 16, 4);
+      g.generateTexture("blood_streak", 16, 4);
+      g.destroy();
+    }
+    const d = this.tokenDiameter();
+    const rad = Math.atan2(along.y, along.x);
+    const dir = Phaser.Math.RadToDeg(rad);
+    const emitter = this.add
+      .particles(at.sx, at.sy, "blood_streak", {
+        angle: { min: dir - 10, max: dir + 10 },
+        rotate: dir,
+        speed: { min: d * 3, max: d * 6 },
+        lifespan: { min: 180, max: 420 },
+        scaleX: { start: Math.max(0.6, d / 70), end: 0.3 },
+        scaleY: { start: Math.max(0.5, d / 110), end: 0.2 },
+        alpha: { start: 1, end: 0 },
+        emitting: false,
+      })
+      .setMask(this.arrMask)
+      .setDepth(35);
+    emitter.explode(40);
+    this.time.delayedCall(1000, () => emitter.destroy());
+    // The spray on the ground, past the target.
+    const ux = Math.cos(rad);
+    const uy = Math.sin(rad);
+    for (let i = 0; i < 12; i++) {
+      const ahead = d * (0.3 + Math.random() * 1.5);
+      const spread = (Math.random() - 0.5) * ahead * 0.35;
+      const x = at.sx + ux * ahead - uy * spread;
+      const y = at.sy + uy * ahead + ux * spread;
+      const size = d * (0.16 - (ahead / d) * 0.06) * (0.6 + Math.random() * 0.6);
+      const streak = this.add
+        .ellipse(x, y, size, size * 0.3, 0x7a0c0a, 0.85)
+        .setRotation(rad)
+        .setMask(this.arrMask)
+        .setDepth(0.6);
+      this.tweens.add({ targets: streak, alpha: 0, duration: 5000, delay: 2500 + Math.random() * 1500, onComplete: () => streak.destroy() });
+    }
+  }
+
+  /** A thrown weapon's blood: drops splashing round the point it strikes, and stains past it. */
   private spurtBlood(at: { sx: number; sy: number }, along: { x: number; y: number }) {
     if (!this.textures.exists("blood")) {
       const g = this.make.graphics({ x: 0, y: 0 }, false);
@@ -3516,7 +3565,7 @@ export class GameScene extends Phaser.Scene {
           if (!same()) return;
           this.popBurst(hit ? hitBurst(e.hit) : "missed", centre, along);
           if (hit) {
-            this.spurtBlood(near, along);
+            this.sprayBlood(near, along);
             if (atToken) {
               this.tokens[e.target]?.flinch(this.tweens);
               this.tokens[e.target]?.hurtFlash(this);
