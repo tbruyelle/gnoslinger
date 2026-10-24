@@ -3505,7 +3505,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * A thrown weapon (17.4) spinning in an arc from the thrower's hand: onto
+   * A thrown weapon (17.4) hurled spinning straight from the thrower's hand: onto
    * the target on a hit, where it strikes with the hit location's burst and
    * some blood, as a bullet does; past it to the hex where it lands on a
    * miss ("MISSED!" beside the target as it goes by). It lands
@@ -3530,10 +3530,7 @@ export class GameScene extends Phaser.Scene {
       const size = this.tokenDiameter() * GUN_SIZE * 1.3;
       const icon = this.textures.exists(key) ? this.add.image(from.sx, from.sy, key).setDisplaySize(size, size) : this.add.rectangle(from.sx, from.sy, size, size / 2, 0x2a1c14);
       icon.setMask(this.arrMask).setDepth(25);
-      const base = icon.scaleX;
-      // The arc rises off the straight line by a third of its length, at most a token and a half.
       const length = Math.hypot(to.sx - from.sx, to.sy - from.sy);
-      const rise = Math.min(length / 3, this.tokenDiameter() * 1.5);
       const flight = { t: 0 };
       const spin = (Math.random() < 0.5 ? -1 : 1) * 720;
       // On a miss the weapon passes the target about when it is nearest to it.
@@ -3543,12 +3540,11 @@ export class GameScene extends Phaser.Scene {
         targets: flight,
         t: 1,
         duration: THROW_FLIGHT_MS,
-        ease: "Sine.easeIn",
+        ease: "Linear",
         onUpdate: () => {
           const t = flight.t;
-          icon.setPosition(from.sx + (to.sx - from.sx) * t, from.sy + (to.sy - from.sy) * t - rise * 4 * t * (1 - t));
+          icon.setPosition(from.sx + (to.sx - from.sx) * t, from.sy + (to.sy - from.sy) * t);
           icon.setAngle(spin * t);
-          icon.setScale(base * (1 + 0.35 * Math.sin(Math.PI * t))); // higher in the arc, nearer the eye
           if (!struck && t >= passing) {
             struck = true;
             if (!same()) return;
