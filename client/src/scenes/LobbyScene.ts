@@ -111,6 +111,8 @@ export class LobbyScene extends Phaser.Scene {
   private revealIds: string[] = [];
   private openIds: string[] = [];
   private lobbyRevealing = false;
+  /** The game the lobby's reveal or opening is for, while in flight. */
+  private revealingId: string | null = null;
   /** Openings the lobby tried, per game: the turn, and when it may try again (drand may not serve the round yet). */
   private openTried = new Map<string, { turn: number; retryAt: number }>();
   private sessionError = "";
@@ -400,10 +402,14 @@ export class LobbyScene extends Phaser.Scene {
   private async revealFromLobby(due: { id: string; turn: number; seat: number; salt: string; plan: string }[], toOpen: GamesList["mine"]) {
     if (!this.chain || this.lobbyRevealing || (due.length === 0 && toOpen.length === 0)) return;
     this.lobbyRevealing = true;
+    this.revealingId = due.length > 0 ? due[0].id : toOpen[0].id;
+    this.renderLobby();
+    let sent = false;
     try {
       if (due.length > 0) {
         const r = due[0];
         await this.chain.realm.reveal(r.id, r.turn, r.seat, r.salt, r.plan);
+        sent = true;
         return;
       }
       const g = toOpen[0];
@@ -412,12 +418,21 @@ export class LobbyScene extends Phaser.Scene {
       const seats = openableSeats(view, Date.now() / 1000);
       if (seats.length > 0 && (await openAndReveal(this.chain.realm, view, seats, null)).length > 0 && this.scene.isActive()) {
         showToast(this, `Game ${g.id}: plans opened from their timelocked copies`, "info");
+        sent = true;
       }
     } catch (e) {
       if (this.scene.isActive()) showToast(this, `Reveal: ${userMessage(e)}`, "error");
     } finally {
       this.lobbyRevealing = false;
+      this.revealingId = null;
+      // Sent: the games list shows the game's new state at once, rather than Open again until the next refresh.
+      if (sent) void this.refreshGames();
+      else this.renderLobby();
     }
+  }
+
+  private renderLobby() {
+    if (this.scene.isActive() && this.screen === "lobby") this.renderView();
   }
 
   /** Shows a player's profile; fromPage is the ranking page it was picked from. */
@@ -505,6 +520,7 @@ export class LobbyScene extends Phaser.Scene {
       topPlayers: this.topPlayers,
       revealIds: this.revealIds,
       openIds: this.openIds,
+      revealingId: this.revealingId,
       dialog: this.dialog,
     });
   }

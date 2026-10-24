@@ -74,6 +74,8 @@ export interface LobbyModel {
   revealIds: string[];
   /** Games with timelocked plans to open, their round out, waiting for a click (auto-sign off). */
   openIds: string[];
+  /** The game whose reveal or opening the lobby is sending (auto-sign on), null if none. */
+  revealingId: string | null;
   dialog: LobbyDialog | null;
 }
 
@@ -395,7 +397,10 @@ export class LobbyView {
       .map((g) => {
         const left = secondsLeft(g, now);
         const turn = `${gameLabel(g)} · Turn ${g.turn} of ${g.maxTurns}`;
-        const btn = (label: string) => `<button type="button" class="gl-play" data-act="open" data-id="${esc(g.id)}">${label}</button>`;
+        const btn = (label: string) =>
+          g.id === m.revealingId
+            ? '<button type="button" class="gl-play" disabled>REVEALING…</button>'
+            : `<button type="button" class="gl-play" data-act="open" data-id="${esc(g.id)}">${label}</button>`;
         if (g.phase === "revealing" && m.openIds.includes(g.id) && !m.revealIds.includes(g.id)) {
           return row("gl-card", g, versus(g), `${turn} · plans left unrevealed: open them from their timelocked copies`, btn("OPEN"));
         }
@@ -434,7 +439,10 @@ export class LobbyView {
       (countLine ? `<span class="gl-count">${countLine}</span>` : "") +
       `</div>${yourMove || '<p class="gl-empty">No showdown waits for your plan.</p>'}</section>`;
 
-    const openBtn = (g: GameSummary, label = "Open") => `<button type="button" class="gl-open" data-act="open" data-id="${esc(g.id)}">${label}</button>`;
+    const openBtn = (g: GameSummary, label = "Open") =>
+      g.id === m.revealingId
+        ? '<button type="button" class="gl-open" disabled>Revealing…</button>'
+        : `<button type="button" class="gl-open" data-act="open" data-id="${esc(g.id)}">${label}</button>`;
     const waiting = s.waiting
       .map((g) => {
         if (g.phase === "waiting") return row("gl-line", g, versus(g), withStake(`${gameLabel(g)} · ${g.maxTurns} turns · ${formatDuration(g.timeout)} per turn`, g), openBtn(g));
