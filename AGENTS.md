@@ -925,7 +925,7 @@ character tokens `char_*.png` 95×95, action cards `action_card_a{1-12}[_back].p
 `hex_grid.json` (hex centres, scaled 2×), gun icons `guns/<type>.gif` and AIM
 markers `aim{2,4,6,8}.gif` (from the VASSAL module), sound effects `sounds/`
 (played during turn playback: `game/sounds.ts` maps events to groups of
-variants, `GameScene.playSounds` picks one at random; a miss, misfires
+variants, `GameScene.playSounds` picks one from the turn's seed, hashed with the event's place in the turn and the group, `variantIndex`, so a turn sounds the same on every playback, and a wild shot's bullet flies the same way (`turnPick`); the planning sounds pick at random; a miss, misfires
 included, adds a `missed*` ricochet after the gunshot; each character hit
 in a segment groans once (`wounded*`), however many effects the hits
 have, or cries `dead*` if one of them kills it, when it reacts

@@ -25,7 +25,7 @@ import { firingGun, gunInHand, replayPlan, type CharView } from "../game/replay"
 import { SEGMENTS, segmentFills, turnSegmentCells } from "../game/segments";
 import { COCK_AIM_SHOOT_AIM_TIME, SHOOT_AIM_TIME, shotOdds } from "../game/shotOdds";
 import { canSee, standingOn } from "../game/sight";
-import { SOUND_FILES, SOUND_VOLUME, THROW_FLIGHT_MS, aimTaken, shotDelays, soundKey, soundsForDelay, soundsForEvents, soundsForPreview, throwLandings, woundDelays, type SoundCue, type SoundGroup } from "../game/sounds";
+import { SOUND_FILES, SOUND_VOLUME, THROW_FLIGHT_MS, aimTaken, shotDelays, soundKey, soundsForDelay, soundsForEvents, soundsForPreview, throwLandings, variantIndex, woundDelays, type SoundCue, type SoundGroup } from "../game/sounds";
 import { SHOOT_OPTIONS, STRENGTH_DAMAGE, STRENGTH_WIELD, TARGET_OPTIONS, isShooting, isStrength, planAllows, throwReach, type ShootOption, type StrengthOption } from "../game/plan";
 import { closeCharacterSheet, openCharacterSheet, type GunPick } from "../ui/characterSheet";
 import { ShowdownView, showdownLayout, type BoardRect, type CharPanel, type HandSide, type ShowdownLayout, type ShowdownModel, type TimelineRow } from "../ui/showdownView";
@@ -741,6 +741,16 @@ class CharacterToken {
  * plan with a live preview, submits it through Adena, and replays the
  * resolution log segment by segment when a turn resolves.
  */
+/**
+ * A pick among count (0 to count − 1) for what a resolved turn's event
+ * shows or sounds: from the turn's seed (variantIndex), so the turn plays
+ * the same on every playback; at random for anything else.
+ */
+function turnPick(turn: TurnResult | undefined, e: TurnEvent | undefined, what: string, count: number): number {
+  const at = turn && e ? turn.events.indexOf(e) : -1;
+  return at >= 0 ? variantIndex(turn!.seed, `${at}/${what}`, count) : Math.floor(Math.random() * count);
+}
+
 export class GameScene extends Phaser.Scene {
   private gameID = "";
   /** How to play: the scripted showdown against the Kid (tutorial/), no chain or wallet behind it. */
@@ -3396,8 +3406,9 @@ export class GameScene extends Phaser.Scene {
     };
     if (fade > 0) this.time.delayedCall(fade, land);
     else land();
-    this.flashShots(events, same);
-    this.playSounds(events);
+    const turn = this.playback?.turns[this.playback.index];
+    this.flashShots(events, turn, same);
+    this.playSounds(events, turn);
     // SERIOUS wounds bleed where the character stands as their fatigue cards cost endurance.
     const chars = this.displayChars();
     for (const e of events) {
@@ -3420,7 +3431,7 @@ export class GameScene extends Phaser.Scene {
    * where the tokens stand as the step begins. same tells whether the
    * replay is still on this step when a delayed gun's turn comes.
    */
-  private flashShots(events: TurnEvent[], same: () => boolean = () => true) {
+  private flashShots(events: TurnEvent[], turn: TurnResult | undefined, same: () => boolean = () => true) {
     const chars = this.displayChars();
     const delays = shotDelays(events);
     const later = (ms: number, fire: () => void) => {
@@ -3441,10 +3452,11 @@ export class GameScene extends Phaser.Scene {
       }
       if (e.kind === "wild_shot" && chars[e.p]) {
         // A gun going off by itself (a WILD SHOT penalty): the bullet flies
-        // off in a random direction, past the board's edge, hitting nothing.
+        // off in a direction picked from the turn's seed, past the board's
+        // edge, hitting nothing.
         const gun = this.gunCentre(e.p);
         const from = { sx: gun.x, sy: gun.y };
-        const angle = Math.random() * Math.PI * 2;
+        const angle = (turnPick(turn, e, "wild_shot", 3600) / 3600) * Math.PI * 2;
         const to = this.beyondTheBoard(from, { sx: from.sx + Math.cos(angle), sy: from.sy + Math.sin(angle) });
         later(at, () => {
           this.flyTracer(from, to, 20);
@@ -3596,13 +3608,14 @@ export class GameScene extends Phaser.Scene {
   }
 
   /** The segment's sound effects, each a random variant of its group. */
-  private playSounds(events: TurnEvent[]) {
-    this.playCues(soundsForEvents(events));
+  /** A resolved turn's sounds, their variants picked from its seed. */
+  private playSounds(events: TurnEvent[], turn?: TurnResult) {
+    this.playCues(soundsForEvents(events), turn);
   }
 
-  private playCues(cues: SoundCue[]) {
+  private playCues(cues: SoundCue[], turn?: TurnResult) {
     for (const cue of cues) {
-      const key = soundKey(cue.group, Math.floor(Math.random() * SOUND_FILES[cue.group].length));
+      const key = soundKey(cue.group, turnPick(turn, cue.event, cue.group, SOUND_FILES[cue.group].length));
       const play = () => this.sound.play(key, { volume: SOUND_VOLUME[cue.group] });
       if (cue.delayMs > 0) this.time.delayedCall(cue.delayMs, play);
       else play();

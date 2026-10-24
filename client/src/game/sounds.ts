@@ -4,7 +4,9 @@ import type { CharView } from "./replay";
 /**
  * Sound effects, by group: each group lists its variants under
  * assets/sounds/, one is picked at random every time the group plays so a
- * repeated action does not sound mechanical.
+ * repeated action does not sound mechanical; a resolved turn's sounds pick
+ * theirs from the turn's seed (variantIndex), so the turn sounds the same
+ * on every playback.
  */
 export const SOUND_FILES = {
   // A card added to the plan, and reversed when it leaves; both converted
@@ -58,6 +60,21 @@ export const soundKey = (group: SoundGroup, i: number) => `sfx_${group}_${i}`;
 export interface SoundCue {
   group: SoundGroup;
   delayMs: number;
+  /** The resolved turn's event the sound is for, which picks its variant (variantIndex). */
+  event?: TurnEvent;
+}
+
+/**
+ * The variant (0 to count − 1) a resolved turn's sound plays: a hash of the
+ * turn's seed and key (the event's place in the turn and the group), so a
+ * turn sounds the same on every playback, whether its segments play step
+ * by step or in one go, in whatever order.
+ */
+export function variantIndex(seed: string, key: string, count: number): number {
+  // FNV-1a, 32 bits.
+  let h = 0x811c9dc5;
+  for (const c of `${seed}/${key}`) h = Math.imul(h ^ c.charCodeAt(0), 0x01000193);
+  return (h >>> 0) % count;
 }
 
 /** A Draw & Cock cocks the gun once it is out of the holster. */
@@ -152,44 +169,44 @@ export function soundsForEvents(events: TurnEvent[]): SoundCue[] {
     const at = delays[i] ?? 0;
     switch (e.kind) {
       case "move":
-        cues.push({ group: "step", delayMs: 0 });
+        cues.push({ group: "step", delayMs: 0, event: e });
         break;
       case "turn":
-        cues.push({ group: "turn", delayMs: 0 });
+        cues.push({ group: "turn", delayMs: 0, event: e });
         break;
       case "flip":
-        if (e.down) cues.push({ group: "fall", delayMs: 0 });
+        if (e.down) cues.push({ group: "fall", delayMs: 0, event: e });
         break;
       case "draw":
-        cues.push({ group: e.from === "ground" ? "groundPick" : "unholster", delayMs: 0 });
-        if (e.result !== "jammed") cues.push({ group: "cock", delayMs: COCK_AFTER_DRAW_MS });
+        cues.push({ group: e.from === "ground" ? "groundPick" : "unholster", delayMs: 0, event: e });
+        if (e.result !== "jammed") cues.push({ group: "cock", delayMs: COCK_AFTER_DRAW_MS, event: e });
         break;
       case "cock":
-        cues.push({ group: "cock", delayMs: 0 });
+        cues.push({ group: "cock", delayMs: 0, event: e });
         break;
       case "aim":
-        cues.push({ group: "aim", delayMs: 0 });
+        cues.push({ group: "aim", delayMs: 0, event: e });
         break;
       case "load":
-        cues.push({ group: "reload", delayMs: 0 });
+        cues.push({ group: "reload", delayMs: 0, event: e });
         break;
       case "shot":
         // A misfire sounds like a missed shot, as it shows, unless the second
         // MALFUNCTION jams or blows up the gun: no bullet then.
         if (delays[i] === undefined) break;
-        cues.push({ group: "gunshot", delayMs: at });
-        if (e.hit === "-") cues.push({ group: "ricochet", delayMs: at + RICOCHET_AFTER_SHOT_MS });
+        cues.push({ group: "gunshot", delayMs: at, event: e });
+        if (e.hit === "-") cues.push({ group: "ricochet", delayMs: at + RICOCHET_AFTER_SHOT_MS, event: e });
         break;
       case "cancel":
         // A shot with an empty gun only clicks, spaced out like the shots fired with it.
-        if (e.reason === "empty") cues.push({ group: "emptyGun", delayMs: at });
+        if (e.reason === "empty") cues.push({ group: "emptyGun", delayMs: at, event: e });
         break;
       case "wild_shot":
-        cues.push({ group: "gunshot", delayMs: at });
+        cues.push({ group: "gunshot", delayMs: at, event: e });
         break;
       case "throw":
         // The weapon strikes the target, or the ground beside it, as it lands.
-        cues.push({ group: "impact", delayMs: at + THROW_FLIGHT_MS });
+        cues.push({ group: "impact", delayMs: at + THROW_FLIGHT_MS, event: e });
         break;
       case "wound": {
         // A kill among a character's wounds makes its groan the death cry.
@@ -198,7 +215,7 @@ export function soundsForEvents(events: TurnEvent[]): SoundCue[] {
           if (e.result === "kill") cue.group = "dead";
           break;
         }
-        const first: SoundCue = { group: e.result === "kill" ? "dead" : "wounded", delayMs: reacts.get(e.p) ?? WOUND_AFTER_SHOT_MS };
+        const first: SoundCue = { group: e.result === "kill" ? "dead" : "wounded", delayMs: reacts.get(e.p) ?? WOUND_AFTER_SHOT_MS, event: e };
         wounded.set(`${e.seg}/${e.p}`, first);
         cues.push(first);
         break;
@@ -207,20 +224,20 @@ export function soundsForEvents(events: TurnEvent[]): SoundCue[] {
         // Crossing an obstacle draws its delay cards: one sound per character.
         if (OBSTACLE_REASONS.has(e.reason) && !climbed.has(e.p)) {
           climbed.add(e.p);
-          cues.push({ group: "obstacle", delayMs: OBSTACLE_AFTER_MOVE_MS });
+          cues.push({ group: "obstacle", delayMs: OBSTACLE_AFTER_MOVE_MS, event: e });
         }
         // SERIOUS fatigue cards at the turn start: a groan when they cost
         // endurance, once per character however many cards it draws.
         if (e.reason === "serious" && e.endurance > 0 && !bled.has(e.p)) {
           bled.add(e.p);
-          cues.push({ group: "wounded", delayMs: 0 });
+          cues.push({ group: "wounded", delayMs: 0, event: e });
         }
         break;
       case "pass_out":
-        cues.push({ group: "fall", delayMs: 0 });
+        cues.push({ group: "fall", delayMs: 0, event: e });
         break;
       case "run_away":
-        cues.push({ group: "runAway", delayMs: 0 });
+        cues.push({ group: "runAway", delayMs: 0, event: e });
         break;
     }
   });

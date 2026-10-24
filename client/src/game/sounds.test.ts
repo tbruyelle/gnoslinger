@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { GunView, TurnEvent } from "../chain/types";
 import type { CharView } from "./replay";
-import { THROW_FLIGHT_MS, shotDelays, soundsForDelay, soundsForEvents, soundsForPreview, throwLandings, woundDelays } from "./sounds";
+import { THROW_FLIGHT_MS, shotDelays, soundsForDelay, soundsForEvents, soundsForPreview, throwLandings, variantIndex, woundDelays } from "./sounds";
 
 const ev = (partial: Partial<TurnEvent>): TurnEvent => ({
   seg: 1, p: 0, kind: "move", action: "", from: "", to: "", facing: 0, down: false, n: 0, delay: 0, reason: "", card: 0, result: "", endurance: 0, target: 1, hit: "", range: 0, gun: "", gunId: 0, step: 0, ...partial,
@@ -159,5 +159,29 @@ describe("soundsForDelay", () => {
 
   it("keeps a killed character silent", () => {
     expect(groups([3], [char({ delay: 0, status: "killed" })])).toEqual([]);
+  });
+});
+
+describe("variantIndex", () => {
+  it("picks the same variant for the same seed and key, within the group", () => {
+    const seed = "8f984af0e9cfd1ba52c3e0e6404283571d25a512e94c6c3226917bf1a71f28fb";
+    expect(variantIndex(seed, "3/gunshot", 4)).toBe(variantIndex(seed, "3/gunshot", 4));
+    const picks = Array.from({ length: 40 }, (_, i) => variantIndex(seed, `${i}/gunshot`, 4));
+    expect(picks.every((i) => i >= 0 && i < 4)).toBe(true);
+    // Spread over the variants, not stuck on one.
+    expect(new Set(picks).size).toBe(4);
+    expect(variantIndex(seed, "3/gunshot", 1)).toBe(0);
+  });
+
+  it("tags each sound of a turn with the event it is for", () => {
+    const shot = ev({ kind: "shot", hit: "-" });
+    const wound = ev({ kind: "wound", result: "stun", p: 1 });
+    const kill = ev({ kind: "wound", result: "kill", p: 1 });
+    const cues = soundsForEvents([shot, wound, kill]);
+    expect(cues.map((c) => [c.group, c.event])).toEqual([
+      ["gunshot", shot],
+      ["ricochet", shot],
+      ["dead", wound],
+    ]);
   });
 });
