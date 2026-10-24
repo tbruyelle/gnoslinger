@@ -326,7 +326,7 @@ picked up earlier in the plan (it takes the sheet's next id, `NextID`):
 whether it is there, and where, is checked when the move is done: a gun move the gun no longer allows (not in a hand, not in
 both hands) is cancelled (`cancel`, Action `gun_move`, Reason
 `not_in_hand`/`not_both`/`no_gun`); a move to a hand is a `move_gun` event
-(From `both_hands`, To the hand), a drop the usual `drop_gun`; dropping
+(From `both_hands`, To the hand), a drop the usual `drop_gun` with Reason `gun_move` ("" in older records, as for a gun knocked out of the hand or falling with its owner); dropping
 the gun the character would fire (gun hand or both hands) also loses its
 aim (`lose_aim`, Reason `gun_dropped`: this project's call, 12.42 lists the
 GUN HAND wound but not a gun let go). Nothing holsters a gun.
@@ -937,7 +937,7 @@ an empty gun (reason `empty`) plays `empty-gun*`, as does picking the target
 of a shot whose gun the preview shows empty, instead of `plan-shoot.wav`; SERIOUS fatigue
 costing endurance at the turn start plays a `wounded*` groan, crossing a
 fence or going onto or off an obstacle an `obstacle*` sound, a thrown
-weapon `impact*` as it lands, `THROW_FLIGHT_MS` after it leaves the hand,
+weapon `throw1.wav` as it leaves the hand and `impact*` as it lands, `thud*` when it missed, as does a gun let go (a `drop_gun` with Reason `gun_move`; picking that move on the sheet plays it too; a cocked one goes off `GUN_FALL_MS` after the thud, as it lands, its bullet leaving the gun's icon on the ground, `groundGunPos`), `THROW_FLIGHT_MS` after it leaves the hand,
 the target reacting then) and while planning,
 for what the plan alone decides (`soundsForPreview`: steps, climbing over a
 fence or an obstacle, turns, going down,

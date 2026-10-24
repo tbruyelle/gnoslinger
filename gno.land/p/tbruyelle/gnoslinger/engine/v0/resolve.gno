@@ -27,7 +27,7 @@ const (
 	EvWildShot     = "wild_shot"     // Gun went off without hitting anything: uncocked, one shell less
 	EvWound        = "wound"         // Player hit: Result = penalty kind (Kill, Stun...), N
 	EvDirection    = "direction"     // Card drawn as a direction card: To = its HEX line
-	EvDropGun      = "drop_gun"      // Gun fell from From (hand) to the hex To, N = its ground id; Reason throw for a thrown weapon landing
+	EvDropGun      = "drop_gun"      // Gun fell from From (hand) to the hex To, N = its ground id; Reason throw for a thrown weapon landing, gun_move for one let go (10.22)
 	EvMoveGun      = "move_gun"      // a gun move (10.22): Gun moved from From (both hands) to To (a hand), as it was
 	EvPassOut      = "pass_out"      // end of turn: more delay than endurance two turns in a row
 	EvSeriousCheck = "serious_check" // end of showdown: Card, N = DELAY + SERIOUS points (4 kills)
@@ -75,6 +75,7 @@ const (
 	ReasonOutOfFight = "out_of_fight" // a shot at a character killed, passed out, surrendered or run away: held (EvNothing)
 	ReasonOutOfRange = "out_of_range" // a throw farther than the weapon's wielding factor (17.2)
 	ReasonThrow      = "throw"        // aim spent by a throw (16.13); a thrown weapon landing (17.4)
+	ReasonGunMove    = "gun_move"     // a gun move dropping the gun in the hex (10.22)
 )
 
 // Malfunction results.
@@ -937,7 +938,7 @@ func directionOf(board *hex.Board, c *Character, shooter *Character, h hex.Rel) 
 // hands moves to the other hand.
 func dropHand(p int, c *Character, hand, other GunLocation, seg int, st *State, evs *[]Event) {
 	if i := c.Guns.At(hand); i >= 0 {
-		dropGun(p, c, i, true, seg, st, evs)
+		dropGun(p, c, i, true, "", seg, st, evs)
 	}
 	if i := c.Guns.At(BothHands); i >= 0 {
 		c.Guns[i].Location = other
@@ -970,7 +971,7 @@ func moveGun(p int, st *State, m GunMove, seg int, evs *[]Event) {
 			return
 		}
 		aimed := g.Location == GunHand || g.Location == BothHands
-		dropGun(p, c, i, true, seg, st, evs)
+		dropGun(p, c, i, true, ReasonGunMove, seg, st, evs)
 		if aimed && c.Aim > 0 {
 			loseAim(p, c, seg, ReasonGunDropped, evs)
 		}
@@ -988,12 +989,13 @@ func moveGun(p int, st *State, m GunMove, seg int, evs *[]Event) {
 
 // dropGun lets the gun in slot i fall in the character's hex, where it lies
 // unowned with a fresh ground id; fire makes a cocked gun go off as it
-// falls (a released or knocked-out gun, 10.22, 14.11).
-func dropGun(p int, c *Character, i int, fire bool, seg int, st *State, evs *[]Event) {
+// falls (a released or knocked-out gun, 10.22, 14.11); reason goes on the
+// drop event, ReasonGunMove for a gun let go.
+func dropGun(p int, c *Character, i int, fire bool, reason string, seg int, st *State, evs *[]Event) {
 	if fire && c.Guns[i].Cocked {
 		fireHarmlessly(p, &c.Guns[i], seg, evs)
 	}
-	putDown(p, c, i, c.Hex, "", seg, st, evs)
+	putDown(p, c, i, c.Hex, reason, seg, st, evs)
 }
 
 // putDown takes the gun in slot i off c's sheet and lays it in hex at,
@@ -1014,7 +1016,7 @@ func putDown(p int, c *Character, i int, at, reason string, seg int, st *State, 
 func dropAllGuns(p int, c *Character, seg int, st *State, evs *[]Event) {
 	for i := range c.Guns {
 		if c.Guns[i].Type != NoGun {
-			dropGun(p, c, i, false, seg, st, evs)
+			dropGun(p, c, i, false, "", seg, st, evs)
 		}
 	}
 }

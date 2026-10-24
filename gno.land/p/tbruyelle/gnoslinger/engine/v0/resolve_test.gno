@@ -1571,7 +1571,7 @@ func TestGunMoves(t *testing.T) {
 	if w := ofKind(evs, 0, EvWildShot); len(w) != 1 || w[0].Seg != 0 {
 		t.Errorf("wild shots = %v", w)
 	}
-	if d := ofKind(evs, 0, EvDropGun); len(d) != 1 || d[0].Seg != 0 || d[0].To != start || d[0].From != "gun_hand" {
+	if d := ofKind(evs, 0, EvDropGun); len(d) != 1 || d[0].Seg != 0 || d[0].To != start || d[0].From != "gun_hand" || d[0].Reason != ReasonGunMove {
 		t.Errorf("drops = %v", d)
 	}
 	if after.Chars[0].Guns.Find(1) >= 0 || len(after.Ground) != 1 || after.Ground[0].Hex != start || after.Ground[0].Gun.Cocked || after.Ground[0].Gun.Shells != 5 {

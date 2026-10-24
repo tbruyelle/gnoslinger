@@ -42,15 +42,18 @@ export const SOUND_FILES = {
   dead: ["dead1.wav", "dead2.wav", "dead3.wav", "dead4.wav", "dead5.wav"],
   // A character leaving the map (15.5).
   runAway: ["run-away.wav"],
-  // A thrown weapon striking its target or the ground.
+  // A weapon leaving the thrower's hand, then striking its target.
+  throw: ["throw1.wav"],
   impact: ["impact1.wav", "impact2.wav"],
+  // A weapon falling on the ground: a throw that missed, or a gun let go (10.22).
+  thud: ["thud1.wav", "thud2.wav"],
 } as const;
 
 export type SoundGroup = keyof typeof SOUND_FILES;
 
 /** Volume per group: gunshots stand out, footsteps stay in the background. */
 export const SOUND_VOLUME: Record<SoundGroup, number> = {
-  pickCard: 0.6, unpickCard: 0.6, select: 0.6, step: 0.5, turn: 0.5, unholster: 0.8, groundPick: 0.8, cock: 0.8, aim: 0.8, planShoot: 0.8, gunshot: 1, ricochet: 0.8, emptyGun: 0.9, reload: 0.8, delay: 0.7, undelay: 0.7, fall: 0.8, obstacle: 0.8, wounded: 0.9, dead: 0.9, runAway: 0.8, impact: 0.9,
+  pickCard: 0.6, unpickCard: 0.6, select: 0.6, step: 0.5, turn: 0.5, unholster: 0.8, groundPick: 0.8, cock: 0.8, aim: 0.8, planShoot: 0.8, gunshot: 1, ricochet: 0.8, emptyGun: 0.9, reload: 0.8, delay: 0.7, undelay: 0.7, fall: 0.8, obstacle: 0.8, wounded: 0.9, dead: 0.9, runAway: 0.8, throw: 0.8, impact: 0.9, thud: 0.9,
 };
 
 /** The Phaser audio key of one variant of a group. */
@@ -94,6 +97,17 @@ const OBSTACLE_AFTER_MOVE_MS = 200;
  */
 const SIMULTANEOUS_GAP_MS = 220;
 
+/**
+ * A cocked gun let go goes off as it hits the ground: its wild shot comes
+ * this long after the thud, which it would drown played together.
+ */
+export const GUN_FALL_MS = 300;
+
+/** A wild shot of a gun let go (10.22): the gun's drop follows it in the step. */
+function fallingShot(e: TurnEvent, events: TurnEvent[]): boolean {
+  return events.some((x) => x.kind === "drop_gun" && x.reason === "gun_move" && x.p === e.p && x.gunId === e.gunId);
+}
+
 /** Delay reasons of crossing an obstacle: a fence (rule 35.2), onto or off an obstacle hex (36.4). */
 const OBSTACLE_REASONS = new Set(["fence", "obstacle"]);
 
@@ -105,7 +119,8 @@ function silentMisfire(e: TurnEvent, events: TurnEvent[]): boolean {
 /**
  * When each gun of a step goes off, in ms after the step is shown, by
  * event index: the shots fired, the empty guns clicking, the wild shots and
- * the weapons thrown (as they leave the hand), in event order, SIMULTANEOUS_GAP_MS apart so they can be told apart;
+ * the weapons thrown (as they leave the hand), in event order, SIMULTANEOUS_GAP_MS apart so they can be told apart
+ * (a gun let go going off GUN_FALL_MS later, as it lands);
  * undefined for the other events and for a shot whose misfire jams or blows
  * up the gun. The sounds and the bullets on the board share this timing.
  */
@@ -118,6 +133,7 @@ export function shotDelays(events: TurnEvent[]): (number | undefined)[] {
       case "cancel":
         return e.reason === "empty" ? shots++ * SIMULTANEOUS_GAP_MS : undefined;
       case "wild_shot":
+        return (fallingShot(e, events) ? GUN_FALL_MS : 0) + shots++ * SIMULTANEOUS_GAP_MS;
       case "throw":
         return shots++ * SIMULTANEOUS_GAP_MS;
       default:
@@ -205,8 +221,10 @@ export function soundsForEvents(events: TurnEvent[]): SoundCue[] {
         cues.push({ group: "gunshot", delayMs: at, event: e });
         break;
       case "throw":
-        // The weapon strikes the target, or the ground beside it, as it lands.
-        cues.push({ group: "impact", delayMs: at + THROW_FLIGHT_MS, event: e });
+        // The weapon whooshes off as it leaves the hand, and strikes the
+        // target, or falls on the ground beside it, as it lands.
+        cues.push({ group: "throw", delayMs: at, event: e });
+        cues.push({ group: e.hit === "-" ? "thud" : "impact", delayMs: at + THROW_FLIGHT_MS, event: e });
         break;
       case "wound": {
         // A kill among a character's wounds makes its groan the death cry.
@@ -238,6 +256,10 @@ export function soundsForEvents(events: TurnEvent[]): SoundCue[] {
         break;
       case "run_away":
         cues.push({ group: "runAway", delayMs: 0, event: e });
+        break;
+      case "drop_gun":
+        // A gun let go; one knocked out of the hand, or falling with its owner, is silent.
+        if (e.reason === "gun_move") cues.push({ group: "thud", delayMs: 0, event: e });
         break;
     }
   });

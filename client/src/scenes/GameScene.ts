@@ -1530,6 +1530,13 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
+  /** Where the gun lying with ground id id is drawn, null if it is not. */
+  private groundGunPos(id: number): { sx: number; sy: number } | null {
+    const j = this.displayGround().findIndex((g) => g.id === id);
+    const img = j >= 0 ? this.groundIcons[j]?.img : undefined;
+    return img ? { sx: img.x, sy: img.y } : null;
+  }
+
   /** Fans out the stack under the pointer, within the disc the spread tokens cover. */
   private updateStackHover(pointer: Phaser.Input.Pointer) {
     if (this.isDragging || !this.inBoard(pointer.x, pointer.y)) {
@@ -2165,6 +2172,8 @@ export class GameScene extends Phaser.Scene {
       onPick: (pick, to) => {
         if (pick.gun === undefined) return;
         this.looseMoves = [...this.looseMoves, { gun: pick.gun, to }];
+        // The plan string does not change before the next card, so the preview plays nothing.
+        if (to === HAND_GROUND) this.playCues([{ group: "thud", delayMs: 0 }]);
         this.updatePreview();
         this.renderView();
       },
@@ -3453,15 +3462,17 @@ export class GameScene extends Phaser.Scene {
       if (e.kind === "wild_shot" && chars[e.p]) {
         // A gun going off by itself (a WILD SHOT penalty): the bullet flies
         // off in a direction picked from the turn's seed, past the board's
-        // edge, hitting nothing.
+        // edge, hitting nothing. A gun let go goes off where it lies, as it
+        // lands (GUN_FALL_MS).
         const gun = this.gunCentre(e.p);
-        const from = { sx: gun.x, sy: gun.y };
+        const dropped = events.find((x) => x.kind === "drop_gun" && x.reason === "gun_move" && x.p === e.p && x.gunId === e.gunId);
         const angle = (turnPick(turn, e, "wild_shot", 3600) / 3600) * Math.PI * 2;
-        const to = this.beyondTheBoard(from, { sx: from.sx + Math.cos(angle), sy: from.sy + Math.sin(angle) });
         later(at, () => {
+          const from = (dropped && this.groundGunPos(dropped.n)) || { sx: gun.x, sy: gun.y };
+          const to = this.beyondTheBoard(from, { sx: from.sx + Math.cos(angle), sy: from.sy + Math.sin(angle) });
           this.flyTracer(from, to, 20);
           this.puffSmoke(from, { x: Math.cos(angle), y: Math.sin(angle) });
-          this.tokens[e.p]?.kickGun(this.tweens);
+          if (!dropped) this.tokens[e.p]?.kickGun(this.tweens);
           this.cameras.main.shake(120, 0.0025);
         });
         return;

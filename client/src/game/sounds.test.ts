@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { GunView, TurnEvent } from "../chain/types";
 import type { CharView } from "./replay";
-import { THROW_FLIGHT_MS, shotDelays, soundsForDelay, soundsForEvents, soundsForPreview, throwLandings, variantIndex, woundDelays } from "./sounds";
+import { GUN_FALL_MS, THROW_FLIGHT_MS, shotDelays, soundsForDelay, soundsForEvents, soundsForPreview, throwLandings, variantIndex, woundDelays } from "./sounds";
 
 const ev = (partial: Partial<TurnEvent>): TurnEvent => ({
   seg: 1, p: 0, kind: "move", action: "", from: "", to: "", facing: 0, down: false, n: 0, delay: 0, reason: "", card: 0, result: "", endurance: 0, target: 1, hit: "", range: 0, gun: "", gunId: 0, step: 0, ...partial,
@@ -22,6 +22,8 @@ describe("soundsForEvents", () => {
     expect(groups([ev({ kind: "shot", hit: "-", reason: "misfire" }), ev({ kind: "malfunction", result: "no_penalty" })])).toEqual(["gunshot", "ricochet"]);
     expect(groups([ev({ kind: "shot", hit: "-", reason: "misfire" }), ev({ kind: "malfunction", result: "jams" })])).toEqual([]);
     expect(groups([ev({ kind: "wound", result: "stun" }), ev({ kind: "pass_out" })])).toEqual(["wounded", "fall"]);
+    // A gun let go thuds on the ground; one knocked out of the hand, or falling with its owner, is silent.
+    expect(groups([ev({ kind: "drop_gun", reason: "gun_move" }), ev({ kind: "drop_gun", reason: "" })])).toEqual(["thud"]);
     // A shot with an empty gun only clicks; other cancels are silent.
     expect(groups([ev({ kind: "cancel", action: "shoot", reason: "empty" }), ev({ kind: "cancel", reason: "not_cocked" })])).toEqual(["emptyGun"]);
   });
@@ -36,9 +38,20 @@ describe("soundsForEvents", () => {
     expect(soundsForEvents(events).map((c) => [c.group, c.delayMs])).toEqual([
       ["gunshot", 0],
       ["ricochet", 350],
+      ["throw", 220],
       ["impact", 220 + THROW_FLIGHT_MS],
       ["wounded", 220 + THROW_FLIGHT_MS + 350],
     ]);
+    // A cocked gun let go thuds on the ground, then goes off.
+    const drop = [ev({ kind: "wild_shot", from: "gun_hand", gunId: 1 }), ev({ kind: "drop_gun", reason: "gun_move", gunId: 1 })];
+    expect(soundsForEvents(drop).map((c) => [c.group, c.delayMs])).toEqual([
+      ["gunshot", GUN_FALL_MS],
+      ["thud", 0],
+    ]);
+    // A wild shot of a gun kept in hand (a WILD SHOT penalty) goes off at once.
+    expect(shotDelays([ev({ kind: "wild_shot", gunId: 1 })])).toEqual([0]);
+    // A throw that missed falls on the ground.
+    expect(groups([ev({ p: 1, kind: "throw", target: 0, hit: "-" })])).toEqual(["throw", "thud"]);
     expect(throwLandings(events)).toEqual(new Map([[3, 220 + THROW_FLIGHT_MS]]));
   });
 
