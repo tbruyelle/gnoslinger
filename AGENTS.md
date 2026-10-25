@@ -107,7 +107,8 @@ client/src/
   ui/toast.ts
 scripts/gen_board_data.py   generates hex/v0/board_a.gno and client/src/board/board_A.json
 scripts/gen_tutorial.py     extracts the tutorial's showdown from filetest z16 into client/src/tutorial/showdown.json
-assets/                     served as the Vite public dir (boards, tokens, cards, hex_grid.json)
+assets/                     served as the Vite public dir, shipped whole by a build: only what the client loads (board A, tokens, cards, markers, sounds, hex_grid.json)
+assets-src/                 the rest, kept for later: other boards, result cards, rifle sounds, the VASSAL module and its images (vassal_v2/, local/: untracked)
 ```
 
 ## Realm
@@ -974,7 +975,10 @@ once combat lands); effects apply at segment end. Full rules:
 
 ## Assets
 
-`assets/` (TTS mod dump, served by Vite): boards 1600×2232 (`board_A.png` …),
+`assets/` (served by Vite as its public directory, which a build copies whole:
+only what the client loads, about 20 MB; checked on 2026-10-25 against the
+names the code builds, the rest moved to `assets-src/`, the TTS dump's
+leftovers deleted): board 1600×2232 (`board_A.png`; the others in `assets-src/`),
 character tokens `char_*.png` 95×95, action cards `action_card_a{1-12}[_back].png` (630×880),
 `hex_grid.json` (hex centres, scaled 2×), gun icons `guns/<type>.gif` and AIM
 markers `aim{2,4,6,8}.gif` (from the VASSAL module), sound effects `sounds/`
@@ -1004,5 +1008,7 @@ from `pick-card.aiff`, an option button of Cock/Aim/Shoot `select.mp3`);
 plays when a DEL badge goes up, `delay1-reverse.mp3` (made with ffmpeg
 `areverse`) when it goes down (`soundsForDelay`, also on the re-sync after
 a live turn, which shows the end-of-turn halving). `assets/local/` (VASSAL): status
-overlays `state_{down,dead,passed_out}.png` drawn over the tokens, markers. `python scripts/fetch_assets.py` re-downloads
+overlays `state_{down,dead,passed_out}.png` drawn over the tokens (tracked;
+the module's other images, `assets-src/local/` and `assets-src/vassal_v2/`
+with the `.vmod` `parse_hex_grid.py` reads, are untracked). `python scripts/fetch_assets.py` re-downloads into `assets-src/`
 (not needed, everything is present).

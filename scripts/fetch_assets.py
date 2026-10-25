@@ -3,7 +3,7 @@
 Download all image assets from a Tabletop Simulator mod file.
 
 Usage:
-    python scripts/fetch_assets.py [--mod tts_mod.json] [--out assets]
+    python scripts/fetch_assets.py [--mod tts_mod.json] [--out assets-src]
                                    [--concurrency 10] [--dry-run] [--verbose]
 """
 import argparse
@@ -354,7 +354,9 @@ def build_catalog(
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--mod", default="tts_mod.json", help="Path to tts_mod.json")
-    p.add_argument("--out", default="assets", help="Output directory for assets")
+    # assets-src, not assets: assets/ is the client's public directory, every
+    # file there is shipped; what the client uses is copied there by hand.
+    p.add_argument("--out", default="assets-src", help="Output directory for assets")
     p.add_argument("--concurrency", type=int, default=10, help="Max simultaneous downloads")
     p.add_argument("--dry-run", action="store_true", help="Plan without downloading")
     p.add_argument("--verbose", action="store_true", help="Enable DEBUG logging")

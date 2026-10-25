@@ -1,6 +1,6 @@
 # VASSAL Module — Layers, Obstacles & Overlays
 
-Source: `assets/vassal_v2/Gunslinger_v2.0.vmod` (buildFile.xml)
+Source: `assets-src/vassal_v2/Gunslinger_v2.0.vmod` (buildFile.xml)
 
 ## Terrain Layers (elevation/visibility system)
 

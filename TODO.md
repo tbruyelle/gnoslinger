@@ -26,7 +26,6 @@
     fetches the round from drand's HTTP API, as for the timelocked plans)
     verifies it with p/drand.Verify and resolves the turn in the same tx
   - wait for gnolang/gno#6268 to land and p/drand to be on the chain
-- remove unused assets
 - use clockwork/wire for codec
   - github.com/clockworkgr/gno-upgradeable, gno.land/p/clockwork/wire/v0:
     a binary codec, values end to end, numbers as varints, strings

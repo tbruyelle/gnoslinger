@@ -21,7 +21,7 @@ from pathlib import Path
 
 log = logging.getLogger("parse_hex_grid")
 
-VMOD_PATH = Path("assets/vassal_v2/Gunslinger_v2.0.vmod")
+VMOD_PATH = Path("assets-src/vassal_v2/Gunslinger_v2.0.vmod")
 OUTPUT_PATH = Path("assets/hex_grid.json")
 
 # VASSAL images are 800x1116; our board images are 1600x2232.

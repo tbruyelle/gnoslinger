@@ -1,5 +1,5 @@
-assets/local
-assets/vassal_v2
+assets-src/local
+assets-src/vassal_v2
 __pycache__/
 *.pyc
 .venv/
