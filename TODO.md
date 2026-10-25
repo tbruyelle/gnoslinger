@@ -10,6 +10,22 @@
 
 ## General
 - check albertx/drand, how this can be used ?
+  - github.com/albttx/gno-drand (prototype, upstreamed in gnolang/gno#6268,
+    still open on 2026-10-25, becomes gno.land/{p,r}/drand/v0; nothing on
+    Onyx yet): on-chain verifiable randomness from drand's evmnet (BLS on
+    the BN254 curve, the one gno.land verifies natively, ~10-12M gas; our
+    timelocked plans use quicknet, BLS12-381, off chain, unaffected)
+  - why: the deck seed (salts, plans, block height and time) cannot be
+    biased by a player, but the block's proposer sets its time and picks
+    its txs: a validator colluding with a player could grind the cards
+  - r/drand is asynchronous: Request pins a future round, a relayer
+    Submits its signature (verified, so it can only deliver drand's), a
+    later tx reads it; no callback, so ~10-15 s and a second tx per turn
+  - better for us, no relayer, no r/drand: at the last reveal the realm
+    pins the round; then Resolve(id, signature) from any client (it
+    fetches the round from drand's HTTP API, as for the timelocked plans)
+    verifies it with p/drand.Verify and resolves the turn in the same tx
+  - wait for gnolang/gno#6268 to land and p/drand to be on the chain
 - remove unused assets
 - use clockwork/wire for codec
 - upgrade architecture
