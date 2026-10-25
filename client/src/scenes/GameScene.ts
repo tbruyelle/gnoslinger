@@ -881,6 +881,16 @@ export class GameScene extends Phaser.Scene {
     this.clearSelection();
     this.playback = null;
     this.finalReplay = false;
+    // The scene object outlives a game (Phaser starts the same one again):
+    // what this screen knew of a turn, by turn number, belongs to the game
+    // and account it showed (the other account's plan once showed as mine
+    // after switching accounts in Adena).
+    this.sentPlan = null;
+    this.openTried = { turn: 0, seats: new Set() };
+    this.revealing = false;
+    this.revealFailedAt = { own: 0 };
+    this.openRetryAt = 0;
+    this.passWarnedAt = 0;
     this.zoom = 1;
     this.panX = 0;
     this.panY = 0;
@@ -3926,9 +3936,12 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     if (!view.players[this.myIndex].revealed) return;
+    const game = this.gameID;
+    const seat = this.myIndex;
     try {
-      const p = await this.chain.realm.getPlan(this.gameID, this.chain.wallet.address);
-      if (!this.scene.isActive() || !p.revealed || p.turn !== turn || this.view?.turn !== turn) return;
+      const p = await this.chain.realm.getPlan(game, this.chain.wallet.address);
+      // Still this game, turn and seat: the screen may have been left and opened again meanwhile.
+      if (!this.scene.isActive() || !p.revealed || p.turn !== turn || this.view?.turn !== turn || this.gameID !== game || this.myIndex !== seat || p.seat !== seat) return;
       this.sentPlan = { turn, plan: p.plan };
       if (this.mode === "waiting") this.renderView();
     } catch {
