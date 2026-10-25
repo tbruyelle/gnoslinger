@@ -157,6 +157,18 @@ export function outcomeLine(g: GameSummary, me: string): string {
   }
 }
 
+/**
+ * How a finished game ended for me (address me), as the realm's winner
+ * has it; null when it was never played out (cancelled, expired,
+ * abandoned) or I hold no seat in it.
+ */
+export function myResult(g: GameSummary, me: string): "won" | "lost" | "draw" | null {
+  if (g.phase !== "finished" || ["cancelled", "expired", "abandoned"].includes(g.endReason)) return null;
+  const seat = g.players.findIndex((p) => p.addr && p.addr === me);
+  if (seat < 0) return null;
+  return g.winner < 0 ? "draw" : g.winner === seat ? "won" : "lost";
+}
+
 /** " · you +4 VP" when I played the game and it earned points; "" otherwise. */
 function myVP(g: GameSummary, me: string): string {
   const seat = g.players.findIndex((p) => p.addr && p.addr === me);

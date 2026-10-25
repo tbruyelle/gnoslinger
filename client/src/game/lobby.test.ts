@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { GameSummary } from "../chain/types";
-import { CHAIN_CLOCK_MARGIN, claimable, formatLeft, OPEN_MAX_AGE, stillOffered, pastTimeout, lobbySections, MAX_MISSED, missOutcome, outcomeLine, runningOut, secondsLeft } from "./lobby";
+import { CHAIN_CLOCK_MARGIN, claimable, formatLeft, OPEN_MAX_AGE, stillOffered, pastTimeout, lobbySections, MAX_MISSED, missOutcome, myResult, outcomeLine, runningOut, secondsLeft } from "./lobby";
 
 const ME = "g1me";
 const OTHER = "g1other";
@@ -92,6 +92,18 @@ describe("outcomeLine", () => {
     const s = lobbySections({ mine: [out], open: [] }, ME, 0);
     expect(s.yourMove).toEqual([]);
     expect(s.waiting.map((g) => g.id)).toEqual(["6"]);
+  });
+});
+
+describe("myResult", () => {
+  it("says whether I won, lost or drew a game played out", () => {
+    const players = [{ addr: ME, char: "marshal" }, { addr: OTHER, char: "the_kid" }];
+    expect(myResult(game("1", { phase: "finished", winner: 0, endReason: "last_standing", players }), ME)).toBe("won");
+    expect(myResult(game("1", { phase: "finished", winner: 0, endReason: "surrender", players }), OTHER)).toBe("lost");
+    expect(myResult(game("1", { phase: "finished", winner: -1, endReason: "max_turns", players }), ME)).toBe("draw");
+    // Never played out, or not my game: nothing to say.
+    expect(myResult(game("1", { phase: "finished", winner: -1, endReason: "cancelled", players }), ME)).toBeNull();
+    expect(myResult(game("1", { phase: "finished", winner: 0, endReason: "last_standing", players }), "g1c")).toBeNull();
   });
 });
 

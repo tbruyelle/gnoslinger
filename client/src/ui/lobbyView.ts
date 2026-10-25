@@ -2,7 +2,7 @@ import { formatCoins } from "../chain/rpc";
 import { spentNow, type SessionState } from "../chain/session";
 import { playerLabel, type GameSummary, type GamesView, type PlayersView, type Profile } from "../chain/types";
 import { uprightTokenAngle } from "../rules";
-import { charName, claimable, formatDuration, formatLeft, lobbySections, outcomeLine, runningOut, seatsTaken, secondsLeft, stillOffered } from "../game/lobby";
+import { charName, claimable, formatDuration, formatLeft, lobbySections, myResult, outcomeLine, runningOut, seatsTaken, secondsLeft, stillOffered } from "../game/lobby";
 import { nextSeat, seatChar } from "../game/setup";
 import { seatColor } from "./seats";
 import { HOUSE_CUT_PERCENT, formatGnot, payoutLine, stakeLine, stakeOption, winnings } from "../game/stakes";
@@ -159,6 +159,9 @@ const CSS = `
 .gl-pill{font-size:16px;font-weight:700;color:#2A1C14;border:2px solid #2A1C14;border-radius:999px;padding:3px 12px;white-space:nowrap}
 .gl-pill.late{color:#8E2F1A;border-color:#8E2F1A}
 .gl-pill.over{color:#FBF4E4;background:#B5482A;border-color:#8E2F1A;font-family:Rye,Georgia,serif;font-weight:400;letter-spacing:1px}
+.gl-pill.won,.gl-pill.lost,.gl-pill.draw{font-family:Rye,Georgia,serif;font-weight:400;letter-spacing:1px}
+.gl-pill.won{color:#FBF4E4;background:#4F7A3A;border-color:#3A5C2B}
+.gl-pill.lost{color:#FBF4E4;background:#B5482A;border-color:#8E2F1A}
 .gl-card.over{border-color:#B5482A;box-shadow:inset 0 0 0 2px #B5482A;background:#F9E6D6}
 .gl-play{min-height:46px;padding:0 22px;background:#B5482A;color:#FBF4E4;border:3px solid #2A1C14;border-radius:10px;box-shadow:0 4px 0 #2A1C14;font-family:Rye,Georgia,serif;font-size:18px;letter-spacing:1px;cursor:pointer}
 .gl-play:hover:not(:disabled){background:#C65634}
@@ -472,7 +475,9 @@ export class LobbyView {
     const finished = s.finished
       .map((g) => {
         const paid = payoutLine(g, g.players.findIndex((p) => p.addr === m.address));
-        return row("gl-line", g, versus(g), `${gameLabel(g)} · ${outcomeLine(g, m.address)}${paid ? ` · ${paid}` : ""}`, openBtn(g, "Replay"));
+        const result = myResult(g, m.address);
+        const pill = result ? `<span class="gl-pill ${result}">${result.toUpperCase()}</span>` : "";
+        return row("gl-line", g, versus(g), `${gameLabel(g)} · ${outcomeLine(g, m.address)}${paid ? ` · ${paid}` : ""}`, pill + openBtn(g, "Replay"));
       })
       .join("");
 
