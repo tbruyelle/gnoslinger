@@ -252,7 +252,8 @@ export function soundsForEvents(events: TurnEvent[]): SoundCue[] {
         }
         break;
       case "pass_out":
-        cues.push({ group: "fall", delayMs: 0, event: e });
+        // Out of the fight like a death: the same cry.
+        cues.push({ group: "dead", delayMs: 0, event: e });
         break;
       case "run_away":
         cues.push({ group: "runAway", delayMs: 0, event: e });

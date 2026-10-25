@@ -21,7 +21,7 @@ describe("soundsForEvents", () => {
     expect(groups([ev({ kind: "shot", hit: "-" })])).toEqual(["gunshot", "ricochet"]);
     expect(groups([ev({ kind: "shot", hit: "-", reason: "misfire" }), ev({ kind: "malfunction", result: "no_penalty" })])).toEqual(["gunshot", "ricochet"]);
     expect(groups([ev({ kind: "shot", hit: "-", reason: "misfire" }), ev({ kind: "malfunction", result: "jams" })])).toEqual([]);
-    expect(groups([ev({ kind: "wound", result: "stun" }), ev({ kind: "pass_out" })])).toEqual(["wounded", "fall"]);
+    expect(groups([ev({ kind: "wound", result: "stun" }), ev({ kind: "pass_out" })])).toEqual(["wounded", "dead"]);
     // A gun let go thuds on the ground; one knocked out of the hand, or falling with its owner, is silent.
     expect(groups([ev({ kind: "drop_gun", reason: "gun_move" }), ev({ kind: "drop_gun", reason: "" })])).toEqual(["thud"]);
     // A shot with an empty gun only clicks; other cancels are silent.

@@ -3387,7 +3387,9 @@ export class GameScene extends Phaser.Scene {
     const gen = ++pb.anim;
     const same = () => this.playback === pb && pb.anim === gen;
     const all = pb.turns[pos.index].events;
-    const events = eventsForSegment(all, pos.seg);
+    // Segment 5 ends the turn: its end-of-turn events (passing out, the
+    // SERIOUS check) play after it, as a last step.
+    const events = pos.seg === SEGMENTS ? [...eventsForSegment(all, pos.seg), ...endOfTurnEvents(all)] : eventsForSegment(all, pos.seg);
     const parts = opts.stepwise && events.length > 0 ? splitSteps(events) : [events];
     this.renderView();
     const play = (k: number) => {
