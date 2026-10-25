@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { parseRoute } from "../game/route";
 import { TUTORIAL_HASH } from "../tutorial/tutorial";
 
 /** The longest the boot waits for the web fonts. */
@@ -30,7 +31,18 @@ export class BootScene extends Phaser.Scene {
     const wait = new Promise((resolve) => setTimeout(resolve, FONTS_WAIT_MS));
     void Promise.race([fonts, wait])
       .catch(() => undefined)
-      // How to play has an address of its own, opened with no wallet.
-      .then(() => (location.hash === TUTORIAL_HASH ? this.scene.start("GameScene", { tutorial: true }) : this.scene.start("LobbyScene")));
+      // How to play and the games (game/route.ts) have addresses of their
+      // own, opened with no wallet: a game is watched, read-only.
+      .then(() => {
+        const route = parseRoute(location.hash);
+        if (location.hash === TUTORIAL_HASH) this.scene.start("GameScene", { tutorial: true });
+        else if (route) this.scene.start("GameScene", { gameID: route.gameID, turn: route.turn });
+        else this.scene.start("LobbyScene");
+      });
+    // The address edited to another game while the app runs: open that one.
+    // (The app's own changes, history.replaceState, fire no hashchange.)
+    window.addEventListener("hashchange", () => {
+      if (parseRoute(location.hash)) location.reload();
+    });
   }
 }

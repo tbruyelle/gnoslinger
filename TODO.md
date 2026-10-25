@@ -10,7 +10,6 @@
 
 ## General
 - check albertx/drand, how this can be used ?
-- address showdown by url & turn by num
 - remove unused assets
 - use clockwork/wire for codec
 - upgrade architecture

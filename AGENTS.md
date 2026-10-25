@@ -654,6 +654,20 @@ calls; `testing.SkipHeights(n)` advances block time 5 s per height.
   replace each other.
 - `chain/poller.ts`: polls `json/game/{id}` every `VITE_POLL_MS` (2 s) and
   fires on `rev` change; backs off on errors; pauses when the tab is hidden.
+- Addresses (`game/route.ts`): the page's hash names what is shown, to
+  reopen or share it: `#game/<id>` a showdown, `#game/<id>/<turn>` its
+  replay on that turn (a short id is padded: `#game/2`), `#how-to-play`
+  the tutorial. A game's address opens with no wallet, to share and watch
+  it: `BootScene` starts `GameScene` straight away (`turn`: the replay on
+  that turn once it resolved, the final replay for a finished game; else a
+  toast), which reads the chain through `viewerChain()` (`chain/index.ts`:
+  no account, signs nothing) whenever no wallet is connected, so the game
+  shows as to a spectator; its Lobby goes to the splash, as from the
+  tutorial. `GameScene` keeps the
+  hash current with `history.replaceState` (no history entries, no
+  `hashchange`): the game while shown, the turn while a replay shows one,
+  cleared on leaving. Editing the address to another game while the app
+  runs reloads the page onto it.
 - `LobbyScene`: splash screen as in the Design canvas (the cover framed like
   a card in a double-ruled page, the tagline, **Connect with Adena**, the
   Avalon Hill credit), animated (intro, slow zoom, blowing dust, gun smoke;

@@ -2,7 +2,7 @@ import Phaser from "phaser";
 import type { CardNumber, CardSide, ChoiceType, RelativeDirection } from "../rules";
 import { AHEAD_DIRS, BACK_DIRS, dirIndexToAngle, getActionCardAsset, getActionDef, relativeToAbsoluteDir, CHAR_ARROW_DIR } from "../rules";
 import { BOARD_A } from "../board/boardA";
-import { currentChain, getChain, type Chain } from "../chain";
+import { currentChain, viewerChain, type Chain } from "../chain";
 import { subscribeAccountChanged, subscribeNetworkChanged } from "../chain/adena";
 import { userMessage } from "../chain/errors";
 import { GamePoller } from "../chain/poller";
@@ -32,6 +32,7 @@ import { showToast } from "../ui/toast";
 import { CHAIN_CLOCK_MARGIN, charName, formatDuration, formatLeft, MAX_MISSED, missOutcome, pastTimeout, seatsTaken } from "../game/lobby";
 import { defaultFacing, nextSeat, seatChar, setupZone, startingChar } from "../game/setup";
 import { vpRecap, vpResult } from "../game/vp";
+import { routeHash } from "../game/route";
 import { loadPending, loadSeenTurn, saveSeenTurn, lockSealed, newSalt, planHash, prunePending, roundTime, savePending, type RevealScope, type Sealed } from "../game/commit";
 import { DRAND_MARGIN, lastToCommit, openableSeats, ownRevealDue } from "../game/reveals";
 import { openAndReveal } from "../game/opener";
@@ -812,6 +813,8 @@ export class GameScene extends Phaser.Scene {
   private playback: { turns: TurnResult[]; index: number; seg: number; cut: number | null; anim: number; live: boolean; auto: Phaser.Time.TimerEvent | null } | null = null;
   /** The game is over and its whole history was asked for: the replay stays on screen, with no way to close it. */
   private finalReplay = false;
+  /** The turn whose replay the page's address asked for (game/route.ts), until the game is first shown. */
+  private routeTurn: number | null = null;
   /** The plan sent this turn, shown while waiting: known from sending it, else read back from the chain. */
   private sentPlan: { turn: number; plan: string } | null = null;
   /**
@@ -864,8 +867,9 @@ export class GameScene extends Phaser.Scene {
   }
 
   /** A game to show, or a set up: calling a showdown has no game yet, joining one has the game it joins. */
-  init(data: { gameID?: string; setup?: SetupRequest; tutorial?: boolean }) {
+  init(data: { gameID?: string; setup?: SetupRequest; tutorial?: boolean; turn?: number | null }) {
     this.tutorial = !!data.tutorial;
+    this.routeTurn = data.turn ?? null;
     this.gameID = this.tutorial ? TUTORIAL_GAME : (data.gameID ?? "");
     this.setup = data.setup
       ? { req: data.setup, seat: data.setup.kind === "create" ? 0 : data.setup.seat, hex: null, facing: defaultFacing(data.setup.charKey), zone: [], ghost: null, busy: false }
@@ -953,7 +957,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   create() {
-    this.chain = this.tutorial ? tutorialChain() : getChain();
+    // No wallet connected (a game's address opened in a fresh page): watched, read-only.
+    this.chain = this.tutorial ? tutorialChain() : (currentChain() ?? viewerChain());
     this.showdown = new ShowdownView({
       button: (id) => this.onButton(id),
       card: (card, side) => {
@@ -1001,16 +1006,19 @@ export class GameScene extends Phaser.Scene {
       showToast(this, why, "info");
       this.scene.start("LobbyScene", { splash: false });
     };
-    if (!this.tutorial) {
+    // Watched without a wallet (viewerChain), no account to follow.
+    if (!this.tutorial && currentChain()) {
       this.unsubscribe.push(
         subscribeAccountChanged(() => leave("Account changed")),
         subscribeNetworkChanged(() => leave("Network changed")),
       );
     }
 
+    // The page's address names what is shown (game/route.ts), to reopen or share it.
     if (this.tutorial) history.replaceState(null, "", TUTORIAL_HASH);
+    else if (this.gameID) history.replaceState(null, "", routeHash(this.gameID));
     this.events.once("shutdown", () => {
-      if (this.tutorial) history.replaceState(null, "", location.pathname + location.search);
+      if (this.tutorial || this.gameID) history.replaceState(null, "", location.pathname + location.search);
       closeCharacterSheet();
       this.showdown?.destroy();
       this.showdown = null;
@@ -1037,6 +1045,17 @@ export class GameScene extends Phaser.Scene {
     if (first) {
       this.shownResultTurn = view.lastTurn?.turn ?? 0;
       this.applyState(true);
+      // Opened at a turn's address: its replay, once that turn resolved.
+      const turn = this.routeTurn;
+      this.routeTurn = null;
+      if (turn !== null && !this.setup) {
+        if (turn <= this.resolvedTurns()) {
+          void (view.phase === "finished" ? this.showFinalReplay(false, turn) : this.openReplay(turn));
+          return;
+        }
+        showToast(this, `Turn ${turn} is not played yet`, "info");
+        history.replaceState(null, "", routeHash(this.gameID));
+      }
       // A game over: its whole replay, from the final turn when this browser has not played it back yet.
       if (view.phase === "finished") void this.showFinalReplay(!!view.lastTurn && view.lastTurn.turn > loadSeenTurn(this.revealScope(), this.gameID, this.chain.wallet.address, view.createdAt));
       // A turn that resolved while this browser was elsewhere (in the lobby,
@@ -1697,8 +1716,8 @@ export class GameScene extends Phaser.Scene {
     const pb = this.playback;
     switch (id) {
       case "lobby":
-        // Out of the tutorial: back to the splash unless Adena is connected already.
-        return this.scene.start("LobbyScene", { splash: this.tutorial && !currentChain() ? undefined : false });
+        // Out of the tutorial, or of a game watched without a wallet: back to the splash unless Adena is connected already.
+        return this.scene.start("LobbyScene", { splash: currentChain() ? false : undefined });
       case "tutorialAgain":
         return this.scene.restart({ tutorial: true });
       case "send":
@@ -3337,7 +3356,7 @@ export class GameScene extends Phaser.Scene {
    * Shows the whole history of a finished game, from the first turn or the
    * last one; it is not closed. Without any resolved turn the board stays.
    */
-  private async showFinalReplay(atLast: boolean) {
+  private async showFinalReplay(atLast: boolean, turn?: number) {
     this.finalReplay = true;
     try {
       const turns = await this.chain.realm.getTurns(this.gameID, this.resolvedTurns());
@@ -3345,7 +3364,7 @@ export class GameScene extends Phaser.Scene {
       const last = turns.length - 1;
       this.shownResultTurn = turns[last].turn;
       if (atLast) saveSeenTurn(this.revealScope(), this.gameID, this.chain.wallet.address, this.view?.createdAt ?? 0, this.shownResultTurn);
-      this.startPlayback(turns, false, atLast ? last : 0);
+      this.startPlayback(turns, false, turn ? turn - 1 : atLast ? last : 0);
     } catch (e) {
       // Let a later poll try again.
       this.finalReplay = false;
@@ -3358,8 +3377,8 @@ export class GameScene extends Phaser.Scene {
     return this.view?.lastTurn?.turn ?? 0;
   }
 
-  /** Replays the whole showdown so far, from the chain's turns. */
-  private async openReplay() {
+  /** Replays the whole showdown so far, from the chain's turns, from the first or from turn. */
+  private async openReplay(turn?: number) {
     if (!this.view || this.mode === "playback" || this.mode === "submitting") return;
     const count = this.resolvedTurns();
     if (count === 0) {
@@ -3369,7 +3388,7 @@ export class GameScene extends Phaser.Scene {
     try {
       const turns = await this.chain.realm.getTurns(this.gameID, count);
       if (!this.scene.isActive() || this.playback) return;
-      this.startPlayback(turns, false);
+      this.startPlayback(turns, false, turn ? turn - 1 : 0);
     } catch (e) {
       if (this.scene.isActive()) showToast(this, userMessage(e), "error");
     }
@@ -3387,6 +3406,8 @@ export class GameScene extends Phaser.Scene {
     if (!pb || !pos) return;
     pb.index = pos.index;
     pb.seg = pos.seg;
+    // The replay's address names the turn shown (a live turn's playback keeps the game's).
+    if (!pb.live && !this.tutorial) history.replaceState(null, "", routeHash(this.gameID, pb.turns[pos.index].turn));
     const gen = ++pb.anim;
     const same = () => this.playback === pb && pb.anim === gen;
     const all = pb.turns[pos.index].events;
@@ -3983,6 +4004,7 @@ export class GameScene extends Phaser.Scene {
     // The end of turn halves the delay: the re-synced board shows it.
     const delays = this.displayChars().map((c) => c?.delay ?? 0);
     this.playback = null;
+    if (!this.tutorial) history.replaceState(null, "", routeHash(this.gameID));
     const view = this.view;
     // A turn resolved while the history was open: show it live now.
     if (!pb.live && view?.lastTurn && view.lastTurn.turn !== this.shownResultTurn) {

@@ -1,5 +1,6 @@
 import { CONFIG, type ChainConfig } from "../config";
-import { connectWallet } from "./adena";
+import { connectWallet, type Wallet } from "./adena";
+import { ChainError } from "./errors";
 import { RealmClient } from "./realm";
 import { Rpc } from "./rpc";
 import { SessionWallet } from "./session";
@@ -21,6 +22,23 @@ export async function initChain(cfg: ChainConfig = CONFIG): Promise<Chain> {
   await wallet.refresh();
   chain = { config: cfg, rpc, wallet, realm: new RealmClient(rpc, wallet, cfg.realmPath, cfg.profilesPath) };
   return chain;
+}
+
+/**
+ * Reads the chain with no wallet: a game's address opened by anyone, to
+ * watch the showdown or a turn of it (game/route.ts). It has no account, so
+ * the game screen shows the showdown as a spectator; it signs nothing.
+ */
+export function viewerChain(cfg: ChainConfig = CONFIG): Chain {
+  const rpc = new Rpc(cfg.rpcUrl);
+  const wallet = {
+    address: "",
+    state: { kind: "none" },
+    doContract: async () => {
+      throw new ChainError("not-connected", "Connect with Adena to play");
+    },
+  };
+  return { config: cfg, rpc, wallet, realm: new RealmClient(rpc, wallet as Wallet, cfg.realmPath, cfg.profilesPath) } as unknown as Chain;
 }
 
 export function getChain(): Chain {
