@@ -32,16 +32,16 @@ dev:
 # --- Gno ---
 
 test:
-	go tool gno test ./gno.land/...
+	go tool gno test ./gno/...
 
 test-v:
-	go tool gno test -v ./gno.land/...
+	go tool gno test -v ./gno/...
 
 lint:
-	go tool gno lint ./gno.land/...
+	go tool gno lint ./gno/...
 
 fmt:
-	go tool gno fmt -w ./gno.land
+	go tool gno fmt -w ./gno
 
 # --- Client ---
 
@@ -57,7 +57,7 @@ gen-board:
 
 # The tutorial's showdown, played by the realm (filetest z16), for the client.
 gen-tutorial:
-	go tool gno test -run ./gno.land/r/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/v0/z16_ -update-golden-tests ./gno.land/r/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/v0/
+	go tool gno test -run ./gno/r/v0/z16_ -update-golden-tests ./gno/r/v0/
 	python3 scripts/gen_tutorial.py
 
 # --- Gno module cache ---

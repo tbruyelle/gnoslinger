@@ -54,9 +54,9 @@ make gnodev        # local chain: chain id "dev", RPC 127.0.0.1:26657, gnoweb :8
                    # ADENA_ADDRS="g1... g1..." make gnodev  premines Adena accounts
 make web           # vite dev server for the client
 make dev           # both, with concurrently
-make test          # go tool gno test ./gno.land/...   (unit tests + filetests)
-make lint          # go tool gno lint ./gno.land/...
-make fmt           # go tool gno fmt -w ./gno.land
+make test          # go tool gno test ./gno/...   (unit tests + filetests)
+make lint          # go tool gno lint ./gno/...
+make fmt           # go tool gno fmt -w ./gno
 make check         # tsc --noEmit + vitest for the client
 make gen-board     # regenerate board A adjacency + fences + obstacles + half-hexes + the line-of-sight between table (realm + client) from assets/hex_grid.json
                    # python3 scripts/gen_board_data.py --draw-los A-H11 A-I11 --out los.png  draws the lines of sight between two hexes over the board
@@ -70,22 +70,27 @@ standalone binary: `go.mod` pins the gno commit the realm is written against.
 
 Run one Gno package or test:
 ```bash
-go tool gno test -v ./gno.land/p/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/engine/v0
-go tool gno test -run TestResolve_Seg5Cancel ./gno.land/p/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/engine/v0
+go tool gno test -v ./gno/p/engine/v0
+go tool gno test -run TestResolve_Seg5Cancel ./gno/p/engine/v0
 # a filetest needs its full path in -run (without the filetests/ directory):
-go tool gno test -run ./gno.land/r/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/v0/z2_ ./gno.land/r/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/v0/
-go tool gno test -update-golden-tests ./gno.land/r/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/v0/   # refresh // Output: and // Events:
+go tool gno test -run ./gno/r/v0/z2_ ./gno/r/v0/
+go tool gno test -update-golden-tests ./gno/r/v0/   # refresh // Output: and // Events:
 ```
 
 ## Layout
 
+The directories do not mirror the package paths: a package's path is the
+`module` of its `gnomod.toml`, which the toolchain (`gnowork.toml` at the
+root makes the repo a workspace) and gnodev read, wherever the directory
+is. `gno/{p,r}/X` holds `gno.land/{p,r}/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/X`.
+
 ```
-gno.land/
-  p/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/hex/v0      directions, relative directions, Board adjacency + axial coords + fenced hexsides + obstacles + the between table, range, aim zone, line of sight (sight.gno; board_a.gno is generated)
-  p/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/cards/v0    the 12 action cards (24 sides), Enabled() = implemented actions
-  p/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/engine/v0   pure rules engine: set up (setup.gno), plan DSL + validation, Resolve, EndTurn, result deck (deck.gno, fire.gno), impact table, sight heights (sight.gno)
-  r/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/v0          the realm: games, lobby, Commit/Reveal/RevealMany, JSON views, Render, filetests/
-  r/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/profiles/v0 the players' profiles and ranking, kept across game versions; written only by the allowed game realms
+gno/
+  p/hex/v0          directions, relative directions, Board adjacency + axial coords + fenced hexsides + obstacles + the between table, range, aim zone, line of sight (sight.gno; board_a.gno is generated)
+  p/cards/v0        the 12 action cards (24 sides), Enabled() = implemented actions
+  p/engine/v0       pure rules engine: set up (setup.gno), plan DSL + validation, Resolve, EndTurn, result deck (deck.gno, fire.gno), impact table, sight heights (sight.gno)
+  r/v0              the realm: games, lobby, Commit/Reveal/RevealMany, JSON views, Render, filetests/
+  r/profiles/v0     the players' profiles and ranking, kept across game versions; written only by the allowed game realms
 client/src/
   chain/      rpc.ts (abci_query/status/tx/broadcast), adena.ts (wallet), session.ts (session key wallet), tx.ts (sign + encode a call), realm.ts (typed calls), poller.ts, types.ts
   rules/      cards.ts, facing.ts, sight.ts (pure card data, facing math, sight heights; mirrors the Gno packages)
