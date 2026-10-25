@@ -99,6 +99,29 @@ func TestEncodeCharactersRoundTrip(t *testing.T) {
 	}
 }
 
+func TestEncodeGroundRoundTrip(t *testing.T) {
+	ground := []GroundGun{
+		{ID: 1, Hex: "A-G6", Gun: Gun{ID: 1, Type: Colt45, Location: Holstered, Shells: 6}},
+		{ID: 3, Hex: "A-I11*", Gun: Gun{ID: 2, Type: Colt45, Cocked: true, Shells: 2, Jammed: true, Exploded: true}},
+	}
+	enc := EncodeGround(ground)
+	if enc != "1|A-G6|1:colt45:0:0:6:0:0;3|A-I11*|2:colt45:0:1:2:1:1" {
+		t.Errorf("encoded %q", enc)
+	}
+	got := DecodeGround(enc)
+	if len(got) != len(ground) {
+		t.Fatalf("decoded %+v", got)
+	}
+	for i := range ground {
+		if got[i] != ground[i] {
+			t.Errorf("ground %d: got %+v, want %+v", i, got[i], ground[i])
+		}
+	}
+	if EncodeGround(nil) != "" || DecodeGround("") != nil || len(DecodeGround("garbage;1|A-G6|bad")) != 0 {
+		t.Error("no ground, or a malformed one, decodes to nothing")
+	}
+}
+
 func TestEncodeIntsRoundTrip(t *testing.T) {
 	for _, ns := range [][]int{nil, {44}, {44, 1, 30, 108}} {
 		got := DecodeInts(EncodeInts(ns))

@@ -141,6 +141,8 @@ export interface TurnResult {
   events: TurnEvent[];
   /** State of every seat at the start of the turn. */
   start: StartChar[];
+  /** The weapons lying on the ground at the start of the turn. */
+  ground: GroundGunView[];
 }
 
 /** Every resolved turn of a game, oldest first. */
@@ -263,7 +265,7 @@ export function parseGameView(json: string): GameView {
   if (!Array.isArray(v.players) || v.players.length < MIN_SEATS || v.players.length > MAX_SEATS) bad("players");
   v.players.forEach(checkPlayer);
   if (v.lastTurn !== null) {
-    if (!isRecord(v.lastTurn) || !Array.isArray(v.lastTurn.events)) bad("lastTurn");
+    if (!isRecord(v.lastTurn) || !Array.isArray(v.lastTurn.events) || !Array.isArray(v.lastTurn.ground)) bad("lastTurn");
   }
   return v as unknown as GameView;
 }
@@ -290,7 +292,7 @@ export function parseHistoryView(json: string): HistoryView {
   const v: unknown = JSON.parse(json);
   if (!isRecord(v) || typeof v.id !== "string" || !Array.isArray(v.players) || !Array.isArray(v.turns)) bad("history");
   for (const t of v.turns) {
-    if (!isRecord(t) || typeof t.turn !== "number" || !Array.isArray(t.events) || !Array.isArray(t.start)) bad("turn");
+    if (!isRecord(t) || typeof t.turn !== "number" || !Array.isArray(t.events) || !Array.isArray(t.start) || !Array.isArray(t.ground)) bad("turn");
   }
   return v as unknown as HistoryView;
 }

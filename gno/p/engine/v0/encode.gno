@@ -67,13 +67,9 @@ func DecodeEvents(s string) []Event {
 func EncodeCharacter(c Character) string {
 	guns := make([]string, 0, MaxGuns)
 	for _, g := range c.Guns {
-		if g.Type == NoGun {
-			continue
+		if g.Type != NoGun {
+			guns = append(guns, encodeGun(g))
 		}
-		guns = append(guns, strings.Join([]string{
-			strconv.Itoa(g.ID), string(g.Type), strconv.Itoa(int(g.Location)), boolStr(g.Cocked),
-			strconv.Itoa(g.Shells), boolStr(g.Jammed), boolStr(g.Exploded),
-		}, ":"))
 	}
 	var killers [MaxPlayers]int
 	for q, k := range c.Killers {
@@ -151,14 +147,11 @@ func DecodeCharacter(s string) Character {
 	c.Hurt = seatValues(f[22], 0)
 	if f[17] != "" {
 		for i, rec := range strings.Split(f[17], ",") {
-			g := strings.Split(rec, ":")
-			if i >= MaxGuns || len(g) != 7 {
+			g, ok := decodeGun(rec)
+			if i >= MaxGuns || !ok {
 				break
 			}
-			c.Guns[i] = Gun{
-				ID: atoi(g[0]), Type: GunType(g[1]), Location: GunLocation(atoi(g[2])), Cocked: g[3] == "1",
-				Shells: atoi(g[4]), Jammed: g[5] == "1", Exploded: g[6] == "1",
-			}
+			c.Guns[i] = g
 		}
 	}
 	return c
@@ -189,6 +182,54 @@ func DecodeChars(s string) []Character {
 		}
 	}
 	return cs
+}
+
+// encodeGun packs a gun's fields, ':'-separated; decodeGun unpacks them.
+func encodeGun(g Gun) string {
+	return strings.Join([]string{
+		strconv.Itoa(g.ID), string(g.Type), strconv.Itoa(int(g.Location)), boolStr(g.Cocked),
+		strconv.Itoa(g.Shells), boolStr(g.Jammed), boolStr(g.Exploded),
+	}, ":")
+}
+
+func decodeGun(s string) (Gun, bool) {
+	g := strings.Split(s, ":")
+	if len(g) != 7 {
+		return Gun{}, false
+	}
+	return Gun{
+		ID: atoi(g[0]), Type: GunType(g[1]), Location: GunLocation(atoi(g[2])), Cocked: g[3] == "1",
+		Shells: atoi(g[4]), Jammed: g[5] == "1", Exploded: g[6] == "1",
+	}, true
+}
+
+// EncodeGround packs the weapons lying on the board (a turn's ground at its
+// start), ';'-separated records of id, hex and gun ("1|A-G6|1:colt45:0:0:6:0:0");
+// DecodeGround unpacks them, skipping a malformed record.
+func EncodeGround(ground []GroundGun) string {
+	recs := make([]string, len(ground))
+	for i, gg := range ground {
+		recs[i] = strconv.Itoa(gg.ID) + "|" + gg.Hex + "|" + encodeGun(gg.Gun)
+	}
+	return strings.Join(recs, ";")
+}
+
+// DecodeGround unpacks what EncodeGround produced.
+func DecodeGround(s string) []GroundGun {
+	if s == "" {
+		return nil
+	}
+	var out []GroundGun
+	for _, rec := range strings.Split(s, ";") {
+		f := strings.SplitN(rec, "|", 3)
+		if len(f) != 3 {
+			continue
+		}
+		if g, ok := decodeGun(f[2]); ok {
+			out = append(out, GroundGun{ID: atoi(f[0]), Hex: f[1], Gun: g})
+		}
+	}
+	return out
 }
 
 // EncodeInts packs numbers (the cards drawn in a turn); DecodeInts unpacks them.

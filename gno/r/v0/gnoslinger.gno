@@ -93,24 +93,32 @@ type Player struct {
 // replay it: the state the turn started from, the plans (one per seat),
 // and what happened. Seed lets anyone re-run the resolution; Cards is the
 // trace of the result cards drawn from the deck it shuffles, in order. The
-// start snapshot, the cards and the events are kept in the engine's compact
-// text encodings: as structs they cost a hundred times more storage (see
-// engine/encode.gno).
+// start snapshot, the weapons on the ground at the start, the cards and the
+// events are kept in the engine's compact text encodings: as structs they
+// cost a hundred times more storage (see engine/encode.gno). With the
+// ground, a turn is shown from its own record, without the turns before it.
 type TurnResult struct {
 	Turn      int
 	Plans     []string
 	Seed      string
 	StartEnc  string // engine.EncodeChars
+	GroundEnc string // engine.EncodeGround
 	CardsEnc  string // engine.EncodeInts
 	EventsEnc string // engine.EncodeEvents
 }
 
-func newTurnResult(turn int, start []engine.Character, plans []string, seed string, cards []int, evs []engine.Event) *TurnResult {
-	return &TurnResult{Turn: turn, Plans: plans, Seed: seed, StartEnc: engine.EncodeChars(start), CardsEnc: engine.EncodeInts(cards), EventsEnc: engine.EncodeEvents(evs)}
+func newTurnResult(turn int, start []engine.Character, ground string, plans []string, seed string, cards []int, evs []engine.Event) *TurnResult {
+	return &TurnResult{
+		Turn: turn, Plans: plans, Seed: seed, StartEnc: engine.EncodeChars(start), GroundEnc: ground,
+		CardsEnc: engine.EncodeInts(cards), EventsEnc: engine.EncodeEvents(evs),
+	}
 }
 
 // Start is the state of every seat when the turn began.
 func (r *TurnResult) Start() []engine.Character { return engine.DecodeChars(r.StartEnc) }
+
+// Ground is the weapons lying on the board when the turn began.
+func (r *TurnResult) Ground() []engine.GroundGun { return engine.DecodeGround(r.GroundEnc) }
 
 // Cards is the result cards drawn during the turn, in order.
 func (r *TurnResult) Cards() []int { return engine.DecodeInts(r.CardsEnc) }

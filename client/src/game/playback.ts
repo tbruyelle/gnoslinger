@@ -35,26 +35,6 @@ export function startOfTurn(t: TurnResult, fallback: CharView[]): CharView[] {
 }
 
 /**
- * The guns lying on the board when a turn began, from the chain's ground
- * once it resolved: minus what the turn dropped, plus what it picked up,
- * back in the hex where it lay, the one its character stood in when it
- * picked it up (it may have walked there first). players are the chain's,
- * holding the guns picked up; fallback stands for a turn recorded without
- * its start.
- */
-export function groundAtTurnStart(t: TurnResult, ground: GroundGunView[], players: { guns: GunView[] }[], fallback: CharView[]): GroundGunView[] {
-  const base = ground.filter((g) => !t.events.some((e) => e.kind === "drop_gun" && e.n === g.id));
-  const start = startOfTurn(t, fallback);
-  for (const [i, e] of t.events.entries()) {
-    if (e.kind !== "draw" || e.from !== "ground") continue;
-    const owner = players[e.p]?.guns.find((x) => x.id === e.gunId);
-    const hex = snapshotAfterSegment(start, t.events, e.seg, undefined, i)[e.p]?.hex ?? "";
-    if (owner) base.push({ id: e.n, hex, guns: [{ ...owner, location: "holstered", cocked: false }] });
-  }
-  return base;
-}
-
-/**
  * The characters' state once every event up to and including segment seg
  * has applied: turn-start events (seg 0) always, end-of-turn events
  * (END_OF_TURN_SEG) from segment 5. When ground is given, the guns dropped

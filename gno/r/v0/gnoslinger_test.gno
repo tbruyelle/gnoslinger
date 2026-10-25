@@ -311,7 +311,7 @@ func TestCommitAndReveal(cur realm, t *testing.T) {
 	js = GameJSON(id)
 	uassert.True(t, strings.Contains(js, `"turn":2`), js)
 	uassert.True(t, strings.Contains(js, `"lastTurn":{"turn":1,"seed":"`+lt.Seed+`","cards":[],"plans":["1f:ahead,2f:ahead","5b"],"events":[`), js)
-	uassert.True(t, strings.Contains(js, `"start":[{"hex":"A-D5","facing":3,"down":false,"delay":0,"status":"alive","aim":0,"aimAt":-1,"aimHex":"","endurance":20,"serious":0,"gunArm":0,"otherArm":0,"leg":0,"guns":[{"id":1,"type":"colt45","name":"Colt 45","location":"holstered","cocked":false,"shells":6,"capacity":6,"jammed":false,"exploded":false}]},{"hex":"A-H7","facing":0,"down":false,"delay":0,"status":"alive","aim":0,"aimAt":-1,"aimHex":"","endurance":20,"serious":0,"gunArm":0,"otherArm":0,"leg":0,"guns":[{"id":1,"type":"colt45","name":"Colt 45","location":"holstered","cocked":false,"shells":6,"capacity":6,"jammed":false,"exploded":false}]}]}}`), js)
+	uassert.True(t, strings.Contains(js, `"start":[{"hex":"A-D5","facing":3,"down":false,"delay":0,"status":"alive","aim":0,"aimAt":-1,"aimHex":"","endurance":20,"serious":0,"gunArm":0,"otherArm":0,"leg":0,"guns":[{"id":1,"type":"colt45","name":"Colt 45","location":"holstered","cocked":false,"shells":6,"capacity":6,"jammed":false,"exploded":false}]},{"hex":"A-H7","facing":0,"down":false,"delay":0,"status":"alive","aim":0,"aimAt":-1,"aimHex":"","endurance":20,"serious":0,"gunArm":0,"otherArm":0,"leg":0,"guns":[{"id":1,"type":"colt45","name":"Colt 45","location":"holstered","cocked":false,"shells":6,"capacity":6,"jammed":false,"exploded":false}]}],"ground":[]}}`), js)
 
 	// Alice ran on turn 1, so she may sprint on turn 2; Bob did not.
 	uassert.True(t, g.State.Chars[0].RanLastTurn)
@@ -332,7 +332,7 @@ func TestCommitAndReveal(cur realm, t *testing.T) {
 	uassert.True(t, strings.HasPrefix(h, `{"id":"`+id+`","turn":3,"phase":"planning","players":[`), h)
 	uassert.True(t, strings.Contains(h, `"turns":[{"turn":1,`), h)
 	uassert.True(t, strings.Contains(h, `},{"turn":2,`), h)
-	uassert.True(t, strings.Contains(h, `"start":[{"hex":"A-D7","facing":3,"down":false,"delay":0,"status":"alive","aim":0,"aimAt":-1,"aimHex":"","endurance":20,"serious":0,"gunArm":0,"otherArm":0,"leg":0,"guns":[{"id":1,"type":"colt45","name":"Colt 45","location":"holstered","cocked":false,"shells":6,"capacity":6,"jammed":false,"exploded":false}]},{"hex":"A-H7","facing":0,"down":true,"delay":0,"status":"alive","aim":0,"aimAt":-1,"aimHex":"","endurance":20,"serious":0,"gunArm":0,"otherArm":0,"leg":0,"guns":[{"id":1,"type":"colt45","name":"Colt 45","location":"holstered","cocked":false,"shells":6,"capacity":6,"jammed":false,"exploded":false}]}]}`), h)
+	uassert.True(t, strings.Contains(h, `"start":[{"hex":"A-D7","facing":3,"down":false,"delay":0,"status":"alive","aim":0,"aimAt":-1,"aimHex":"","endurance":20,"serious":0,"gunArm":0,"otherArm":0,"leg":0,"guns":[{"id":1,"type":"colt45","name":"Colt 45","location":"holstered","cocked":false,"shells":6,"capacity":6,"jammed":false,"exploded":false}]},{"hex":"A-H7","facing":0,"down":true,"delay":0,"status":"alive","aim":0,"aimAt":-1,"aimHex":"","endurance":20,"serious":0,"gunArm":0,"otherArm":0,"leg":0,"guns":[{"id":1,"type":"colt45","name":"Colt 45","location":"holstered","cocked":false,"shells":6,"capacity":6,"jammed":false,"exploded":false}]}],"ground":[]}`), h)
 	uassert.Equal(t, h, Render("json/history/"+id))
 	uassert.True(t, strings.Contains(js, `{"seg":2,"p":0,"kind":"move","action":"advance","from":"A-D5","to":"A-D6","facing":3,"down":false,"n":0,"delay":0,"reason":"","card":0,"result":"","endurance":0,"target":0,"hit":"","range":0,"gun":"","gunId":0,"step":3,"chart":"","status":""}`), js)
 	uassert.True(t, strings.Contains(js, `{"seg":3,"p":1,"kind":"flip","action":"get_up_down","from":"","to":"","facing":0,"down":true,"n":0,"delay":0,"reason":"","card":0,"result":"","endurance":0,"target":0,"hit":"","range":0,"gun":"","gunId":0,"step":4,"chart":"","status":""}`), js)
@@ -795,6 +795,23 @@ func TestDrawAndCock(cur realm, t *testing.T) {
 	uassert.AbortsWithMessage(t, cur, "gnoslinger: that gun is already there", func() {
 		Reveal(cross(cur), id, 2, 0, salt, "9f:1:0")
 	})
+	// Letting the gun go: the next turn records it on the ground at its start.
+	Reveal(cross(cur), id, 2, 0, salt, "h1:g,3b:ahead_left")
+	testing.SetRealm(testing.NewUserRealm(bob))
+	Reveal(cross(cur), id, 2, 1, salt, "")
+	Commit(cross(cur), id, getGame(id).Turn, hashOf(id, 1, ""), "locked")
+	testing.SetRealm(testing.NewUserRealm(alice))
+	Reveal(cross(cur), id, 3, 0, salt, "")
+	testing.SetRealm(testing.NewUserRealm(bob))
+	Reveal(cross(cur), id, 3, 1, salt, "")
+	g = getGame(id)
+	uassert.Equal(t, 0, len(g.Turns[1].Ground()))
+	ground := g.Turns[2].Ground()
+	uassert.Equal(t, 1, len(ground))
+	uassert.Equal(t, "A-D5", ground[0].Hex)
+	uassert.Equal(t, "holstered", ground[0].Gun.Location.String())
+	hist := HistoryJSON(id)
+	uassert.True(t, strings.Contains(hist, `],"ground":[{"id":1,"hex":"A-D5","guns":[{"id":1,"type":"colt45"`), hist)
 }
 
 func TestShootout(cur realm, t *testing.T) {

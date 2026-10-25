@@ -292,6 +292,7 @@ func resolveTurn(cur realm, g *Game) string {
 	// From a copy: the live state may share the characters with what the
 	// engine returns (see engine.CloneChars).
 	start := engine.CloneChars(g.State.Chars)
+	ground := engine.EncodeGround(g.State.Ground)
 	deck := engine.NewDeck(seed)
 	st, evs := engine.Resolve(hex.A, g.State, plans, deck)
 	st, endEvs := engine.EndTurn(st)
@@ -309,7 +310,7 @@ func resolveTurn(cur realm, g *Game) string {
 	}
 	evs = append(evs, engine.VPEvents(awards)...)
 	seedHex := enchex.EncodeToString(seed[:])
-	g.Turns = append(g.Turns, newTurnResult(g.Turn, start, g.Plans, seedHex, deck.Drawn(), evs))
+	g.Turns = append(g.Turns, newTurnResult(g.Turn, start, ground, g.Plans, seedHex, deck.Drawn(), evs))
 	g.State = st
 	g.award(cur, awards)
 	g.clearTurn()

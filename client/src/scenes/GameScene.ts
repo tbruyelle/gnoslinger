@@ -11,7 +11,6 @@ import {
   describeEvents,
   endOfTurnEvents,
   eventsForSegment,
-  groundAtTurnStart,
   snapshotAfterSegment,
   splitSteps,
   startOfTurn,
@@ -1280,23 +1279,11 @@ export class GameScene extends Phaser.Scene {
     return ground;
   }
 
-  /** The guns lying in hexes when the replayed turn began (a fresh copy). */
+  /** The guns lying in hexes when the replayed turn began, as the turn recorded them (a fresh copy). */
   private groundBefore(): GroundGunView[] {
     const pb = this.playback;
-    const view = this.view;
-    if (!pb || !view) return [];
-    const t = pb.turns[pb.index];
-    let base: GroundGunView[];
-    if (pb.live) {
-      base = groundAtTurnStart(t, view.ground ?? [], view.players, this.committed);
-    } else {
-      base = [];
-      for (let i = 0; i < pb.index; i++) {
-        const prev = pb.turns[i];
-        snapshotAfterSegment(startOfTurn(prev, this.committed), prev.events, SEGMENTS, base);
-      }
-    }
-    return base.map((g) => ({ id: g.id, hex: g.hex, guns: g.guns.map((x) => ({ ...x })) }));
+    if (!pb) return [];
+    return pb.turns[pb.index].ground.map((g) => ({ id: g.id, hex: g.hex, guns: g.guns.map((x) => ({ ...x })) }));
   }
 
   /** The characters as they should be drawn right now. */

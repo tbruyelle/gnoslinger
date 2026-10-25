@@ -28,7 +28,8 @@ const listLimit = 50
 //	 "commitUntil" (the turn's deadline),"revealUntil" (when unrevealed seats can be claimed out),"lockRound" (the drand round the plans are timelocked to) (0 unless planning or revealing),
 //	 "lastTurn":null|{"turn","seed","cards":[result card numbers drawn, in order],"plans":[..],
 //	             "events":[{"seg","p","kind","action","from","to","facing","down","n","delay","reason","card","result","endurance","target","hit","range","gun","gunId","step","chart","status"}],
-//	             "start":[{"hex","facing","down","delay","status","aim","aimAt","aimHex","endurance","serious","gunArm","otherArm","leg","guns":[..]},..]}}
+//	             "start":[{"hex","facing","down","delay","status","aim","aimAt","aimHex","endurance","serious","gunArm","otherArm","leg","guns":[..]},..],
+//	             "ground":[the weapons on the ground at the turn's start, as "ground" above]}}
 //
 // Times are unix seconds; winner, events[].p and events[].target are seat indexes, -1 for none.
 // The plans of the turn in progress are hidden until revealed: only their
@@ -261,7 +262,9 @@ func writeTurnResult(b *strings.Builder, r *TurnResult) {
 		writeGuns(b, c.Guns)
 		b.WriteByte('}')
 	}
-	b.WriteString("]}")
+	b.WriteByte(']')
+	writeGround(b, r.Ground())
+	b.WriteByte('}')
 }
 
 func writeEvent(b *strings.Builder, e engine.Event) {

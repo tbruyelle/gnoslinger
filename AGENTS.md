@@ -32,6 +32,11 @@ come later.
   toolchain through `go.mod` + `go tool` (like `~/src/aibgno`).
 - **Client**: TypeScript + Phaser 3 + Vite (port 5173), tests with vitest,
   wallet through the injected `window.adena` API.
+- **Deployment**: nothing is deployed for now: no network (Onyx included)
+  holds the realm or any of its games, only local gnodev chains, which
+  replay their transactions with the new code on every reload. A change
+  needs no compatibility with records stored by earlier versions (the
+  realm's decoders still read some older formats; they may go).
 - **Rules reference**: `bga/` (separate git repo, gitignored, private
   `github.com/tbruyelle/gunslinger-bga`) holds an abandoned Board Game Arena
   PHP implementation and `bga/doc/RULES.md`, the full rules transcription.
@@ -121,11 +126,14 @@ within it, so a plan sent does not give the others more time; the turn
 can be claimed `Timeout` after it (`timeoutAt`, `"timeoutAt"` in the game
 JSON and the summaries, 0 unless planning). `Plans` holds only the turn in progress;
 every resolved turn is kept in `Turns`, `LastTurn()` being the last one
-(`TurnResult{Turn, Plans[], Seed, StartEnc, CardsEnc, EventsEnc}`, at most
-MaxTurns; the start snapshot, the cards drawn and the events are stored in
-the engine's compact text encodings, `engine/v0/encode.gno`, read back
-through `Start()`, `Cards()`, `Events()`: as structs a turn cost over 17 KB
-of storage deposit, encoded about a tenth).
+(`TurnResult{Turn, Plans[], Seed, StartEnc, GroundEnc, CardsEnc, EventsEnc}`, at most
+MaxTurns; the start snapshot, the weapons on the ground at the start, the
+cards drawn and the events are stored in the engine's compact text
+encodings, `engine/v0/encode.gno`, read back through `Start()`,
+`Ground()`, `Cards()`, `Events()`: as structs a turn cost over 17 KB of
+storage deposit, encoded about a tenth). A turn is self-contained: the
+replay shows it from its own record, the ground included (`"ground"` in
+the turn's JSON, `GameScene.groundBefore`), without the turns before it.
 
 ### Storage deposit
 Measured on gnodev on 2026-10-16, before the seats (two-player games; a
@@ -257,7 +265,7 @@ the RPC, clients poll).
 
 ### Reads
 `Render("json/game/{id}")`, `Render("json/games/{addr}")`,
-`Render("json/history/{id}")` (every resolved turn with its starting state,
+`Render("json/history/{id}")` (every resolved turn with its starting state and ground,
 plans, seed, drawn cards and events, for replays) and
 `Render("json/plan/{id}/{addr}")` (where an address's plan for the turn in
 progress stands, `committed`, `revealed`, and the plan once revealed); each
@@ -777,7 +785,7 @@ played, victory points, since). `game/lobby.ts` sorts the games into
   stacked like a character sharing the hex (`occupantsAt`); `CharView.guns` carries
   the guns through the preview (Draw & Cock moves the gun) and the playback
   (`draw` and `wild_shot` events are folded, the turn's `start` JSON lists
-  the guns). Hovering a token shows that character's aim zone, where it can aim and
+  the guns, its `ground` the guns lying in hexes when it began). Hovering a token shows that character's aim zone, where it can aim and
 shoot (`showAimZone`: brick red for an enemy, action green for mine, under
 the tokens, not clickable; the hexes it cannot see, `game/sight.ts` over
 `BoardMap.lineOfSight`, are left out; not during a replay or a turn's playback).

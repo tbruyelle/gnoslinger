@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { END_OF_TURN_SEG, STEP_ACTION, STEP_END, STEP_SHOTS, type GroundGunView, type GunView, type TurnEvent, type TurnResult } from "../chain/types";
-import { describeEvent, describeEvents, endOfTurnEvents, eventsForSegment, groundAtTurnStart, snapshotAfterSegment, splitSteps, startOfTurn, stepBack, stepForward } from "./playback";
+import { describeEvent, describeEvents, endOfTurnEvents, eventsForSegment, snapshotAfterSegment, splitSteps, startOfTurn, stepBack, stepForward } from "./playback";
 
 const ev = (partial: Partial<TurnEvent>): TurnEvent => ({
   seg: 0, p: 0, kind: "move", action: "", from: "", to: "", facing: 0, down: false, n: 0, delay: 0, reason: "", card: 0, result: "", endurance: 0, target: 0, hit: "", range: 0, gun: "", gunId: 0, step: 0, ...partial,
@@ -212,7 +212,7 @@ describe("replay stepping", () => {
   });
 
   it("uses the stored start of a turn, or the fallback", () => {
-    const t: TurnResult = { turn: 1, seed: "", cards: [], plans: ["", ""], events: [], start: [{ hex: "A-F3", facing: 3, down: false, delay: 1, guns: [colt], ...fresh }, { hex: "A-F9", facing: 0, down: true, delay: 0, guns: [], ...fresh, aim: 4 }] };
+    const t: TurnResult = { turn: 1, ground: [], seed: "", cards: [], plans: ["", ""], events: [], start: [{ hex: "A-F3", facing: 3, down: false, delay: 1, guns: [colt], ...fresh }, { hex: "A-F9", facing: 0, down: true, delay: 0, guns: [], ...fresh, aim: 4 }] };
     expect(startOfTurn(t, start)).toEqual([
       { hex: "A-F3", facing: 3, down: false, delay: 1, guns: [colt], ...fresh },
       { hex: "A-F9", facing: 0, down: true, delay: 0, guns: [], ...fresh, aim: 4 },
@@ -250,24 +250,5 @@ describe("gun moves in playback", () => {
     expect(snapshotAfterSegment(start2, evs, 1)[0].guns[0].location).toBe("other_hand");
     expect(describeEvent(evs[0], names)).toBe("marshal moves the Colt 45 from both hands to the other hand");
     expect(describeEvent(ev({ p: 0, kind: "cancel", action: "gun_move", reason: "not_both" }), names)).toBe("marshal: gun move is cancelled (the gun is not in both hands)");
-  });
-});
-
-describe("groundAtTurnStart", () => {
-  it("puts a gun picked up back where it lay, where its character walked to", () => {
-    // Game 1, turn 6: the marshal starts in H7, walks to G7 and picks up the gun lying there (ground 3).
-    const t: TurnResult = {
-      turn: 6, seed: "", cards: [], plans: ["1f:ahead,9f:g3:2", ""],
-      start: [
-        { hex: "A-H7", facing: 5, down: false, delay: 0, ...fresh, guns: [] },
-        { hex: "A-E6", facing: 2, down: false, delay: 0, ...fresh, guns: [] },
-      ],
-      events: [
-        ev({ seg: 2, p: 0, kind: "move", action: "advance", from: "A-H7", to: "A-G7" }),
-        ev({ seg: 5, p: 0, kind: "draw", action: "draw_and_cock", from: "ground", to: "both_hands", n: 3, gun: "colt45", gunId: 1 }),
-      ],
-    };
-    const players = [{ guns: [{ ...colt, location: "both_hands" as const, cocked: true }] }, { guns: [] }];
-    expect(groundAtTurnStart(t, [], players, [])).toEqual([{ id: 3, hex: "A-G7", guns: [{ ...colt, location: "holstered", cocked: false }] }]);
   });
 });
