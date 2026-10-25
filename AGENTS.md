@@ -870,11 +870,23 @@ Clicking a token opens the **character
   `VITE_CHAIN_ID`, `VITE_CHAIN_NAME`, `VITE_REALM_PATH`,
   `VITE_PROFILES_PATH` (the profiles realm, where `getProfile` and
   `listPlayers` read), `VITE_POLL_MS`,
-  optional `VITE_GAS_WANTED`/`VITE_GAS_FEE`. Without `VITE_GAS_WANTED` every
-  call goes out with a fixed 100M gas limit (`DEFAULT_GAS_WANTED`): Adena's
-  own estimate has no margin, and a reveal that resolves the turn can
-  use more gas than its simulation since the deck seed includes the block
-  height.
+  optional `VITE_GAS_WANTED`/`VITE_GAS_FEE`. Without `VITE_GAS_WANTED` each
+  call's gas limit is fitted (`chain/gas.ts`, `SessionWallet.gasFor`): the
+  call is simulated first (`Rpc.simulate`, the node's `.app/simulate` on
+  `tx.simulationTx`: a 1 ugnot fee, a blank signature, the session key's
+  public key or none for an Adena account, whose key the chain holds once
+  it signed anything) and goes out with 1.5 times its simulated gas, twice
+  for a call that may resolve the turn (`Reveal`, `RevealMany`,
+  `ClaimTimeout`, `Surrender`: the deck seed includes the block height, so
+  its block may draw more cards than the simulation), between 25M and
+  500M; without a simulation (a refusal, an unknown key) the fixed 100M,
+  300M for those. Through the session a call that runs out of gas goes
+  again once with twice the limit. A fixed 100M ran out on a 4-seat turn
+  where everyone shoots twice (about 101M, measured on gnodev 2026-10-25;
+  its simulation said 100M, the block used 94.5M), and made every call
+  pay 0.12 GNOT of fee where a commit uses about 16M gas (now 0.03).
+  Adena gets the limit from the client (`AdenaWallet.doContract`), its
+  own estimate having no margin.
 
 ### Manual end-to-end test
 1. Two accounts in Adena; `ADENA_ADDRS="g1... g1..." make gnodev` (premines

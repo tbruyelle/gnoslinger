@@ -1,10 +1,10 @@
-import { hex } from "@scure/base";
+import { base64, hex } from "@scure/base";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChainConfig } from "../config";
 import type { AdenaWallet } from "./adena";
 import { QueryError, type Rpc, type TxResult } from "./rpc";
 import { isSessionError, parseSessionAccount, sessionProblem, SessionWallet, spentNow } from "./session";
-import { pubKeyAddress, publicKey } from "./tx";
+import { pubKeyAddress, publicKey, type Simulation } from "./tx";
 
 const MASTER = "g1tnz4rhep0fhj3s52qerakj58q87fxes36f3558";
 const SECRET = "1cd7e52b3a4f1b041d723f43e12453e9bbd8681020858cb0b91a13bd05889b85";
@@ -29,7 +29,7 @@ const account = (o: { expires?: number; used?: string; reset?: number } = {}) =>
 
 const CALL = { caller: MASTER, send: "", pkg_path: "gno.land/r/x/v0", func: "SubmitPlan", args: ["0000001", ""] };
 
-function setup(opts: { session?: string | null; broadcastError?: { type: string; log: string }; txError?: string } = {}) {
+function setup(opts: { session?: string | null; broadcastError?: { type: string; log: string }; txError?: string; txErrors?: (string | null)[]; simulate?: Simulation | Error; cfg?: Partial<ChainConfig> } = {}) {
   const session = opts.session === undefined ? account() : opts.session;
   const rpc = {
     abciQuery: vi.fn(async (path: string) => {
@@ -38,11 +38,20 @@ function setup(opts: { session?: string | null; broadcastError?: { type: string;
       return session;
     }),
     gasPrice: vi.fn(async () => ({ gas: 1000, price: 1 })),
-    broadcastTxSync: vi.fn(async () => ({ hash: "h", error: opts.broadcastError ?? null })),
-    waitForTx: vi.fn(async (): Promise<TxResult> => ({ height: 1, error: opts.txError ?? null, log: opts.txError ?? "", data: null, events: [] })),
+    broadcastTxSync: vi.fn(async (_tx: string) => ({ hash: "h", error: opts.broadcastError ?? null })),
+    waitForTx: vi.fn(async (): Promise<TxResult> => {
+      const error = opts.txErrors ? (opts.txErrors.shift() ?? null) : (opts.txError ?? null);
+      return { height: 1, error, log: error ?? "", data: null, events: [] };
+    }),
+    // Without a simulation, the fixed limits.
+    simulate: vi.fn(async (): Promise<Simulation> => {
+      const sim = opts.simulate ?? new Error("no simulation");
+      if (sim instanceof Error) throw sim;
+      return sim;
+    }),
   };
-  const adena = { address: MASTER, doContract: vi.fn(async () => ({ hash: "adena" })), doMessages: vi.fn() };
-  const wallet = new SessionWallet(adena as unknown as AdenaWallet, rpc as unknown as Rpc, CFG, () => NOW);
+  const adena = { address: MASTER, doContract: vi.fn(async (_call: unknown, _gas?: number) => ({ hash: "adena" })), doMessages: vi.fn() };
+  const wallet = new SessionWallet(adena as unknown as AdenaWallet, rpc as unknown as Rpc, { ...CFG, ...opts.cfg }, () => NOW);
   return { rpc, adena, wallet };
 }
 
@@ -119,6 +128,47 @@ describe("session accounts", () => {
     await s.wallet.doContract(CALL);
     expect(s.adena.doContract).toHaveBeenCalledOnce();
     expect(s.wallet.state).toMatchObject({ kind: "ended", reason: "it reached its spending limit" });
+  });
+
+  it("fits the gas limit to the simulated gas, on either path", async () => {
+    // The fee: gas price 1 ugnot per 1000 gas, 20 % over.
+    const fee = (tx: string) => /(\d+)ugnot/.exec(new TextDecoder("latin1").decode(base64.decode(tx)))?.[1];
+    let s = setup({ simulate: { gasUsed: 20_000_000, error: null } });
+    await s.wallet.doContract(CALL);
+    expect(fee(s.rpc.broadcastTxSync.mock.calls[0][0])).toBe("36000"); // 30M
+    // A reveal may resolve the turn: twice the simulated gas.
+    s = setup({ simulate: { gasUsed: 50_000_000, error: null } });
+    await s.wallet.doContract({ ...CALL, func: "Reveal" });
+    expect(fee(s.rpc.broadcastTxSync.mock.calls[0][0])).toBe("120000"); // 100M
+
+    localStorage.clear();
+    s = setup({ simulate: { gasUsed: 20_000_000, error: null } });
+    await s.wallet.doContract(CALL);
+    expect(s.adena.doContract).toHaveBeenCalledWith(CALL, 30_000_000);
+    // Not simulated (the account unknown, a realm refusal): the fixed limits.
+    s = setup();
+    await s.wallet.doContract({ ...CALL, func: "Reveal" });
+    expect(s.adena.doContract).toHaveBeenCalledWith({ ...CALL, func: "Reveal" }, 300_000_000);
+    s = setup({ simulate: { gasUsed: 9_000_000, error: "gnoslinger: not your turn" } });
+    await s.wallet.doContract(CALL);
+    expect(s.adena.doContract).toHaveBeenCalledWith(CALL, 100_000_000);
+    // VITE_GAS_WANTED fixes it.
+    s = setup({ simulate: { gasUsed: 20_000_000, error: null }, cfg: { gasWanted: 70_000_000 } });
+    await s.wallet.doContract(CALL);
+    expect(s.rpc.simulate).not.toHaveBeenCalled();
+    expect(s.adena.doContract).toHaveBeenCalledWith(CALL, 70_000_000);
+  });
+
+  it("goes again once with twice the gas when it runs out", async () => {
+    const fee = (tx: string) => /(\d+)ugnot/.exec(new TextDecoder("latin1").decode(base64.decode(tx)))?.[1];
+    let s = setup({ simulate: { gasUsed: 50_000_000, error: null }, txErrors: ["out of gas in location: ReadFlat; gasWanted: 100000000", null] });
+    expect(await s.wallet.doContract({ ...CALL, func: "Reveal" })).toEqual({ hash: expect.any(String) });
+    expect(s.rpc.broadcastTxSync).toHaveBeenCalledTimes(2);
+    expect(fee(s.rpc.broadcastTxSync.mock.calls[1][0])).toBe("240000"); // 200M
+    // Only once.
+    s = setup({ simulate: { gasUsed: 50_000_000, error: null }, txErrors: ["out of gas", "out of gas", null] });
+    await s.wallet.doContract({ ...CALL, func: "Reveal" });
+    expect(s.rpc.broadcastTxSync).toHaveBeenCalledTimes(2);
   });
 
   it("leaves other failures to the caller", async () => {

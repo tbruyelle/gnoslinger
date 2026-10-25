@@ -1,8 +1,6 @@
 import type { ChainConfig } from "../config";
 import { ChainError, type ChainErrorKind } from "./errors";
-
-/** Gas limit sent with every call when VITE_GAS_WANTED is not set. */
-export const DEFAULT_GAS_WANTED = 100_000_000;
+import { DEFAULT_GAS_WANTED } from "./gas";
 
 /** Response envelope of every injected Adena method. */
 export interface AdenaResponse<D> {
@@ -154,13 +152,16 @@ export class AdenaWallet implements Wallet {
     private readonly cfg: ChainConfig,
   ) {}
 
-  doContract(call: VmCall): Promise<{ hash: string }> {
-    // Left to itself Adena simulates the call and uses the result as the gas
-    // limit, with no margin. A SubmitPlan that resolves the turn shuffles the
-    // deck from a seed that includes the block height, so the real block can
-    // draw more cards than the simulation and run out of gas. A fixed, ample
-    // limit avoids that (the dev chain allows 10e9 per block).
-    return this.doMessages([{ type: "/vm.m_call", value: call }], this.cfg.gasWanted ?? DEFAULT_GAS_WANTED);
+  /**
+   * gasWanted is the call's limit (chain/gas.ts, from SessionWallet's
+   * simulation), else VITE_GAS_WANTED or the fixed default. Left to itself
+   * Adena simulates the call and uses the result as the limit, with no
+   * margin: a reveal that resolves the turn shuffles the deck from a seed
+   * that includes the block height, so its block can draw more cards than
+   * the simulation did and run out of gas.
+   */
+  doContract(call: VmCall, gasWanted?: number): Promise<{ hash: string }> {
+    return this.doMessages([{ type: "/vm.m_call", value: call }], gasWanted ?? this.cfg.gasWanted ?? DEFAULT_GAS_WANTED);
   }
 
   /** Signs and broadcasts (sync) messages of this account through Adena's popup. */

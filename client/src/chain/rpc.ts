@@ -1,4 +1,6 @@
+import { base64 } from "@scure/base";
 import { ChainError } from "./errors";
+import { decodeSimulation, type Simulation } from "./tx";
 
 /** A JSON-RPC level failure (transport, or an `error` member in the reply). */
 export class RpcError extends Error {
@@ -106,6 +108,21 @@ export class Rpc {
   async broadcastTxSync(txB64: string): Promise<{ hash: string; error: { type: string; log: string } | null }> {
     const r = await this.call<{ hash: string; error: { "@type"?: string } | null; log: string }>("broadcast_tx_sync", { tx: txB64 });
     return { hash: r.hash, error: r.error ? { type: r.error["@type"] ?? "error", log: r.log ?? "" } : null };
+  }
+
+  /**
+   * Runs a transaction (amino binary, tx.simulationTx) against the latest
+   * state without committing it: the gas it used, and the realm's panic if
+   * it would fail.
+   */
+  async simulate(tx: Uint8Array): Promise<Simulation> {
+    const r = await this.call<{ response: { ResponseBase: ResponseBase; Value: string | null } }>("abci_query", {
+      path: ".app/simulate",
+      data: base64.encode(tx),
+    });
+    const rb = r.response.ResponseBase;
+    if (rb.Error) throw new QueryError(rb.Error.value ?? extractPanic(rb.Log) ?? "simulation failed", rb.Log ?? "");
+    return decodeSimulation(base64.decode(r.response.Value ?? ""));
   }
 
   /** The chain's minimum gas price: price ugnot for every gas units. */

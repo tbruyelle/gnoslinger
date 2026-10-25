@@ -1,6 +1,6 @@
-import { hex } from "@scure/base";
+import { base64, hex } from "@scure/base";
 import { describe, expect, it } from "vitest";
-import { encodeTx, pubKeyAddress, pubKeyJSON, pubKeyProto, publicKey, sign, signBytes, signCall } from "./tx";
+import { decodeSimulation, encodeTx, pubKeyAddress, pubKeyJSON, pubKeyProto, publicKey, sign, signBytes, signCall, simulationTx } from "./tx";
 
 // Printed by the pinned gno (tm2 std, amino) for the same key and call.
 const SECRET = hex.decode("1cd7e52b3a4f1b041d723f43e12453e9bbd8681020858cb0b91a13bd05889b85");
@@ -42,5 +42,32 @@ describe("tx", () => {
     expect(sb).toContain('"memo":"a\\u003cb"');
     expect(sb).toContain('"fee":{"amount":[],"gas":"1"}');
     expect(sb).not.toContain("args");
+  });
+});
+
+// The node's answers to .app/simulate on gnodev (pinned gno, 2026-10-25), for
+// test1: a CreateGame that goes through (22,686,124 gas), and a Commit the
+// realm refuses.
+const SIM_OK = "CrQEEhQoIjAwMDAwMDIiIHN0cmluZykKChqNAgoJL3RtLkV2ZW50Ev8BCgtHYW1lQ3JlYXRlZBINCgJpZBIHMDAwMDAwMhIzCgdjcmVhdG9yEihnMWpnOG10dXR1OWtoaGZ3YzRueG11aGNwZnRmMHBhamRoZnZzcWY1Eg8KBGNoYXISB21hcnNoYWwSCgoFc2VhdHMSATISDgoIbWF4VHVybnMSAjIwEhYKDnRpbWVvdXRNaW51dGVzEgQyODgwEgsKA2hleBIEQS1ENhILCgZmYWNpbmcSATISCgoFc3Rha2USATAaQWduby5sYW5kL3IvZzF0aDBtYXNwNjd6ZnM5bGc2ZDM0cWhnaGxkaGc2a2pjcWp1djdjMi9nbm9zbGluZ2VyL3YwGncKFy90bS5TdG9yYWdlRGVwb3NpdEV2ZW50ElwI1FwSCzU5MzAwMHVnbm90Gkpnbm8ubGFuZC9yL2cxdGgwbWFzcDY3emZzOWxnNmQzNHFoZ2hsZGhnNmtqY3FqdXY3YzIvZ25vc2xpbmdlci9wcm9maWxlcy92MBpwChcvdG0uU3RvcmFnZURlcG9zaXRFdmVudBJVCN6qAxIMMjczMTEwMHVnbm90GkFnbm8ubGFuZC9yL2cxdGgwbWFzcDY3emZzOWxnNmQzNHFoZ2hsZGhnNmtqY3FqdXY3YzIvZ25vc2xpbmdlci92MCIhbXNnOjAsc3VjY2Vzczp0cnVlLGxvZzosZXZlbnRzOltdEID4gq0WGNim0RU=";
+const SIM_REFUSED = "CqUHCkQKES9hYmNpLlN0cmluZ0Vycm9yEi8KLWdub3NsaW5nZXI6IHlvdSBhcmUgbm90IGEgcGxheWVyIG9mIHRoaXMgZ2FtZSLIBm1zZzowLHN1Y2Nlc3M6ZmFsc2UsbG9nOi0tPSBFcnJvciA9LS0KRGF0YTogZXJyb3JzLkZtdEVycm9ye2Zvcm1hdDoiZ25vc2xpbmdlcjogeW91IGFyZSBub3QgYSBwbGF5ZXIgb2YgdGhpcyBnYW1lIiwgYXJnczpbXWludGVyZmFjZSB7fShuaWwpfQpNc2cgVHJhY2VzOgogICAgMCAgZ25vL3RtMi9wa2cvZXJyb3JzL2Vycm9ycy5nbzoxMDMgLSBWTSBwYW5pYzogZ25vc2xpbmdlcjogeW91IGFyZSBub3QgYSBwbGF5ZXIgb2YgdGhpcyBnYW1lClN0YWNrdHJhY2U6CnBhbmljOiBnbm9zbGluZ2VyOiB5b3UgYXJlIG5vdCBhIHBsYXllciBvZiB0aGlzIGdhbWUKKCpnbm8ubGFuZC9yL2cxdGgwbWFzcDY3emZzOWxnNmQzNHFoZ2hsZGhnNmtqY3FqdXY3YzIvZ25vc2xpbmdlci92MC5HYW1lKS5tdXN0U2VhdCBhdCBnbm8ubGFuZC9yL2cxdGgwbWFzcDY3emZzOWxnNmQzNHFoZ2hsZGhnNmtqY3FqdXY3YzIvZ25vc2xpbmdlci92MC9nbm9zbGluZ2VyLmdubzoxOTkKQ29tbWl0IGF0IGduby5sYW5kL3IvZzF0aDBtYXNwNjd6ZnM5bGc2ZDM0cWhnaGxkaGc2a2pjcWp1djdjMi9nbm9zbGluZ2VyL3YwL3BsYXkuZ25vOjMwCgoKU3RhY2sgVHJhY2U6CiAgICAwICBnbm8vdG0yL3BrZy9lcnJvcnMvZXJyb3JzLmdvOjg4CiAgICAxICBnbm8vdG0yL3BrZy9lcnJvcnMvZXJyb3JzLmdvOjEwMwogICAgMiAgZ25vL2duby5sYW5kL3BrZy9zZGsvdm0va2VlcGVyLmdvOjE0NTMKICAgIDMgIGduby9nbm8ubGFuZC9wa2cvc2RrL3ZtL2tlZXBlci5nbzoxNDI2CiAgICA0ICAvdXNyL2xpYi9nby9zcmMvcnVudGltZS9wYW5pYy5nbzo4NjAKLi4uIDI5IG1vcmUgbGluZXMgZWxpZGVkLGV2ZW50czpbXSoSdm0udmVyc2lvbj1kZXZlbG9wEID4gq0WGLjPyQc=";
+
+describe("simulation", () => {
+  it("reads the gas used, or the realm's refusal", () => {
+    expect(decodeSimulation(base64.decode(SIM_OK))).toEqual({ gasUsed: 22_686_124, error: null });
+    const refused = decodeSimulation(base64.decode(SIM_REFUSED));
+    expect(refused.error).toBe("gnoslinger: you are not a player of this game");
+    expect(refused.gasUsed).toBeGreaterThan(0);
+    expect(decodeSimulation(new Uint8Array())).toEqual({ gasUsed: 0, error: null });
+  });
+
+  it("builds the transaction to simulate: a 1 ugnot fee, a blank signature, the key when given", () => {
+    const pub = publicKey(SECRET);
+    const withKey = simulationTx(CALL, 1_000_000_000, pub, SESSION);
+    const keyless = simulationTx(CALL, 1_000_000_000, null, "");
+    expect(withKey).toEqual(encodeTx(CALL, { gasWanted: 1_000_000_000, gasFee: 1 }, "", pub, new Uint8Array(64), SESSION));
+    const text = (b: Uint8Array) => new TextDecoder("latin1").decode(b);
+    expect(text(withKey)).toContain("/tm.PubKeySecp256k1");
+    expect(text(keyless)).not.toContain("/tm.PubKeySecp256k1");
+    expect(text(keyless)).toContain("1ugnot");
   });
 });

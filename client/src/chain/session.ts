@@ -1,9 +1,10 @@
 import { base64, hex } from "@scure/base";
 import type { ChainConfig } from "../config";
-import { DEFAULT_GAS_WANTED, WALLET_TIMEOUT_MS, type AdenaWallet, type ContractMessage, type VmCall, type Wallet } from "./adena";
+import { WALLET_TIMEOUT_MS, type AdenaWallet, type ContractMessage, type VmCall, type Wallet } from "./adena";
 import { ChainError } from "./errors";
+import { gasWanted, isOutOfGas, SIM_GAS } from "./gas";
 import { QueryError, type Rpc } from "./rpc";
-import { pubKeyAddress, pubKeyProto, publicKey, randomSecretKey, signCall } from "./tx";
+import { pubKeyAddress, pubKeyProto, publicKey, randomSecretKey, signCall, simulationTx } from "./tx";
 
 /**
  * Account sessions (the chain's auth module, DESIGN_HIDDEN_PLANS.md): a key
@@ -227,33 +228,66 @@ export class SessionWallet implements Wallet {
   /** Signs with the session when there is a live one, else (or when the chain refuses it) through Adena. */
   async doContract(call: VmCall): Promise<{ hash: string }> {
     // A call sending coins (a stake) is always signed in Adena: the player sees the money it puts in.
-    if (!this.secret || call.send) return this.adena.doContract(call);
+    if (!this.secret || call.send) return this.adena.doContract(call, await this.gasFor(call, null, ""));
     const state = await this.refresh();
-    if (state.kind !== "active") return this.adena.doContract(call);
-    const info = state.info;
-    const gasWanted = this.cfg.gasWanted ?? DEFAULT_GAS_WANTED;
-    const gasFee = this.cfg.gasFee ?? (await this.fee(gasWanted));
-    const { tx, hash } = signCall(call, { gasWanted, gasFee }, { chainId: this.cfg.chainId, accountNumber: info.accountNumber, sequence: info.sequence }, this.secret, info.addr);
+    if (state.kind !== "active") return this.adena.doContract(call, await this.gasFor(call, null, ""));
+    return this.viaSession(call, state.info, await this.gasFor(call, publicKey(this.secret), state.info.addr), true);
+  }
+
+  /** Signs and broadcasts a call with the session key; retry: once more with twice the gas if it runs out. */
+  private async viaSession(call: VmCall, info: SessionInfo, gas: number, retry: boolean): Promise<{ hash: string }> {
+    const secret = this.secret;
+    if (!secret) return this.adena.doContract(call, gas);
+    const gasFee = this.cfg.gasFee ?? (await this.fee(gas));
+    const { tx, hash } = signCall(call, { gasWanted: gas, gasFee }, { chainId: this.cfg.chainId, accountNumber: info.accountNumber, sequence: info.sequence }, secret, info.addr);
     const res = await this.rpc.broadcastTxSync(base64.encode(tx));
     if (res.error) {
-      if (isSessionError(res.error.type + res.error.log)) return this.fallBack(call, info, res.error.log || res.error.type);
+      if (isSessionError(res.error.type + res.error.log)) return this.fallBack(call, info, res.error.log || res.error.type, gas);
       throw new ChainError("checktx", `Transaction refused: ${firstLine(res.error.log) || res.error.type}`, res.error.log);
     }
     // A session spends at delivery too (storage deposits): over its limit,
     // the call fails there, and goes again through Adena.
     const result = await this.rpc.waitForTx(hash);
-    if (result?.error && isSessionError(result.error + result.log)) return this.fallBack(call, info, result.error);
+    if (result?.error && isSessionError(result.error + result.log)) return this.fallBack(call, info, result.error, gas);
+    // A reveal resolving the turn can draw more cards in its block than in
+    // its simulation: run out of gas, it goes again with twice the limit
+    // (the failed one took its fee and its sequence number).
+    if (retry && result?.error && isOutOfGas(result.error + result.log)) {
+      const state = await this.refresh();
+      if (state.kind === "active") return this.viaSession(call, state.info, Math.min(SIM_GAS, gas * 2), false);
+    }
     return { hash };
   }
 
-  private async fallBack(call: VmCall, info: SessionInfo, why: string): Promise<{ hash: string }> {
+  /**
+   * The gas limit for a call (chain/gas.ts): its simulated gas with a
+   * margin, the simulation signed by pub for the session sessionAddr
+   * ("" for the account's own key, which the chain then supplies); the
+   * fixed limits when it cannot be simulated, or VITE_GAS_WANTED.
+   */
+  private async gasFor(call: VmCall, pub: Uint8Array | null, sessionAddr: string): Promise<number> {
+    if (this.cfg.gasWanted) return this.cfg.gasWanted;
+    let simulated: number | null = null;
+    try {
+      const sim = await this.rpc.simulate(simulationTx(call, SIM_GAS, pub, sessionAddr));
+      // A call the realm would refuse goes out all the same, with the fixed
+      // limit: the node may be a block behind (a claim just due), and the
+      // transaction result is where the client reads the realm's refusal.
+      if (!sim.error) simulated = sim.gasUsed;
+    } catch {
+      // Node unreachable or the account unknown to it: the fixed limits.
+    }
+    return gasWanted(call.func, simulated);
+  }
+
+  private async fallBack(call: VmCall, info: SessionInfo, why: string, gas: number): Promise<{ hash: string }> {
     const overLimit = /limit|spend|deposit/i.test(why);
     const reason = overLimit ? "it reached its spending limit" : /expire/i.test(why) ? "it expired" : "the chain refused it";
     // The chain starts a new period at spendReset + spendPeriod (or at the next spend once that has passed).
     const nextPeriod = info.spendReset + info.spendPeriod > this.now() ? info.spendReset + info.spendPeriod : this.now() + info.spendPeriod;
     this.refused = { until: overLimit && info.spendPeriod > 0 ? nextPeriod : Infinity, reason };
     this.setState({ kind: "ended", info, reason });
-    return this.adena.doContract(call);
+    return this.adena.doContract(call, gas);
   }
 
   /** The fee for gasWanted at the chain's gas price, with a margin. */
