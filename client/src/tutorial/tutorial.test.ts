@@ -31,7 +31,7 @@ describe("TutorialRealm", () => {
       expect(view.players[1].committed).toBe(true);
       // No deadline has passed, though the showdown was recorded in 2009.
       expect(view.commitUntil).toBeGreaterThan(Date.now() / 1000);
-      expect((await realm.getHistory("")).turns).toHaveLength(turn - 1);
+      expect(await realm.getTurns("", 99)).toHaveLength(turn - 1);
       await expect(realm.reveal("", turn, 0, "aa", "")).rejects.toThrow(/This step asks for/);
       await realm.reveal("", turn, 0, "aa", recorded(turn));
       expect((await realm.getGame("")).lastTurn?.turn).toBe(turn);

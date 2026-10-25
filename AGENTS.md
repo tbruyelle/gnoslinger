@@ -266,8 +266,11 @@ the RPC, clients poll).
 
 ### Reads
 `Render("json/game/{id}")`, `Render("json/games/{addr}")`,
-`Render("json/history/{id}")` (every resolved turn with its starting state and ground,
-plans, seed, drawn cards and events, for replays) and
+`Render("json/history/{id}/{turn}")` (one resolved turn, from 1, with its
+starting state and ground, plans, seed, drawn cards and events, for
+replays: a turn per query, `TurnJSON`, so that what a query costs does not
+grow with the game, the whole history of a long 4-seat game nearing the
+3 billion gas a query may use; "turn N is not resolved" past the last) and
 `Render("json/plan/{id}/{addr}")` (where an address's plan for the turn in
 progress stands, `committed`, `revealed`, and the plan once revealed); each
 seat of `json/game` carries `committed`, `revealed` and `locked` (its
@@ -284,15 +287,16 @@ game) and `Render("json/players/{offset}/{count}")` (a page of the ranking, at m
 50, `{total, offset, players}`; each profile carries its `rank` and `name`,
 the address's name in `gno.land/r/sys/users`, where `r/sys/namereg`
 registers them, resolved when the JSON is built, "" if none; every player of
-`json/game`, `json/games` and `json/history` carries that `name` too, and
+`json/game` and `json/games` carries that `name` too, and
 `json/games/{addr}` the listed address's own: the client and the gnoweb pages
 show a player by name, else by address, `playerLabel`; every seat's `aimAt`
 says which seat its AIM markers follow, -1 for a hex or no aim, and the
 summaries' players carry their `status`; each seat of `json/game` carries `missed`, the turns in a row it let time out) return raw JSON through `vm/qrender`
 (`vm/qeval` would Go-quote the string). `Render("")`, `game/{id}`, `help` are
 gnoweb pages, and so is the profiles realm's `Render("")` (the top 50, the
-games scored). `GameJSON`, `GamesJSON`, `HistoryJSON`, `GameRev` are plain
-getters for tests and gnokey.
+games scored). `GameJSON`, `GamesJSON`, `TurnJSON`, `HistoryJSON`, `GameRev` are plain
+getters for tests and gnokey (`HistoryJSON`, every turn at once, is served by
+no view: the tests and `make gen-tutorial` read it).
 
 ### Plan string
 `entry("," entry)*`, `entry := <card 1-12><f|b>[:<choice>]`; the choice is a
@@ -755,7 +759,9 @@ played, victory points, since). `game/lobby.ts` sorts the games into
   `cut` stops the shown state at a step), so a bullet flies before the
   moves and an aim taken after a move waits for the token to get there;
   stepping back or jumping lands a segment in one go. **Replay** opens
-  the whole history (`json/history/{id}`) with turn navigation and
+  the whole history, its turns read in parallel, one query each
+  (`RealmClient.getTurns`, kept once read: a resolved turn never changes),
+  with turn navigation and
   play/pause; a cross at the replay panel's top right closes it (or ends a
   live turn's playback). A running game opened with a resolved turn this
   browser has not played back yet (`loadSeenTurn`, `gnoslinger.seen.<chainId>.<realm>.<game>.<addr>`, one per account, holding

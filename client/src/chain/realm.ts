@@ -5,13 +5,13 @@ import { Rpc, unwrapQevalString, type TxResult } from "./rpc";
 import {
   parseGameView,
   parseGamesView,
-  parseHistoryView,
+  parseTurn,
   parsePlayersView,
   parseProfile,
   seatOf,
   type GameView,
   type GamesView,
-  type HistoryView,
+  type TurnResult,
   parsePlanView,
   type PlanView,
   type PlayersView,
@@ -30,6 +30,8 @@ interface Sent<R> {
 /** Typed access to the gnoslinger realm: reads through Render, writes through Adena; the profiles live in their own realm. */
 export class RealmClient {
   private busy = false;
+  /** The resolved turns read so far, by "<game>/<turn>": a resolved turn never changes. */
+  private readonly turns = new Map<string, TurnResult>();
 
   constructor(
     readonly rpc: Rpc,
@@ -42,8 +44,19 @@ export class RealmClient {
     return parseGameView(await this.rpc.qrender(this.pkgPath, `json/game/${id}`));
   }
 
-  async getHistory(id: string): Promise<HistoryView> {
-    return parseHistoryView(await this.rpc.qrender(this.pkgPath, `json/history/${id}`));
+  /** A resolved turn of a game (from 1), read once: a turn per query, so that what a query costs does not grow with the game. */
+  async getTurn(id: string, turn: number): Promise<TurnResult> {
+    const key = `${id}/${turn}`;
+    const known = this.turns.get(key);
+    if (known) return known;
+    const t = parseTurn(await this.rpc.qrender(this.pkgPath, `json/history/${id}/${turn}`));
+    this.turns.set(key, t);
+    return t;
+  }
+
+  /** The first count resolved turns of a game, oldest first, read in parallel. */
+  getTurns(id: string, count: number): Promise<TurnResult[]> {
+    return Promise.all(Array.from({ length: count }, (_, i) => this.getTurn(id, i + 1)));
   }
 
   /** Where addr's plan for the turn in progress stands; the plan itself shows once revealed. */

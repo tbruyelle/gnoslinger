@@ -3340,12 +3340,12 @@ export class GameScene extends Phaser.Scene {
   private async showFinalReplay(atLast: boolean) {
     this.finalReplay = true;
     try {
-      const history = await this.chain.realm.getHistory(this.gameID);
-      if (!this.scene.isActive() || history.turns.length === 0) return;
-      const last = history.turns.length - 1;
-      this.shownResultTurn = history.turns[last].turn;
+      const turns = await this.chain.realm.getTurns(this.gameID, this.resolvedTurns());
+      if (!this.scene.isActive() || turns.length === 0) return;
+      const last = turns.length - 1;
+      this.shownResultTurn = turns[last].turn;
       if (atLast) saveSeenTurn(this.revealScope(), this.gameID, this.chain.wallet.address, this.view?.createdAt ?? 0, this.shownResultTurn);
-      this.startPlayback(history.turns, false, atLast ? last : 0);
+      this.startPlayback(turns, false, atLast ? last : 0);
     } catch (e) {
       // Let a later poll try again.
       this.finalReplay = false;
@@ -3353,17 +3353,23 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  /** Replays the whole showdown so far, from the chain's history. */
+  /** The turns resolved so far: every turn up to the last one is kept. */
+  private resolvedTurns(): number {
+    return this.view?.lastTurn?.turn ?? 0;
+  }
+
+  /** Replays the whole showdown so far, from the chain's turns. */
   private async openReplay() {
     if (!this.view || this.mode === "playback" || this.mode === "submitting") return;
+    const count = this.resolvedTurns();
+    if (count === 0) {
+      showToast(this, "No turn has been played yet", "info");
+      return;
+    }
     try {
-      const history = await this.chain.realm.getHistory(this.gameID);
+      const turns = await this.chain.realm.getTurns(this.gameID, count);
       if (!this.scene.isActive() || this.playback) return;
-      if (history.turns.length === 0) {
-        showToast(this, "No turn has been played yet", "info");
-        return;
-      }
-      this.startPlayback(history.turns, false);
+      this.startPlayback(turns, false);
     } catch (e) {
       if (this.scene.isActive()) showToast(this, userMessage(e), "error");
     }

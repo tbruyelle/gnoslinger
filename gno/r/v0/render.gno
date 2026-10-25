@@ -29,8 +29,12 @@ func init() {
 	router.HandleFunc("json/games/{addr}", func(res *mux.ResponseWriter, req *mux.Request) {
 		res.Write(GamesJSON(req.GetVar("addr")))
 	})
-	router.HandleFunc("json/history/{id}", func(res *mux.ResponseWriter, req *mux.Request) {
-		res.Write(HistoryJSON(req.GetVar("id")))
+	router.HandleFunc("json/history/{id}/{turn}", func(res *mux.ResponseWriter, req *mux.Request) {
+		turn, err := strconv.Atoi(req.GetVar("turn"))
+		if err != nil {
+			panic("gnoslinger: invalid turn")
+		}
+		res.Write(TurnJSON(req.GetVar("id"), turn))
 	})
 	router.HandleFunc("json/plan/{id}/{addr}", func(res *mux.ResponseWriter, req *mux.Request) {
 		res.Write(PlanJSON(req.GetVar("id"), req.GetVar("addr")))
@@ -39,7 +43,7 @@ func init() {
 
 // Render serves the gnoweb pages ("", "help", "game/{id}") and the raw JSON
 // views the web client reads ("json/game/{id}", "json/games/{addr}",
-// "json/history/{id}", "json/plan/{id}/{addr}"); the players' profiles and
+// "json/history/{id}/{turn}", "json/plan/{id}/{addr}"); the players' profiles and
 // ranking are the profiles realm's (gno.land/r/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/profiles/v0).
 func Render(path string) string {
 	return router.Render(path)

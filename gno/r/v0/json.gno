@@ -103,7 +103,23 @@ func PlanJSON(id, addr string) string {
 	return b.String()
 }
 
-// HistoryJSON is every resolved turn of a game, oldest first, for replays:
+// TurnJSON is one resolved turn of a game (from 1), the turn result as
+// json/game writes its last one: what replays read, a turn per query (the
+// "json/history/{id}/{turn}" view), so that what a query costs does not
+// grow with the game. Each turn is self-contained (its start and ground).
+func TurnJSON(id string, turn int) string {
+	g := getGame(id)
+	if turn < 1 || turn > len(g.Turns) {
+		panic("gnoslinger: turn " + strconv.Itoa(turn) + " is not resolved")
+	}
+	var b strings.Builder
+	writeTurnResult(&b, g.Turns[turn-1])
+	return b.String()
+}
+
+// HistoryJSON is every resolved turn of a game, oldest first, for tests and
+// tools (the tutorial's showdown, make gen-tutorial); no view serves it: a
+// long game's history may cost more than a query can.
 //
 //	{"id","turn","phase","players":[{"addr","char"}],"turns":[turn result...]}
 func HistoryJSON(id string) string {

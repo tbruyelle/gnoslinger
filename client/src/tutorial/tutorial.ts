@@ -2,7 +2,7 @@ import type { Chain } from "../chain";
 import type { ChainConfig } from "../config";
 import { CONFIG } from "../config";
 import type { RealmClient } from "../chain/realm";
-import type { GameView, HistoryView, PlanView } from "../chain/types";
+import type { GameView, HistoryView, PlanView, TurnResult } from "../chain/types";
 import { decodePlan, type PlanEntry } from "../game/plan";
 import { getActionDef } from "../rules";
 import data from "./showdown.json";
@@ -80,9 +80,9 @@ export class TutorialRealm {
     return served(VIEWS[this.index], this.shift);
   }
 
-  /** The turns resolved so far. */
-  async getHistory(_id: string): Promise<HistoryView> {
-    return { ...HISTORY, players: VIEWS[this.index].players, turns: HISTORY.turns.slice(0, this.index) };
+  /** The first count turns resolved so far. */
+  async getTurns(_id: string, count: number): Promise<TurnResult[]> {
+    return HISTORY.turns.slice(0, Math.min(count, this.index));
   }
 
   async getPlan(_id: string, _addr: string): Promise<PlanView> {
@@ -140,7 +140,7 @@ export function describePlan(plan: string): string {
 export function tutorialChain(): Chain {
   const config: ChainConfig = { ...CONFIG, chainId: "tutorial", pollMs: 500 };
   const wallet = { address: TUTORIAL_ADDR, state: { kind: "none" } };
-  const realm = new TutorialRealm() satisfies Pick<RealmClient, "getGame" | "getHistory" | "getPlan" | "reveal" | "surrender" | "claimTimeout" | "cancelGame">;
+  const realm = new TutorialRealm() satisfies Pick<RealmClient, "getGame" | "getTurns" | "getPlan" | "reveal" | "surrender" | "claimTimeout" | "cancelGame">;
   return { config, rpc: null, wallet, realm } as unknown as Chain;
 }
 

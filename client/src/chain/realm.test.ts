@@ -84,6 +84,21 @@ describe("RealmClient.send", () => {
 });
 
 describe("RealmClient reads", () => {
+  it("reads a game's turns one per query, each once", async () => {
+    const asked: string[] = [];
+    const turn = (n: number) => JSON.stringify({ turn: n, seed: "", cards: [], plans: [], events: [], start: [], ground: [] });
+    const rpc = fakeRpc((path) => {
+      asked.push(path);
+      return turn(Number(path.split("/").pop()));
+    });
+    const realm = new RealmClient(rpc, fakeWallet(async () => ({ hash: "h" })), PKG);
+    expect((await realm.getTurns("0000001", 3)).map((t) => t.turn)).toEqual([1, 2, 3]);
+    expect(asked.sort()).toEqual(["json/history/0000001/1", "json/history/0000001/2", "json/history/0000001/3"]);
+    // A resolved turn never changes: the next replay reads only the new one.
+    await realm.getTurns("0000001", 4);
+    expect(asked).toHaveLength(4);
+  });
+
   it("reads the games from the game realm and the profiles from the profiles realm", async () => {
     const PROFILES = "gno.land/r/x/gnoslinger/profiles/v0";
     const asked: string[] = [];

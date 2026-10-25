@@ -288,13 +288,11 @@ export function parsePlanView(json: string): PlanView {
   return v as unknown as PlanView;
 }
 
-export function parseHistoryView(json: string): HistoryView {
-  const v: unknown = JSON.parse(json);
-  if (!isRecord(v) || typeof v.id !== "string" || !Array.isArray(v.players) || !Array.isArray(v.turns)) bad("history");
-  for (const t of v.turns) {
-    if (!isRecord(t) || typeof t.turn !== "number" || !Array.isArray(t.events) || !Array.isArray(t.start) || !Array.isArray(t.ground)) bad("turn");
-  }
-  return v as unknown as HistoryView;
+/** A resolved turn, as json/history/{id}/{turn} serves it (and json/game its last one). */
+export function parseTurn(json: string): TurnResult {
+  const t: unknown = JSON.parse(json);
+  if (!isRecord(t) || typeof t.turn !== "number" || !Array.isArray(t.events) || !Array.isArray(t.start) || !Array.isArray(t.ground)) bad("turn");
+  return t as unknown as TurnResult;
 }
 
 export function parseGamesView(json: string): GamesView {

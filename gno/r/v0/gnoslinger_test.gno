@@ -333,7 +333,11 @@ func TestCommitAndReveal(cur realm, t *testing.T) {
 	uassert.True(t, strings.Contains(h, `"turns":[{"turn":1,`), h)
 	uassert.True(t, strings.Contains(h, `},{"turn":2,`), h)
 	uassert.True(t, strings.Contains(h, `"start":[{"hex":"A-D7","facing":3,"down":false,"delay":0,"status":"alive","aim":0,"aimAt":-1,"aimHex":"","endurance":20,"serious":0,"gunArm":0,"otherArm":0,"leg":0,"guns":[{"id":1,"type":"colt45","name":"Colt 45","location":"holstered","cocked":false,"shells":6,"capacity":6,"jammed":false,"exploded":false}]},{"hex":"A-H7","facing":0,"down":true,"delay":0,"status":"alive","aim":0,"aimAt":-1,"aimHex":"","endurance":20,"serious":0,"gunArm":0,"otherArm":0,"leg":0,"guns":[{"id":1,"type":"colt45","name":"Colt 45","location":"holstered","cocked":false,"shells":6,"capacity":6,"jammed":false,"exploded":false}]}],"ground":[]}`), h)
-	uassert.Equal(t, h, Render("json/history/"+id))
+	// The replays read a turn per query.
+	uassert.True(t, strings.Contains(h, TurnJSON(id, 1)+","+TurnJSON(id, 2)), h)
+	uassert.Equal(t, TurnJSON(id, 2), Render("json/history/"+id+"/2"))
+	uassert.PanicsWithMessage(t, cur, "gnoslinger: turn 3 is not resolved", func() { TurnJSON(id, 3) })
+	uassert.PanicsWithMessage(t, cur, "gnoslinger: turn 0 is not resolved", func() { TurnJSON(id, 0) })
 	uassert.True(t, strings.Contains(js, `{"seg":2,"p":0,"kind":"move","action":"advance","from":"A-D5","to":"A-D6","facing":3,"down":false,"n":0,"delay":0,"reason":"","card":0,"result":"","endurance":0,"target":0,"hit":"","range":0,"gun":"","gunId":0,"step":3,"chart":"","status":""}`), js)
 	uassert.True(t, strings.Contains(js, `{"seg":3,"p":1,"kind":"flip","action":"get_up_down","from":"","to":"","facing":0,"down":true,"n":0,"delay":0,"reason":"","card":0,"result":"","endurance":0,"target":0,"hit":"","range":0,"gun":"","gunId":0,"step":4,"chart":"","status":""}`), js)
 	uassert.True(t, strings.Contains(js, `"hex":"A-H7","facing":0,"down":true`), js)
