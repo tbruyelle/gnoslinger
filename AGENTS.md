@@ -671,7 +671,7 @@ calls; `testing.SkipHeights(n)` advances block time 5 s per height.
 - `LobbyScene`: splash screen as in the Design canvas (the cover framed like
   a card in a double-ruled page, the tagline, **Connect with Adena**, the
   Avalon Hill credit), animated (intro, slow zoom, blowing dust, gun smoke;
-  Connect with Adena fires a gunshot; the western music,
+  Connect with Adena fires a gunshot, always `gunshot1.wav`; the western music,
   `sounds/music-splash.mp3`, then plays once in the lobby, fading out when a game
   opens or on Quit; switched off for now by `MUSIC_ENABLED`); `BootScene` waits up to 2 s for the
   web fonts first, since Phaser draws a text once. A game handing back

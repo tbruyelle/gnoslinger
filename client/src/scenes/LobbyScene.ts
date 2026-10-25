@@ -235,10 +235,10 @@ export class LobbyScene extends Phaser.Scene {
     this.load.start();
   }
 
-  /** A random gunshot, if one is loaded yet. */
+  /** The splash's gunshot, always gunshot1.wav, if it is loaded yet. */
   private playGunshot() {
-    const keys = SOUND_FILES.gunshot.map((_, i) => soundKey("gunshot", i)).filter((k) => this.cache.audio.exists(k));
-    if (keys.length > 0) this.sound.play(Phaser.Utils.Array.GetRandom(keys), { volume: SOUND_VOLUME.gunshot });
+    const key = soundKey("gunshot", SOUND_FILES.gunshot.indexOf("gunshot1.wav"));
+    if (this.cache.audio.exists(key)) this.sound.play(key, { volume: SOUND_VOLUME.gunshot });
   }
 
   /** Forgets the connection in the app (Adena itself stays connected to the site) and shows the splash again. */
