@@ -155,7 +155,7 @@ boxes are only sight anchors.
      `shapes` stay as they are; the boxes and polygons are not emitted.
    - Run `make gen-board`; existing tests stay green.
 
-2. **Hex package: the sight rule** (`gno.land/p/tbruyelle/gnoslinger/hex/v0`),
+2. **Hex package: the sight rule** (`gno.land/p/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/hex/v0`),
    in a new `sight.gno`; `geom.gno` is untouched: `InAimZone` (8.32, hex
    rows from the axial coordinates) is not affected by the trough or the
    printed coordinates, and rule 31.21 (a target out of the aim zone has
@@ -216,7 +216,7 @@ boxes are only sight anchors.
        held with the markers kept on the hex; at an empty hex it is held as
        before (`nothing`, `empty_hex`).
 
-4. **Realm** (`r/tbruyelle/gnoslinger/v0`): a test with a `no_los` cancel
+4. **Realm** (`r/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/v0`): a test with a `no_los` cancel
    and a `no_los` held shot in its output, the gnoweb log wording in
    `render.gno` ("no line of sight" rather than "no los"), and a line on
    the help page. `make test`, `make lint`.

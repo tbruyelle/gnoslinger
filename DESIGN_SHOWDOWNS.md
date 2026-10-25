@@ -42,7 +42,7 @@ keyed by mode.
 ## Layout
 
 ```
-gno.land/p/tbruyelle/gnoslinger/
+gno.land/p/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/
   hex/v0                boards, adjacency (multi-board layouts later)
   cards/v0              action cards
   engine/v0             rules for N players: State.Chars []Character, plans
@@ -54,7 +54,7 @@ gno.land/p/tbruyelle/gnoslinger/
                         character a side of its own (v1: up to 8 seats)
   showdowns/corral/v0   teams, the OK Corral scenario
 
-gno.land/r/tbruyelle/gnoslinger/v0
+gno.land/r/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/v0
                         the only realm: registry, games (seats, phases, plan
                         collection, timeouts, Rev, turn history), lobby,
                         profiles, leaderboard, JSON views
@@ -63,7 +63,7 @@ gno.land/r/tbruyelle/gnoslinger/v0
 ## The contract
 
 ```go
-// p/tbruyelle/gnoslinger/showdown/v0
+// p/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/showdown/v0
 type Showdown interface {
     Info() Info // name, min/max players, teams, boards
     Setup(seats []Seat) engine.State
@@ -85,8 +85,8 @@ package):
 package main
 
 import (
-    gnoslinger "gno.land/r/tbruyelle/gnoslinger/v0"
-    "gno.land/p/tbruyelle/gnoslinger/showdowns/battleroyale/v0"
+    gnoslinger "gno.land/r/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/v0"
+    "gno.land/p/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/showdowns/battleroyale/v0"
 )
 
 func main() { gnoslinger.Register(cross, "battleroyale/v0", battleroyale.Showdown{}) }
@@ -95,7 +95,7 @@ func main() { gnoslinger.Register(cross, "battleroyale/v0", battleroyale.Showdow
 Who may register depends on where the showdown's code lives:
 
 - **The project's own showdowns**, packages under
-  `gno.land/p/tbruyelle/gnoslinger/showdowns/`: anyone, no admin. Deploying
+  `gno.land/p/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/showdowns/`: anyone, no admin. Deploying
   under that namespace already takes its owner, so the code is trusted.
 - **Any other package**: the admin only (later GovDAO or a multisig), after
   reviewing it.

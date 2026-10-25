@@ -1,0 +1,285 @@
+package engine
+
+import (
+	"strings"
+	"testing"
+
+	"gno.land/p/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/cards/v0"
+	"gno.land/p/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/hex/v0"
+)
+
+func mustPlan(t *testing.T, s string) Plan {
+	t.Helper()
+	p, err := ParsePlan(s)
+	if err != nil {
+		t.Fatalf("ParsePlan(%q): %v", s, err)
+	}
+	return p
+}
+
+func TestParsePlanRoundTrip(t *testing.T) {
+	for _, s := range []string{
+		"",
+		"1f:ahead_left",
+		"1f:ahead_left,2f:ahead,3f",
+		"4b",
+		"1b:back_right,3b:ahead",
+		"12b",
+		"5b,3b:ahead_right,4b",
+		"9f:1:0",
+		"9f:12:2",
+		"9f:g3:0",
+		"5f:cock",
+		"6f:aim:A-F6,7f:shoot:@1",
+		"5f:aim:@1",
+		"7f",
+		"9f:1:0,7f:shoot:@1",
+		"6b",
+		"6b:throw:@1",
+		"6b:throw:A-F6",
+		"7b:damage,6b:throw:@1",
+		"7b:wield,6b:throw:A-F6",
+	} {
+		p := mustPlan(t, s)
+		if got := p.String(); got != s {
+			t.Errorf("ParsePlan(%q).String() = %q", s, got)
+		}
+	}
+	p := mustPlan(t, "1f:ahead_left,2f:ahead,3f")
+	want := Plan{
+		{Card: 1, Side: 'f', Code: cards.Advance, Cost: 2, Dir: hex.AheadLeft, Hand: -1, Target: -1},
+		{Card: 2, Side: 'f', Code: cards.Run, Cost: 1, Dir: hex.Ahead, Hand: -1, Target: -1},
+		{Card: 3, Side: 'f', Code: cards.Sprint, Cost: 1, Hand: -1, Target: -1},
+	}
+	if len(p) != len(want) {
+		t.Fatalf("got %d actions", len(p))
+	}
+	for i := range want {
+		if !sameAction(p[i], want[i]) {
+			t.Errorf("action %d = %+v, want %+v", i, p[i], want[i])
+		}
+	}
+	if p.Cost() != 4 {
+		t.Errorf("Cost() = %d", p.Cost())
+	}
+	if !p.Has(cards.Run) || p.Has(cards.Turn) {
+		t.Error("Has is wrong")
+	}
+	if !p.PlayedFoot() || mustPlan(t, "").PlayedFoot() {
+		t.Error("PlayedFoot is wrong")
+	}
+}
+
+func TestParsePlanRejects(t *testing.T) {
+	for _, s := range []string{
+		"13f", "0f", "-1f", "1x", "1F", "f", "1", "1f:", ":ahead",
+		"1f:north", "1f:straight_ahead", "1f:Ahead",
+		"1f,2f,3f,4f,5f,6f", // six entries
+		"1f,", ",1f", "1f,,2f", "1f, 2f", " 1f", "1f ",
+		"1f:ahead:ahead", "9f:1", "9f:0:0", "9f:-1:0", "9f:ahead", "1f:0", "9f:1:3", "9f:1:x", "9f:1:0:0", "9f:g0:0", "9f:gx:0", "9f:g:0", "9f:g1",
+		"5f", "5f:nothing", "5f:ahead", "5f:fire", "7f:aim", "7f:cock", "7f:ahead", "6f:1:0", "1f:shoot",
+		"6b:throw", "6b:shoot:@1", "6b:aim:@1", "6b:throw:@4", "6b:nothing:@1", "7b:aim", "7b:damage:2", "7b:wield:@1",
+		"5f:aim", "5f:aim:", "5f:aim:a-f6", "5f:aim:A-F6:x", "5f:cock:A-F6", "5f:aim:@4", "5f:aim:@-1", "5f:aim:@x", "5f:aim:@", "7f:shoot", "5f:shoot", "7f:shoot:", "7f:shoot:@4",
+		strings.Repeat("1f,", 60),
+	} {
+		if p, err := ParsePlan(s); err == nil {
+			t.Errorf("ParsePlan(%q) accepted: %v", s, p)
+		}
+	}
+}
+
+func TestValidate(t *testing.T) {
+	tests := []struct {
+		plan  string
+		delay int
+		err   string // "" for a valid plan, else a substring of the error
+	}{
+		{"", 0, ""},
+		{"1f:ahead,2f:ahead_left,3f", 0, ""},
+		{"1b:back_left,3b:ahead", 0, ""},
+		{"5b,3b:ahead_right,4b", 0, ""},
+		{"2b:back,3b:ahead_left", 0, ""},
+		{"1f:ahead,1b:back", 0, "both sides"},
+		{"3f,3f", 0, "both sides"},
+		{"1b:back,5b", 0, "more time points"},
+		{"1f:ahead,3b:ahead,4b", 2, "more time points"},
+		{"1f:ahead,3b:ahead", 2, ""},
+		{"4b", 5, "more time points"},
+		{"2f:ahead", 0, "together with advance"},
+		{"1f:ahead,3f", 0, "together with run"},
+		{"1f:ahead,2f:ahead,3f,4f", 0, ""},
+		{"1f", 0, "forward direction"},
+		{"1f:back", 0, "forward direction"},
+		{"3b:back_left", 0, "forward direction"},
+		{"1b:ahead", 0, "backward direction"},
+		{"1b", 0, "backward direction"},
+		{"2b:ahead_right", 0, "backward direction"},
+		{"3f:ahead", 0, "takes no direction"},
+		{"4b:back", 0, "takes no direction"},
+		{"8f", 0, ""},
+		{"8b", 0, "not available"},
+		{"10f", 0, "not available"},
+		{"6b", 0, ""},
+		{"6b:throw:@1", 0, ""},
+		{"7b,6b:throw:@1", 0, ""},
+		{"7b:wield,6b:throw:A-F6", 0, ""},
+		{"7b", 0, "just before a throw"},
+		{"6b:throw:@1,7b", 0, "just before a throw"},
+		{"7b,1f:ahead,6b:throw:@1", 0, "just before a throw"},
+		{"7b,6b:throw:@1,7f", 0, "both sides"},
+		{"7b,6b:throw:@1", 2, "more time points"},
+		{"12b", 0, "not available"},
+		{"5f:cock", 0, ""},
+		{"5f:uncock", 0, ""},
+		{"5f:aim:A-F6,6f:aim:A-F7", 0, ""},
+		{"5f:aim:@1", 0, ""},
+		{"7f", 0, ""},
+		{"7f:shoot:@1", 0, ""},
+		{"9f:1:0,7f:shoot:@1", 0, ""},
+		{"9f:1:0,5f:shoot:@1", 0, ""},
+		{"9f:1:0,5f:shoot:@1,7f:shoot:@1", 0, "more time points"},
+		{"5f:aim:A-F6,6f:aim:A-F6,7f:shoot:@1", 1, "more time points"},
+		{"9f", 0, "choose the gun"},
+		{"9f:2:0", 0, "no such gun"},
+		{"9f:1:1", 0, "only the gun hand or both hands"},
+		{"9f:1:2", 0, ""},
+		{"9f:1:0", 0, ""},
+		{"1f:ahead,9f:1:0", 0, ""},
+		{"9f:g1:0", 0, ""},
+		{"9f:g1:1", 0, "only the gun hand or both hands"},
+		{"1f:ahead,2f:ahead,3f,4b,9f:g1:0", 0, "more time points"},
+	}
+	for _, tt := range tests {
+		p := mustPlan(t, tt.plan)
+		err := p.Validate(Character{Delay: tt.delay, RanLastTurn: true, Guns: startingGuns()})
+		switch {
+		case tt.err == "" && err != nil:
+			t.Errorf("Validate(%q, delay %d) = %v, want ok", tt.plan, tt.delay, err)
+		case tt.err != "" && err == nil:
+			t.Errorf("Validate(%q, delay %d) = ok, want %q", tt.plan, tt.delay, tt.err)
+		case tt.err != "" && !strings.Contains(err.Error(), tt.err):
+			t.Errorf("Validate(%q, delay %d) = %v, want %q", tt.plan, tt.delay, err, tt.err)
+		}
+	}
+}
+
+func TestValidateSprintNeedsRunOnPreviousTurn(t *testing.T) {
+	fresh := Character{}
+	if err := mustPlan(t, "1f:ahead,2f:ahead,3f").Validate(fresh); err == nil || !strings.Contains(err.Error(), "previous turn") {
+		t.Errorf("sprint without a run last turn: %v", err)
+	}
+	if err := mustPlan(t, "1f:ahead,2f:ahead").Validate(fresh); err != nil {
+		t.Errorf("run without sprint should be fine: %v", err)
+	}
+	if err := mustPlan(t, "1f:ahead,2f:ahead,3f,4f").Validate(Character{RanLastTurn: true}); err != nil {
+		t.Errorf("sprint after a run last turn: %v", err)
+	}
+	// The missing-run-this-turn message comes first.
+	if err := mustPlan(t, "1f:ahead,3f").Validate(fresh); err == nil || !strings.Contains(err.Error(), "together with run") {
+		t.Errorf("sprint without run this turn: %v", err)
+	}
+}
+
+func TestDrawAndCockPlan(t *testing.T) {
+	p := mustPlan(t, "9f:1:0")
+	if p[0].Gun != 1 || p[0].Hand != HandGun || p[0].Dir != "" || p.String() != "9f:1:0" {
+		t.Errorf("parsed %+v, string %q", p[0], p.String())
+	}
+	if d := mustPlan(t, "1f:ahead")[0]; d.Gun != 0 || d.Hand != -1 {
+		t.Error("direction entries have no gun")
+	}
+	// A gun already in the gun hand can move to both hands (to load it),
+	// not to where it already is.
+	c := Character{Guns: startingGuns()}
+	c.Guns[0].Location = GunHand
+	if err := p.Validate(c); err == nil || !strings.Contains(err.Error(), "already there") {
+		t.Errorf("drawing a gun already in hand: %v", err)
+	}
+	if err := mustPlan(t, "9f:1:2").Validate(c); err != nil {
+		t.Errorf("gun hand to both hands: %v", err)
+	}
+	c.Guns[0].Location = BothHands
+	if err := p.Validate(c); err != nil {
+		t.Errorf("both hands to gun hand: %v", err)
+	}
+	c.Guns[0].Location = GunHand
+	// A second holstered gun cannot be drawn while the hand is busy.
+	c.Guns[1] = Gun{ID: c.Guns.NextID(), Type: Colt45, Location: Holstered, Shells: 6}
+	if c.Guns[1].ID != 2 || c.Guns.Find(2) != 1 || c.Guns.Find(9) != -1 {
+		t.Errorf("ids: %+v", c.Guns)
+	}
+	if err := mustPlan(t, "9f:2:0").Validate(c); err == nil || !strings.Contains(err.Error(), "already holds") {
+		t.Errorf("drawing with a full hand: %v", err)
+	}
+	// A gun in both hands takes both hands.
+	c.Guns[0].Location = BothHands
+	if err := mustPlan(t, "9f:2:0").Validate(c); err == nil || !strings.Contains(err.Error(), "already holds") {
+		t.Errorf("drawing while both hands hold a gun: %v", err)
+	}
+	// A direction card given a slot token is a parse error.
+	if _, err := ParsePlan("3b:0"); err == nil || !strings.Contains(err.Error(), "invalid direction") {
+		t.Errorf("expected a parse error: %v", err)
+	}
+}
+
+// sameAction compares two actions, their gun moves included.
+func sameAction(a, b Action) bool {
+	if len(a.Moves) != len(b.Moves) {
+		return false
+	}
+	for i := range a.Moves {
+		if a.Moves[i] != b.Moves[i] {
+			return false
+		}
+	}
+	a.Moves, b.Moves = nil, nil
+	return a.Card == b.Card && a.Side == b.Side && a.Code == b.Code && a.Cost == b.Cost && a.Dir == b.Dir &&
+		a.Gun == b.Gun && a.Ground == b.Ground && a.Hand == b.Hand && a.Opt == b.Opt && a.Hex == b.Hex && a.Target == b.Target
+}
+
+func TestGunMovePlan(t *testing.T) {
+	// Gun moves come before their action, in the string as in the plan.
+	p := mustPlan(t, "h1:g,1f:ahead,h2:1,h3:0,5f:aim:@1")
+	if len(p) != 2 || len(p[0].Moves) != 1 || p[0].Moves[0] != (GunMove{Gun: 1, To: HandGround}) ||
+		len(p[1].Moves) != 2 || p[1].Moves[0] != (GunMove{Gun: 2, To: HandOther}) || p[1].Moves[1] != (GunMove{Gun: 3, To: HandGun}) {
+		t.Fatalf("plan = %+v", p)
+	}
+	if got := p.String(); got != "h1:g,1f:ahead,h2:1,h3:0,5f:aim:@1" {
+		t.Errorf("String() = %q", got)
+	}
+	if p.Cost() != 4 {
+		t.Errorf("Cost() = %d: a gun move is free", p.Cost())
+	}
+	// They are not actions: five actions and moves fit.
+	mustPlan(t, "h1:g,3b:ahead_left,4b,7f,10b,2b")
+	for _, bad := range []string{"1f:ahead,h1:g", "h1:g", "h0:g", "hx:g", "h1:2", "h1", "h1:g:0", "h1:g,h1:g,h1:g,h1:g,1f:ahead"} {
+		if _, err := ParsePlan(bad); err == nil {
+			t.Errorf("ParsePlan(%q) accepted", bad)
+		}
+	}
+	// The gun need not be on the sheet yet: a gun picked up earlier in the
+	// plan gets the sheet's next id.
+	c := newCharacter()
+	if err := mustPlan(t, "h2:g,1f:ahead").Validate(c); err != nil {
+		t.Errorf("Validate: %v", err)
+	}
+	// The other hand comes with a second gun.
+	if err := mustPlan(t, "h1:1,1f:ahead").Validate(c); err == nil {
+		t.Error("a move to the other hand was accepted")
+	}
+}
+
+func TestStrengthDefaultsToDamageAndCombines(t *testing.T) {
+	p := mustPlan(t, "7b,6b:throw:@1")
+	if p[0].Opt != OptDamage || p.String() != "7b:damage,6b:throw:@1" {
+		t.Errorf("bare strength = %+v, %q", p[0], p.String())
+	}
+	c := mustPlan(t, "1f:ahead,h1:g,7b:wield,6b:throw:@1,7f").Combine()
+	if len(c) != 3 || c[1].Code != cards.Throw || c[1].Cost != 4 || c[1].Wield != StrengthWield || c[1].Damage != 0 ||
+		len(c[1].Moves) != 1 || c[1].Moves[0].To != HandGround || c[2].Code != cards.Shoot {
+		t.Errorf("combined = %+v", c)
+	}
+	if c := mustPlan(t, "7b:damage,6b").Combine(); len(c) != 1 || c[0].Damage != StrengthDamage || c[0].Cost != 4 {
+		t.Errorf("combined = %+v", c)
+	}
+}

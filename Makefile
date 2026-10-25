@@ -7,7 +7,7 @@ ifdef GNOROOT
 	GNOROOT = $(shell go list -f '{{.Module.Dir}}' github.com/gnolang/gno)
 endif
 
-REALM := gno.land/r/tbruyelle/gnoslinger/v0
+REALM := gno.land/r/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/v0
 
 # Adena account addresses to premine on the local chain, space separated:
 #   ADENA_ADDRS="g1... g1..." make gnodev
@@ -57,7 +57,7 @@ gen-board:
 
 # The tutorial's showdown, played by the realm (filetest z16), for the client.
 gen-tutorial:
-	go tool gno test -run ./gno.land/r/tbruyelle/gnoslinger/v0/z16_ -update-golden-tests ./gno.land/r/tbruyelle/gnoslinger/v0/
+	go tool gno test -run ./gno.land/r/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/v0/z16_ -update-golden-tests ./gno.land/r/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/v0/
 	python3 scripts/gen_tutorial.py
 
 # --- Gno module cache ---

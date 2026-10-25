@@ -35,7 +35,7 @@ export class RealmClient {
     readonly rpc: Rpc,
     readonly wallet: Wallet,
     readonly pkgPath: string,
-    readonly profilesPath = "gno.land/r/tbruyelle/gnoslinger/profiles/v0",
+    readonly profilesPath = "gno.land/r/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/profiles/v0",
   ) {}
 
   async getGame(id: string): Promise<GameView> {

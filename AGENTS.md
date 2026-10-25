@@ -28,7 +28,7 @@ come later.
 
 ## Tech Stack
 
-- **Realm**: Gno (`gno.land/{p,r}/tbruyelle/gnoslinger/...`), pinned gno
+- **Realm**: Gno (`gno.land/{p,r}/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/...`), pinned gno
   toolchain through `go.mod` + `go tool` (like `~/src/aibgno`).
 - **Client**: TypeScript + Phaser 3 + Vite (port 5173), tests with vitest,
   wallet through the injected `window.adena` API.
@@ -70,22 +70,22 @@ standalone binary: `go.mod` pins the gno commit the realm is written against.
 
 Run one Gno package or test:
 ```bash
-go tool gno test -v ./gno.land/p/tbruyelle/gnoslinger/engine/v0
-go tool gno test -run TestResolve_Seg5Cancel ./gno.land/p/tbruyelle/gnoslinger/engine/v0
+go tool gno test -v ./gno.land/p/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/engine/v0
+go tool gno test -run TestResolve_Seg5Cancel ./gno.land/p/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/engine/v0
 # a filetest needs its full path in -run (without the filetests/ directory):
-go tool gno test -run ./gno.land/r/tbruyelle/gnoslinger/v0/z2_ ./gno.land/r/tbruyelle/gnoslinger/v0/
-go tool gno test -update-golden-tests ./gno.land/r/tbruyelle/gnoslinger/v0/   # refresh // Output: and // Events:
+go tool gno test -run ./gno.land/r/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/v0/z2_ ./gno.land/r/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/v0/
+go tool gno test -update-golden-tests ./gno.land/r/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/v0/   # refresh // Output: and // Events:
 ```
 
 ## Layout
 
 ```
 gno.land/
-  p/tbruyelle/gnoslinger/hex/v0      directions, relative directions, Board adjacency + axial coords + fenced hexsides + obstacles + the between table, range, aim zone, line of sight (sight.gno; board_a.gno is generated)
-  p/tbruyelle/gnoslinger/cards/v0    the 12 action cards (24 sides), Enabled() = implemented actions
-  p/tbruyelle/gnoslinger/engine/v0   pure rules engine: set up (setup.gno), plan DSL + validation, Resolve, EndTurn, result deck (deck.gno, fire.gno), impact table, sight heights (sight.gno)
-  r/tbruyelle/gnoslinger/v0          the realm: games, lobby, Commit/Reveal/RevealMany, JSON views, Render, filetests/
-  r/tbruyelle/gnoslinger/profiles/v0 the players' profiles and ranking, kept across game versions; written only by the allowed game realms
+  p/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/hex/v0      directions, relative directions, Board adjacency + axial coords + fenced hexsides + obstacles + the between table, range, aim zone, line of sight (sight.gno; board_a.gno is generated)
+  p/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/cards/v0    the 12 action cards (24 sides), Enabled() = implemented actions
+  p/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/engine/v0   pure rules engine: set up (setup.gno), plan DSL + validation, Resolve, EndTurn, result deck (deck.gno, fire.gno), impact table, sight heights (sight.gno)
+  r/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/v0          the realm: games, lobby, Commit/Reveal/RevealMany, JSON views, Render, filetests/
+  r/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/profiles/v0 the players' profiles and ranking, kept across game versions; written only by the allowed game realms
 client/src/
   chain/      rpc.ts (abci_query/status/tx/broadcast), adena.ts (wallet), session.ts (session key wallet), tx.ts (sign + encode a call), realm.ts (typed calls), poller.ts, types.ts
   rules/      cards.ts, facing.ts, sight.ts (pure card data, facing math, sight heights; mirrors the Gno packages)
@@ -206,7 +206,7 @@ waiting game has `"addr":""` and `"hex":""` in the JSON. The client
 mirrors the table in `game/setup.ts` (`SETUPS`, `MIN_PLAYERS`,
 `MAX_PLAYERS`, `seatChar`, `nextSeat`, `setupZone`, `defaultFacing`).
 
-### Profiles (`r/tbruyelle/gnoslinger/profiles/v0`)
+### Profiles (`r/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/profiles/v0`)
 The profiles live in a realm of their own so that a new version of the game
 realm (new rules, `gnoslinger/v1`) keeps the scores. Each address that
 creates or joins a game gets a `Profile{Addr, GamesPlayed, VictoryPoints,
@@ -219,7 +219,7 @@ the crossing functions `Ensure`, `AddGamePlayed` and `AddVictoryPoints`
 (`profiles.X(cross(cur), ...)`; that is why `autoPass`, `resolveTurn` and
 `Game.award` take the crossing call's `cur`), which panic unless the calling
 realm (`cur.Previous().PkgPath()`) is on the allowlist (`games`; `init`
-allows `gno.land/r/tbruyelle/gnoslinger/v0`). The admin, the deployer at
+allows `gno.land/r/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/v0`). The admin, the deployer at
 first (`unsafe.OriginCaller()`; test1 on gnodev), manages it: `Allow(pkgPath)`
 when a new game version is deployed, `Disallow(pkgPath)` to stop scoring an
 old one (its CreateGame, JoinGame and resolving reveal then panic),
@@ -887,9 +887,9 @@ Clicking a token opens the **character
 3. Each account picks cards and sends its plan (a commit; the last one in
    clear), the committed plans are then revealed (by themselves with
    auto-sign on, else with REVEAL) and the last reveal resolves the turn, every tab replays it, positions match
-   `go tool gnokey query vm/qrender -remote 127.0.0.1:26657 -data 'gno.land/r/tbruyelle/gnoslinger/v0:json/game/0000001'`.
-4. CLI alternative: `go tool gnokey maketx call -pkgpath gno.land/r/tbruyelle/gnoslinger/v0 -func Commit -args 0000001 -args <hash> -args "" -gas-fee 1000000ugnot -gas-wanted 100000000 -broadcast -chainid dev -remote 127.0.0.1:26657 <key>`
-   with the hash from `go tool gnokey query vm/qeval -remote 127.0.0.1:26657 -data 'gno.land/r/tbruyelle/gnoslinger/v0.PlanHash("0000001",1,0,"a1","1f:ahead")'`,
+   `go tool gnokey query vm/qrender -remote 127.0.0.1:26657 -data 'gno.land/r/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/v0:json/game/0000001'`.
+4. CLI alternative: `go tool gnokey maketx call -pkgpath gno.land/r/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/v0 -func Commit -args 0000001 -args <hash> -args "" -gas-fee 1000000ugnot -gas-wanted 100000000 -broadcast -chainid dev -remote 127.0.0.1:26657 <key>`
+   with the hash from `go tool gnokey query vm/qeval -remote 127.0.0.1:26657 -data 'gno.land/r/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/v0.PlanHash("0000001",1,0,"a1","1f:ahead")'`,
    then the last player `-func Reveal -args 0000001 -args 1 -args 1 -args b1 -args "1f:ahead"` (in clear) and anyone `-func Reveal -args 0000001 -args 1 -args 0 -args a1 -args "1f:ahead"`
    (`CreateGame -args 3 -args 20 -args 0 -args A-D6 -args 2`, `JoinGame
    -args 0000001 -args A-H6 -args 5`). A second gnodev for such a run,

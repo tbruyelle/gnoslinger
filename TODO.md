@@ -11,7 +11,6 @@
 ## General
 - address showdown by url & turn by num
 - remove unused assets
-- Replace the tbruyelle realm to sthing else
 - upgrade architecture
   - DESIGN_SHOWDOWN
 

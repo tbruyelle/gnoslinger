@@ -1,4 +1,4 @@
-/** Mirrors of the realm's JSON views (see gno.land/r/tbruyelle/gnoslinger/v0/json.gno). */
+/** Mirrors of the realm's JSON views (see gno.land/r/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/v0/json.gno). */
 
 /** planning: the plans are committed (hidden); revealing: every plan is committed, the reveals come in. */
 export type Phase = "waiting" | "planning" | "revealing" | "finished";
