@@ -9,7 +9,7 @@
 - add report bug button
 
 ## General
-- check albertx/drand, how this can be used ?
+- check albttx/drand, how this can be used ?
   - github.com/albttx/gno-drand (prototype, upstreamed in gnolang/gno#6268,
     still open on 2026-10-25, becomes gno.land/{p,r}/drand/v0; nothing on
     Onyx yet): on-chain verifiable randomness from drand's evmnet (BLS on
@@ -28,6 +28,23 @@
   - wait for gnolang/gno#6268 to land and p/drand to be on the chain
 - remove unused assets
 - use clockwork/wire for codec
+  - github.com/clockworkgr/gno-upgradeable, gno.land/p/clockwork/wire/v0:
+    a binary codec, values end to end, numbers as varints, strings
+    length-prefixed, the reader's call order as the schema; decoding cuts
+    each field out instead of scanning bytes (strings.Split, atoi)
+  - cannot be used as is: no LICENSE in the repo (all rights reserved),
+    and not on Onyx (no wire path under any namespace on 2026-10-25; the
+    author's g1lnkytfqcjwllws63gvf0mv9yt04aswy4y9amhm has upgradeable/v0)
+  - measured on game 1's turn 1 events (17), same 22 fields, vs our text
+    codec: decode 24.8M -> 7.4M gas (-70%), encode 14.9M -> 4.9M (-67%),
+    870 -> 658 bytes (-24%; an empty field still costs a byte)
+  - plan (B): our own codec on the same idea, a presence mask (one varint)
+    so only the fields set are written; for EventsEnc, StartEnc, CardsEnc
+    (no version byte needed: nothing deployed, no old records to read)
+  - gain now modest: the turn records' encoding is ~27M of a heavy 4-seat
+    resolving reveal (94.5M), so ~18M less, ~0.04 GNOT of fee and ~0.05 of
+    deposit per turn; the history is read a turn per query, no more near
+    the query gas ceiling: not urgent
 - upgrade architecture
   - DESIGN_SHOWDOWN
 
