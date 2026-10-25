@@ -3326,8 +3326,14 @@ export class GameScene extends Phaser.Scene {
     if (live) saveSeenTurn(this.revealScope(), this.gameID, this.chain.wallet.address, this.view?.createdAt ?? 0, turns[turns.length - 1].turn);
     this.hideAimZone();
     this.mode = "playback";
-    this.refreshTokens(true);
-    this.renderView();
+    // The tokens stand where the turn began at once (the board may show a
+    // later state, opened from the lobby); then the turn start plays as a
+    // step, its events (SERIOUS bleeding, an aim lost on the first reveal)
+    // animated.
+    const first = turns[index].events.findIndex((e) => e.seg === 0);
+    this.playback.cut = first >= 0 ? first : null;
+    this.refreshTokens(false);
+    this.stepTo({ index, seg: 0 }, { stepwise: true });
   }
 
   /**
