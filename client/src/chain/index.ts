@@ -1,5 +1,5 @@
 import { CONFIG, type ChainConfig } from "../config";
-import { connectWallet, type Wallet } from "./adena";
+import { adenaConnected, connectWallet, type Wallet } from "./adena";
 import { ChainError } from "./errors";
 import { RealmClient } from "./realm";
 import { Rpc } from "./rpc";
@@ -22,6 +22,20 @@ export async function initChain(cfg: ChainConfig = CONFIG): Promise<Chain> {
   await wallet.refresh();
   chain = { config: cfg, rpc, wallet, realm: new RealmClient(rpc, wallet, cfg.realmPath, cfg.profilesPath) };
   return chain;
+}
+
+/**
+ * Connects the wallet when that needs no popup, Adena having this site
+ * connected already (a page reloaded, a link opened by a player): the
+ * chain shared by the scenes, else null.
+ */
+export async function connectIfAllowed(cfg: ChainConfig = CONFIG): Promise<Chain | null> {
+  if (!(await adenaConnected())) return null;
+  try {
+    return await initChain(cfg);
+  } catch {
+    return null;
+  }
 }
 
 /**

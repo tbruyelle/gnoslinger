@@ -1,5 +1,7 @@
 import Phaser from "phaser";
+import { connectIfAllowed } from "../chain";
 import { parseRoute } from "../game/route";
+import { installWalletNotices } from "../ui/walletNotices";
 import { TUTORIAL_HASH } from "../tutorial/tutorial";
 
 /** The longest the boot waits for the web fonts. */
@@ -32,12 +34,14 @@ export class BootScene extends Phaser.Scene {
     void Promise.race([fonts, wait])
       .catch(() => undefined)
       // How to play and the games (game/route.ts) have addresses of their
-      // own, opened with no wallet: a game is watched, read-only.
-      .then(() => {
+      // own: a game opens as its player when Adena has the site connected
+      // already (a page reloaded, say), else with no wallet, watched.
+      .then(async () => {
         const route = parseRoute(location.hash);
-        if (location.hash === TUTORIAL_HASH) this.scene.start("GameScene", { tutorial: true });
-        else if (route) this.scene.start("GameScene", { gameID: route.gameID, turn: route.turn });
-        else this.scene.start("LobbyScene");
+        if (location.hash === TUTORIAL_HASH) return this.scene.start("GameScene", { tutorial: true });
+        if (!route) return this.scene.start("LobbyScene");
+        if (await connectIfAllowed()) installWalletNotices();
+        this.scene.start("GameScene", { gameID: route.gameID, turn: route.turn });
       });
     // The address edited to another game while the app runs: open that one.
     // (The app's own changes, history.replaceState, fire no hashchange.)

@@ -105,6 +105,21 @@ export async function detectAdena(timeoutMs = 1500): Promise<AdenaApi> {
   return window.adena;
 }
 
+/**
+ * Whether Adena is there with this site connected and an account open,
+ * asked without any popup (GetAccount answers NOT_CONNECTED or
+ * WALLET_LOCKED otherwise): then connectWallet needs none either.
+ */
+export async function adenaConnected(): Promise<boolean> {
+  try {
+    const adena = await detectAdena();
+    const acc = await withTimeout(adena.GetAccount(), 3000, "No answer from Adena");
+    return acc.status === "success" && !!acc.data?.address;
+  } catch {
+    return false;
+  }
+}
+
 /** Maps an Adena failure response to a ChainError. */
 export function adenaError(res: AdenaResponse<unknown>, fallback: ChainErrorKind, chainId?: string): ChainError {
   switch (res.type) {

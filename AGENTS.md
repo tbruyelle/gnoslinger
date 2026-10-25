@@ -664,8 +664,12 @@ calls; `testing.SkipHeights(n)` advances block time 5 s per height.
 - Addresses (`game/route.ts`): the page's hash names what is shown, to
   reopen or share it: `#game/<id>` a showdown, `#game/<id>/<turn>` its
   replay on that turn (a short id is padded: `#game/2`), `#how-to-play`
-  the tutorial. A game's address opens with no wallet, to share and watch
-  it: `BootScene` starts `GameScene` straight away (`turn`: the replay on
+  the tutorial. A game's address opens straight on the game: `BootScene`
+  connects the wallet first when that needs no popup (`connectIfAllowed`:
+  Adena has the site connected already, `adenaConnected`; a page reloaded
+  by a code change so stays the player's, following account changes),
+  else opens it with no wallet, to share and watch it. `BootScene` starts
+  `GameScene` (`turn`: the replay on
   that turn once it resolved, the final replay for a finished game; else a
   toast), which reads the chain through `viewerChain()` (`chain/index.ts`:
   no account, signs nothing) whenever no wallet is connected, so the game
