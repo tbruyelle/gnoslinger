@@ -43,12 +43,6 @@ func DecodeEvents(s string) []Event {
 	evs := make([]Event, 0, len(recs))
 	for _, r := range recs {
 		f := strings.Split(r, "|")
-		if len(f) == 19 {
-			f = append(f, "0") // recorded before steps existed: no step
-		}
-		if len(f) == 20 {
-			f = append(f, "", "") // recorded before the chart and Target Status were kept
-		}
 		if len(f) != 22 {
 			continue
 		}
@@ -97,17 +91,9 @@ func perSeat(v [MaxPlayers]int) string {
 	return strings.Join(s, "/")
 }
 
-// seatValues unpacks what perSeat packed. A field without "/" is a record
-// from before the per-seat fields: the one seat it names (NoSeat for
-// none) gets all of legacy.
-func seatValues(f string, legacy int) (out [MaxPlayers]int) {
+// seatValues unpacks what perSeat packed.
+func seatValues(f string) (out [MaxPlayers]int) {
 	if f == "" {
-		return out
-	}
-	if !strings.Contains(f, "/") {
-		if q := atoi(f); q >= 0 && q < MaxPlayers {
-			out[q] = legacy
-		}
 		return out
 	}
 	for i, n := range strings.Split(f, "/") {
@@ -118,17 +104,9 @@ func seatValues(f string, legacy int) (out [MaxPlayers]int) {
 	return out
 }
 
-// DecodeCharacter unpacks what EncodeCharacter produced. A record of the
-// first 18 fields (before the seats were kept: AimAt, KilledBy, SeriousBy,
-// LegBy, Hurt) reads with nobody in them; DecodeChars then puts markers on
-// the opponent back on it. Killers, SeriousFrom and LegFrom were single
-// seats before (KilledBy, SeriousBy, LegBy, the last one to wound): the
-// seat named gets the kill, or all of the SERIOUS or LEG points.
+// DecodeCharacter unpacks what EncodeCharacter produced.
 func DecodeCharacter(s string) Character {
 	f := strings.Split(s, "|")
-	if len(f) == 18 {
-		f = append(f, "-1", "-1", "-1", "-1", "")
-	}
 	if len(f) != 23 {
 		return Character{}
 	}
@@ -139,12 +117,12 @@ func DecodeCharacter(s string) Character {
 		Serious: atoi(f[13]), GunArm: atoi(f[14]), OtherArm: atoi(f[15]), Leg: atoi(f[16]),
 		AimAt: atoi(f[18]),
 	}
-	for q, k := range seatValues(f[19], 1) {
+	for q, k := range seatValues(f[19]) {
 		c.Killers[q] = k != 0
 	}
-	c.SeriousFrom = seatValues(f[20], c.Serious)
-	c.LegFrom = seatValues(f[21], c.Leg)
-	c.Hurt = seatValues(f[22], 0)
+	c.SeriousFrom = seatValues(f[20])
+	c.LegFrom = seatValues(f[21])
+	c.Hurt = seatValues(f[22])
 	if f[17] != "" {
 		for i, rec := range strings.Split(f[17], ",") {
 			g, ok := decodeGun(rec)
@@ -167,8 +145,7 @@ func EncodeChars(cs []Character) string {
 	return strings.Join(parts, ";")
 }
 
-// DecodeChars unpacks what EncodeChars produced. In a record of the two
-// seat days, AIM markers off any hex followed the opponent.
+// DecodeChars unpacks what EncodeChars produced.
 func DecodeChars(s string) []Character {
 	if s == "" {
 		return nil
@@ -177,9 +154,6 @@ func DecodeChars(s string) []Character {
 	cs := make([]Character, len(parts))
 	for i, part := range parts {
 		cs[i] = DecodeCharacter(part)
-		if len(strings.Split(part, "|")) == 18 && cs[i].Aim > 0 && cs[i].AimHex == "" && len(parts) == 2 {
-			cs[i].AimAt = 1 - i
-		}
 	}
 	return cs
 }

@@ -47,7 +47,7 @@ describe("segmentCells", () => {
 describe("turnSegmentCells", () => {
   const ev = (p: Partial<TurnEvent>): TurnEvent => ({
     seg: 0, p: 0, kind: "delay", action: "", from: "", to: "", facing: 0, down: false, n: 0, delay: 0, reason: "",
-    card: 0, result: "", endurance: 0, target: -1, hit: "", range: 0, gun: "", gunId: 0, step: 0, ...p,
+    card: 0, result: "", endurance: 0, target: -1, hit: "", range: 0, gun: "", gunId: 0, step: 0, chart: "", status: "", ...p,
   });
 
   it("reads the seat's delay: turn start, then per segment", () => {

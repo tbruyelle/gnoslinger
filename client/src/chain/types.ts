@@ -17,7 +17,7 @@ export const MAX_SEATS = 4;
 export interface PlayerView {
   addr: string;
   /** Registered name (namereg, in gno.land/r/sys/users), "" if none. */
-  name?: string;
+  name: string;
   char: string;
   /** The hex the character stands in, "" for a seat nobody took yet. */
   hex: string;
@@ -32,7 +32,7 @@ export interface PlayerView {
   /** The seat's plan timelocked to the game's lockRound (tlock), "" once revealed or when its client sent none. */
   locked: string;
   /** Turns in a row the player let time out, each passed for them (MAX_MISSED puts them out); a commit resets it. */
-  missed?: number;
+  missed: number;
   playedFoot: boolean;
   playedRun: boolean;
   /** A Run was played on the previous turn: required to Sprint (rule 9.23). */
@@ -108,13 +108,13 @@ export interface TurnEvent {
   /**
    * The part of the segment the event belongs to, in resolution order:
    * STEP_SHOTS, each seat's action (STEP_ACTION + seat), then STEP_END;
-   * 0 outside the segments and for turns recorded before steps existed.
+   * 0 outside the segments.
    */
   step: number;
   /** A shot's preliminary hit read on the FIRE card's chart, before Target Status ("" when no chart was read). */
-  chart?: string;
+  chart: string;
   /** Target Status letters that changed a shot's hit (M move, R run, D down, H head), "" when none did. */
-  status?: string;
+  status: string;
 }
 
 /** Steps of a segment (engine StepShots, StepEnd, StepAction). */
@@ -150,7 +150,7 @@ export interface HistoryView {
   id: string;
   turn: number;
   phase: Phase;
-  players: { addr: string; name?: string; char: string }[];
+  players: { addr: string; name: string; char: string }[];
   turns: TurnResult[];
 }
 
@@ -171,14 +171,14 @@ export interface GameView {
   winner: number;
   endReason: string;
   /** Victory points per seat, once a played game ended. */
-  vp?: number[];
+  vp: number[];
   /** The victory points earned and lost, per seat (rule 15). */
-  awards?: VPAward[];
+  awards: VPAward[];
   /** Stakes (the realm's stakes.gno), in ugnot: what each player puts in (0: a free showdown), the stakes paid so far, what each seat got once over ([] before), what the house kept. */
-  stake?: number;
-  pot?: number;
-  payouts?: number[];
-  houseCut?: number;
+  stake: number;
+  pot: number;
+  payouts: number[];
+  houseCut: number;
   createdAt: number;
   updatedAt: number;
   /** Unix seconds after which ClaimTimeout succeeds: commitUntil while planning, revealUntil while revealing; 0 otherwise. */
@@ -209,28 +209,28 @@ export interface GameSummary {
   timeout: number;
   /** Seat index of the winner (the most victory points), -1 for none. */
   winner: number;
-  /** "" while running; expired (games from before the join phase lost its timeout), surrender, timeout, abandoned, all_down, max_turns, last_standing. */
+  /** "" while running; surrender, timeout, all_down, max_turns, last_standing (a cancelled game is deleted). */
   endReason: string;
   /** Victory points per seat, once a played game ended. */
-  vp?: number[];
+  vp: number[];
   /** Stakes (the realm's stakes.gno), in ugnot: what each player puts in (0: a free showdown), the stakes paid so far, what each seat got once over ([] before), what the house kept. */
-  stake?: number;
-  pot?: number;
-  payouts?: number[];
-  houseCut?: number;
+  stake: number;
+  pot: number;
+  payouts: number[];
+  houseCut: number;
   createdAt: number;
   updatedAt: number;
   /** Unix seconds after which ClaimTimeout succeeds: the deadline while planning, its grace while revealing; 0 otherwise. */
   timeoutAt: number;
   /** The drand round the turn's plans are timelocked to (0 unless planning or revealing): the lobby opens them from then. */
-  lockRound?: number;
+  lockRound: number;
   /** One entry per seat, addr "" for a seat nobody took yet; committed/revealed: the seat's plan for the turn in progress; name: the registered name, "" if none; status: alive, out, killed or passed_out. */
-  players: { addr: string; name?: string; char: string; status?: PlayerStatus; committed?: boolean; revealed?: boolean }[];
+  players: { addr: string; name: string; char: string; status: PlayerStatus; committed: boolean; revealed: boolean }[];
 }
 
 export interface GamesView {
   /** The registered name of the address listed, "" if none. */
-  name?: string;
+  name: string;
   open: GameSummary[];
   mine: GameSummary[];
 }

@@ -3,7 +3,7 @@ import { END_OF_TURN_SEG, STEP_ACTION, STEP_END, STEP_SHOTS, type GroundGunView,
 import { describeEvent, describeEvents, endOfTurnEvents, eventsForSegment, snapshotAfterSegment, splitSteps, startOfTurn, stepBack, stepForward } from "./playback";
 
 const ev = (partial: Partial<TurnEvent>): TurnEvent => ({
-  seg: 0, p: 0, kind: "move", action: "", from: "", to: "", facing: 0, down: false, n: 0, delay: 0, reason: "", card: 0, result: "", endurance: 0, target: 0, hit: "", range: 0, gun: "", gunId: 0, step: 0, ...partial,
+  seg: 0, p: 0, kind: "move", action: "", from: "", to: "", facing: 0, down: false, n: 0, delay: 0, reason: "", card: 0, result: "", endurance: 0, target: 0, hit: "", range: 0, gun: "", gunId: 0, step: 0, chart: "", status: "", ...partial,
 });
 
 const events: TurnEvent[] = [
@@ -211,14 +211,13 @@ describe("replay stepping", () => {
     expect(stepBack({ index: 0, seg: 0 })).toBeNull();
   });
 
-  it("uses the stored start of a turn, or the fallback", () => {
+  it("uses the stored start of a turn, a copy", () => {
     const t: TurnResult = { turn: 1, ground: [], seed: "", cards: [], plans: ["", ""], events: [], start: [{ hex: "A-F3", facing: 3, down: false, delay: 1, guns: [colt], ...fresh }, { hex: "A-F9", facing: 0, down: true, delay: 0, guns: [], ...fresh, aim: 4 }] };
-    expect(startOfTurn(t, start)).toEqual([
+    expect(startOfTurn(t)).toEqual([
       { hex: "A-F3", facing: 3, down: false, delay: 1, guns: [colt], ...fresh },
       { hex: "A-F9", facing: 0, down: true, delay: 0, guns: [], ...fresh, aim: 4 },
     ]);
-    expect(startOfTurn(t, start)[0].guns[0]).not.toBe(colt);
-    expect(startOfTurn({ ...t, start: [] }, start)).toEqual(start);
+    expect(startOfTurn(t)[0].guns[0]).not.toBe(colt);
   });
 });
 

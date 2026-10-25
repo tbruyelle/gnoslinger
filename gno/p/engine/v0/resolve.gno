@@ -21,7 +21,7 @@ const (
 	EvAim          = "aim"           // N = AIM points after aiming, To = the hex they sit on, Target = the seat they follow (-1 for a hex)
 	EvLoseAim      = "lose_aim"      // Reason (To = the obstacle in the way for no_los)
 	EvNothing      = "nothing"       // a Shoot used to do nothing, or a shot held at a hex nobody stands in (Reason empty_hex, To = the hex) or at a target out of sight (Reason no_los, To = its hex, Target = its seat) or out of the fight (Reason out_of_fight, To = its hex, Target = its seat): keeps the aim
-	EvShot         = "shot"          // Card, Target = the seat shot at (whoever stood in the hex named, for a shot at a hex), To = the hex shot at, Hit (final location or Miss), Range, N = aim time, Reason "" | out_of_zone | misfire (older records: Target -1 and empty_hex for a shot wasted on an empty hex)
+	EvShot         = "shot"          // Card, Target = the seat shot at (whoever stood in the hex named, for a shot at a hex), To = the hex shot at, Hit (final location or Miss), Range, N = aim time, Reason "" | out_of_zone | misfire
 	EvThrow        = "throw"         // like a shot: Card, Target, To = the hex thrown at, Hit, Range, N = aim time, Chart, Status, Gun, GunID, Reason "" | out_of_zone; the weapon then lands (EvDropGun, Reason throw)
 	EvMalfunction  = "malfunction"   // Card, Result (no_effect, misfire, jams, explodes, no_penalty), Gun, GunID
 	EvWildShot     = "wild_shot"     // Gun went off without hitting anything: uncocked, one shell less
@@ -48,7 +48,6 @@ const (
 	ReasonLight      = "light"        // a LIGHT draws fatigue cards (14.11)
 	ReasonSerious    = "serious"      // fatigue cards at the start of the turn (14.12)
 	ReasonLeg        = "leg"          // fatigue cards per hex moved upright (14.12)
-	ReasonOffBoard   = "offboard"     // older records: a move off the board was cancelled (it now runs away, EvRunAway)
 	ReasonTime       = "time"         // not executed by the end of segment 5 (rule 7.53)
 	ReasonNoGun      = "no_gun"       // no gun in the box the action needs (11.3); a gun move of a gun the character no longer has
 	ReasonNotInHand  = "not_in_hand"  // a gun move dropping a gun that is not in a hand box (10.22)

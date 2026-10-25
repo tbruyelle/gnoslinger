@@ -24,13 +24,12 @@ export function stepBack(pos: ReplayPos): ReplayPos | null {
   return null;
 }
 
-/** The characters' state when a turn began, from the stored snapshot. */
-export function startOfTurn(t: TurnResult, fallback: CharView[]): CharView[] {
-  if (!t.start || t.start.length === 0) return fallback.map(copyChar);
+/** The characters' state when a turn began, from its stored snapshot. */
+export function startOfTurn(t: TurnResult): CharView[] {
   return t.start.map((c) => ({
-    hex: c.hex, facing: c.facing, down: c.down, delay: c.delay, status: c.status ?? "alive",
-    aim: c.aim ?? 0, aimAt: c.aimAt ?? -1, aimHex: c.aimHex ?? "", endurance: c.endurance ?? 20, serious: c.serious ?? 0, gunArm: c.gunArm ?? 0, otherArm: c.otherArm ?? 0, leg: c.leg ?? 0,
-    guns: (c.guns ?? []).map((g) => ({ ...g })),
+    hex: c.hex, facing: c.facing, down: c.down, delay: c.delay, status: c.status,
+    aim: c.aim, aimAt: c.aimAt, aimHex: c.aimHex, endurance: c.endurance, serious: c.serious, gunArm: c.gunArm, otherArm: c.otherArm, leg: c.leg,
+    guns: c.guns.map((g) => ({ ...g })),
   }));
 }
 
@@ -183,7 +182,7 @@ export function eventsForSegment(events: TurnEvent[], seg: number): TurnEvent[] 
 /**
  * A segment's events split into the steps that resolved one after the
  * other (shots, each seat's action in seat order, the end of the segment),
- * as runs of the same step; a turn recorded before steps existed is one.
+ * as runs of the same step.
  */
 export function splitSteps(events: TurnEvent[]): TurnEvent[][] {
   const out: TurnEvent[][] = [];

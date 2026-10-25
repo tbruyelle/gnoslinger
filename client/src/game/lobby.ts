@@ -46,7 +46,7 @@ export function lobbySections(
   const revealOrOpen = (g: GameSummary) => g.phase === "revealing" && (revealWaits(g) || openWaits(g));
   const myPlan = (g: GameSummary) => {
     const s = g.players.find((p) => p.addr === me);
-    return g.phase === "planning" && !!s && !s.committed && (s.status ?? "alive") === "alive";
+    return g.phase === "planning" && !!s && !s.committed && s.status === "alive";
   };
   const myMove = (g: GameSummary) => myPlan(g) || revealOrOpen(g) || claimable(g, nowSec);
   return {
@@ -64,8 +64,8 @@ export function lobbySections(
 export const MAX_MISSED = 3;
 
 /** What claiming the timeout does to a seat without a plan: passes its turn, or puts it out at its MAX_MISSED-th miss in a row. */
-export function missOutcome(p: { missed?: number }): "pass" | "out" {
-  return (p.missed ?? 0) + 1 >= MAX_MISSED ? "out" : "pass";
+export function missOutcome(p: { missed: number }): "pass" | "out" {
+  return p.missed + 1 >= MAX_MISSED ? "out" : "pass";
 }
 
 /**
@@ -136,20 +136,13 @@ export function outcomeLine(g: GameSummary, me: string): string {
     const p = g.players[seat];
     return p?.addr ? (p.addr === me ? "you" : charName(p.char)) : "?";
   };
-  // Who gave up or ran out of time: the seats out of the fight by status; without it (older summaries), the loser of a duel.
-  const out = g.players.flatMap((p, i) => (p.addr && p.status === "out" ? [who(i)] : []));
-  const losers = out.length > 0 ? out.join(", ") : who(1 - g.winner);
+  // Who gave up or ran out of time: the seats out of the fight.
+  const losers = g.players.flatMap((p, i) => (p.addr && p.status === "out" ? [who(i)] : [])).join(", ");
   switch (g.endReason) {
-    case "cancelled":
-      return "cancelled";
-    case "expired":
-      return "expired, the seats never filled up";
     case "surrender":
       return `${losers} surrendered` + myVP(g, me);
     case "timeout":
       return `${losers} ran out of time` + myVP(g, me);
-    case "abandoned":
-      return "abandoned";
     case "all_down":
       return (g.winner >= 0 ? `everyone out of the fight, won by ${who(g.winner)}` : "everyone out of the fight: a draw") + myVP(g, me);
     default:
@@ -159,11 +152,10 @@ export function outcomeLine(g: GameSummary, me: string): string {
 
 /**
  * How a finished game ended for me (address me), as the realm's winner
- * has it; null when it was never played out (cancelled, expired,
- * abandoned) or I hold no seat in it.
+ * has it; null while it is not over, or when I hold no seat in it.
  */
 export function myResult(g: GameSummary, me: string): "won" | "lost" | "draw" | null {
-  if (g.phase !== "finished" || ["cancelled", "expired", "abandoned"].includes(g.endReason)) return null;
+  if (g.phase !== "finished") return null;
   const seat = g.players.findIndex((p) => p.addr && p.addr === me);
   if (seat < 0) return null;
   return g.winner < 0 ? "draw" : g.winner === seat ? "won" : "lost";
@@ -172,6 +164,6 @@ export function myResult(g: GameSummary, me: string): "won" | "lost" | "draw" | 
 /** " · you +4 VP" when I played the game and it earned points; "" otherwise. */
 function myVP(g: GameSummary, me: string): string {
   const seat = g.players.findIndex((p) => p.addr && p.addr === me);
-  const v = seat >= 0 ? g.vp?.[seat] : undefined;
+  const v = seat >= 0 ? g.vp[seat] : undefined;
   return v === undefined ? "" : ` · you ${signedVP(v)} VP`;
 }

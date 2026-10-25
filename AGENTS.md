@@ -35,8 +35,9 @@ come later.
 - **Deployment**: nothing is deployed for now: no network (Onyx included)
   holds the realm or any of its games, only local gnodev chains, which
   replay their transactions with the new code on every reload. A change
-  needs no compatibility with records stored by earlier versions (the
-  realm's decoders still read some older formats; they may go).
+  needs no compatibility with records stored by earlier versions: the
+  decoders read the current formats only, the client expects every field
+  the realm writes.
 - **Rules reference**: `bga/` (separate git repo, gitignored, private
   `github.com/tbruyelle/gunslinger-bga`) holds an abandoned Board Game Arena
   PHP implementation and `bga/doc/RULES.md`, the full rules transcription.
@@ -186,7 +187,7 @@ crossing call's `cur` to pay), `payPot`: the house keeps `HouseCutPercent`
 (5) for events, the winner takes the rest, a draw splits it between the
 seats tied for the most victory points (the remainder of the division to
 the house); a showdown ended with nobody left in the fight by timeouts
-(`nobodyWon`; `abandoned` in older games) and `CancelGame` give every
+(`nobodyWon`) and `CancelGame` give every
 stake back in full (`refundStakes`). `Payouts` (per seat) and
 `HouseCut` record it; events `PotPaid`, `StakeRefunded`. The house's funds
 (`house`, `House()`) are the only part of the balance not owed to a game:
@@ -253,7 +254,7 @@ v0 once its running games are over.
 | `Reveal(cur, id, turn, seat, salt, plan) int` | `turn` the one in progress. Phase `revealing`: anyone; the salt (1 to 64 hex) and plan must match the seat's hash; then the plan is validated (a target must be a seat of the game, not one's own) and stored with its salt, the commit cleared (its deposit refunded to the caller). Phase `planning`: the **last commit in clear**, only from the seat itself, before the deadline, once every other character in the fight committed (their plans are fixed by their hashes; a refused transaction still shows the plan, so the client only sends it when its poll shows exactly that); it counts as the seat's commit and reveal. The reveal that completes the turn (every character in the fight revealed, `allRevealed`) resolves it in the same tx |
 | `RevealMany(cur, id, turn, seats, salts, plans) int` | phase `revealing`, anyone: several seats at once, the lists separated by `;` (an empty plan is an empty field): what the opener of the timelocked plans sends, one drand round opening them all. A seat already revealed is skipped, and so is one whose salt and plan do not match its hash or whose plan is not valid (event `PlanUnopened`: the opener cannot check that before opening, and one bad plan must not hold the others back); bad lists, an unknown seat, the wrong turn or phase abort |
 | `Surrender(cur, id)` | rule 15.4, while the plans are committed (the start of a turn; refused while revealing, which would be the abort after reading the others' plans): the character is `Out` (nobody can shoot it, it plays no more), its commit dropped. With one character left in the fight the game ends and is scored (`surrender`); with more, the showdown goes on without it and moves on to the reveals if the others' plans are committed |
-| `ClaimTimeout(cur, id)` | anyone (`time.Now()`, lazy: no timers on chain); refused while waiting for players (no timeout then; older games may show `expired`). **Planning**, past the deadline: each alive seat without a commit **misses** the turn (`Missed[seat]`++, event `PlanMissed`): the turn is passed for it (empty plan), unless that is its `MaxMissed` (3rd) miss in a row, which makes it `Out` (out of time counts as surrendering); only a revealed plan resets the count (a commit alone does not), an automatic pass (5+ delay) leaves it as it is (and counts as a plan in); the game then moves on to the reveals, and with nobody's plan in the turn resolves empty: a showdown nobody plays any more ends after `MaxMissed` claims, everyone `Out`, its stakes given back (there is no `abandoned` ending any more; it ended the game when nobody committed, which let a late winner lose a game won, the other character being passed automatically; older games keep it). **Revealing**, past `revealUntil` (the deadline plus `RevealGrace`, 5 min: the timelocked plans open `LockDelay`, 2 min, after the deadline, and their opener needs time): every alive seat whose plan is not revealed misses the turn the same way (`missTurn`, its commit dropped); refused before ("the plans can still be revealed"). A backstop, not the usual way: a vanished player's plan is opened from its timelocked copy and revealed with no claim; this only catches a copy that cannot be opened (deliberately broken, or drand out of reach) or one nobody opened. No harsher penalty: the realm cannot tell a copy nobody could open from one a claimer chose not to open (in a 2-player game the claimer is the only one around to open it), and a deliberately broken copy only buys the choice between its plan and a pass, each use a missed turn. One character left → `timeout`, scored, the turn not played; more → the turn moves on with the plans in |
+| `ClaimTimeout(cur, id)` | anyone (`time.Now()`, lazy: no timers on chain); refused while waiting for players (no timeout then). **Planning**, past the deadline: each alive seat without a commit **misses** the turn (`Missed[seat]`++, event `PlanMissed`): the turn is passed for it (empty plan), unless that is its `MaxMissed` (3rd) miss in a row, which makes it `Out` (out of time counts as surrendering); only a revealed plan resets the count (a commit alone does not), an automatic pass (5+ delay) leaves it as it is (and counts as a plan in); the game then moves on to the reveals, and with nobody's plan in the turn resolves empty: a showdown nobody plays any more ends after `MaxMissed` claims, everyone `Out`, its stakes given back (there is no `abandoned` ending any more; it ended the game when nobody committed, which let a late winner lose a game won, the other character being passed automatically). **Revealing**, past `revealUntil` (the deadline plus `RevealGrace`, 5 min: the timelocked plans open `LockDelay`, 2 min, after the deadline, and their opener needs time): every alive seat whose plan is not revealed misses the turn the same way (`missTurn`, its commit dropped); refused before ("the plans can still be revealed"). A backstop, not the usual way: a vanished player's plan is opened from its timelocked copy and revealed with no claim; this only catches a copy that cannot be opened (deliberately broken, or drand out of reach) or one nobody opened. No harsher penalty: the realm cannot tell a copy nobody could open from one a claimer chose not to open (in a 2-player game the claimer is the only one around to open it), and a deliberately broken copy only buys the choice between its plan and a pass, each use a missed turn. One character left → `timeout`, scored, the turn not played; more → the turn moves on with the plans in |
 
 Errors are panics prefixed `gnoslinger: `; the client extracts them from the
 tx result log. Events: `GameCreated`, `PlayerJoined`, `PlanCommitted`,
@@ -339,7 +340,7 @@ picked up earlier in the plan (it takes the sheet's next id, `NextID`):
 whether it is there, and where, is checked when the move is done: a gun move the gun no longer allows (not in a hand, not in
 both hands) is cancelled (`cancel`, Action `gun_move`, Reason
 `not_in_hand`/`not_both`/`no_gun`); a move to a hand is a `move_gun` event
-(From `both_hands`, To the hand), a drop the usual `drop_gun` with Reason `gun_move` ("" in older records, as for a gun knocked out of the hand or falling with its owner); dropping
+(From `both_hands`, To the hand), a drop the usual `drop_gun` with Reason `gun_move` ("" for a gun knocked out of the hand or falling with its owner); dropping
 the gun the character would fire (gun hand or both hands) also loses its
 aim (`lose_aim`, Reason `gun_dropped`: this project's call, 12.42 lists the
 GUN HAND wound but not a gun let go). Nothing holsters a gun.
@@ -408,14 +409,14 @@ client hides its token, says RAN AWAY on its panel, and offers each
 direction off the map as a gold "RUN AWAY" spot when picking a move
 (its hover says what it means; picking it, and its playback, play
 `run-away.wav`)
-(older turns' records hold a cancel, Reason `offboard`). Unexecuted actions are cancelled after segment 5. End of
+Unexecuted actions are cancelled after segment 5. End of
 turn (`EndTurn`, returns events) removes half the delay, rounded up, and a
 character with more delay than endurance at the end of two turns in a row
 (checked after the halving) passes out. Events have `Seg` 0 for turn-start
 events (SERIOUS fatigue, aim lost on the first reveal) and `EndOfTurn` (6)
 for those after segment 5 (cancels, passing out, the serious-wound check).
 Each event of a segment carries its `Step` (`step` in the JSON, the 20th
-encoded field; old 19-field records decode with 0): `StepShots`, then
+encoded field): `StepShots`, then
 `StepAction`+seat for each seat's action in seat order, then `StepEnd`
 (occupied-hex penalty, combat results, aims out of the zone); 0 outside the
 segments. Replays show the steps one after the other.
@@ -485,7 +486,7 @@ and Run turn a bullseye into the card's lesser hit and any other hit into a
 miss; Down turns any hit but a bullseye into a miss. The shot event keeps
 the chart's hit (`Chart`, `chart` in the JSON) and the letters of the
 entries that changed it (`Status`, `status`: M, R, D; the 21st and 22nd
-encoded fields, older records decode with ""), and the resolution log
+encoded fields), and the resolution log
 shows "BE → ARM hit (target moved)". A bullseye becomes a
 VITAL hit (the shooter's best choice). The shooter then uncocks, spends a
 shell and loses the aim. **Hits** map through the IMPACT TABLE (`impact.gno`,
@@ -560,8 +561,7 @@ Knock out enemy +1 to the enemy who crossed off most of its endurance boxes
 cards of STUN and LIGHT to the shooter, each fatigue card of SERIOUS and
 LEG wounds to the seat whose wound gave that point, `SeriousFrom` and
 `LegFrom`, the points per seat, `pointFrom`; `Serious` and `Leg` stay the
-totals; the per-seat fields are encoded "/"-separated, an older record's
-single seat getting the kill or all the points); a tie goes to the first
+totals; the per-seat fields are encoded "/"-separated); a tie goes to the first
 seat; a character down and out can no longer be hit, so a knock out is
 never followed by a kill). When the showdown ends with the turn,
 `EndVictoryPoints` follows: still up, Survive +2, and Hold the field +2 when

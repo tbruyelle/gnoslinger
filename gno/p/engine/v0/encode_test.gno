@@ -29,16 +29,6 @@ func TestEncodeEventsRoundTrip(t *testing.T) {
 			t.Errorf("event %d: got %+v, want %+v", i, got[i], evs[i])
 		}
 	}
-	// Turns recorded before events had a step decode with none.
-	old := DecodeEvents("2|0|move|advance|A-F3|A-F4|3|0|0|0||0||0|0||0||0")
-	if len(old) != 1 || old[0].To != "A-F4" || old[0].Step != 0 {
-		t.Errorf("19-field record: got %+v", old)
-	}
-	// Turns recorded before the chart and Target Status decode without them.
-	old = DecodeEvents("4|0|shot|shoot||A-F9|0|0|7|0||34||0|1|BODY|2|colt45|1|1")
-	if len(old) != 1 || old[0].Hit != "BODY" || old[0].Step != StepShots || old[0].Chart != "" || old[0].Status != "" {
-		t.Errorf("20-field record: got %+v", old)
-	}
 	if DecodeEvents("") != nil || len(DecodeEvents("garbage")) != 0 {
 		t.Error("empty or malformed input should decode to nothing")
 	}
@@ -74,22 +64,6 @@ func TestEncodeCharactersRoundTrip(t *testing.T) {
 	}
 	if DecodeChars("") != nil {
 		t.Error("nothing should decode to nothing")
-	}
-	// A record of the two seat days (18 fields): nobody named, but markers
-	// off any hex followed the opponent.
-	old := DecodeChars("A-F3|3|0|0|0|0|0|0|0|4||20|0|0|0|0|0|1:colt45:1:1:6:0:0;A-F9|0|0|0|0|0|0|0|0|0||20|0|0|0|0|0|")
-	if len(old) != 2 || old[0].Aim != 4 || old[0].AimAt != 1 || old[1].AimAt != NoSeat || old[0].Killers != ([MaxPlayers]bool{}) || old[0].SeriousFrom != ([MaxPlayers]int{}) || old[0].Guns[0].ID != 1 {
-		t.Errorf("18-field records: got %+v", old)
-	}
-	// A record of the single-seat days (23 fields): KilledBy 1, SeriousBy 1
-	// with 2 SERIOUS points, LegBy 0 with 3 LEG points.
-	one := DecodeCharacter("A-F3|3|1|0|2|0|0|0|0|0||0|0|2|0|0|3||-1|1|1|0|0/5/0/0")
-	if one.Killers != [MaxPlayers]bool{false, true, false, false} || one.SeriousFrom != [MaxPlayers]int{0, 2, 0, 0} || one.LegFrom != [MaxPlayers]int{3, 0, 0, 0} || one.Hurt != [MaxPlayers]int{0, 5, 0, 0} {
-		t.Errorf("23-field single-seat record: got %+v", one)
-	}
-	// Nobody named (-1).
-	if none := DecodeCharacter("A-F3|3|0|0|0|0|0|0|0|0||20|0|0|0|0|0||-1|-1|-1|-1|"); none.Killers != ([MaxPlayers]bool{}) || none.SeriousFrom != ([MaxPlayers]int{}) {
-		t.Errorf("23-field record naming nobody: got %+v", none)
 	}
 	// Four seats round trip too.
 	four := fourState()

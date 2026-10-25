@@ -416,7 +416,7 @@ export class LobbyView {
               ? "plans were not revealed in time"
               : !g.players.some((p) => p.committed)
                 ? "nobody played in time"
-                : mine && !mine.committed && (mine.status ?? "alive") === "alive"
+                : mine && !mine.committed && mine.status === "alive"
                   ? "your plan did not come in time"
                   : "the others did not play in time";
           return row("gl-card over", g, versus(g), `${turn} · ${why}: call time to go on`, '<span class="gl-pill over">OUT OF TIME</span>' + btn("CALL TIME"));

@@ -10,9 +10,10 @@ import { roundTime } from "./commit";
 /** A seat as the game view and the lobby's summaries both carry it. */
 interface Seat {
   addr: string;
-  status?: PlayerStatus;
-  committed?: boolean;
-  revealed?: boolean;
+  status: PlayerStatus;
+  committed: boolean;
+  revealed: boolean;
+  /** The game view's seats carry their timelocked plan; the summaries do not. */
   locked?: string;
 }
 
@@ -23,7 +24,7 @@ interface Seat {
  */
 export const DRAND_MARGIN = 5;
 
-const inFight = (p: Seat | undefined) => !!p?.addr && (p.status ?? "alive") === "alive";
+const inFight = (p: Seat | undefined) => !!p?.addr && p.status === "alive";
 
 /** Whether every other character in the fight committed: my plan, the last, can then be revealed at once, in clear. */
 export function lastToCommit(view: { phase: string; players: Seat[] }, seat: number): boolean {

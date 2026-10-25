@@ -25,9 +25,9 @@ export function stakeOption(ugnot: number): string {
 }
 
 /** A showdown's stake and pot for its line or title: "5 GNOT stake · 10 GNOT pot", "" for a free one. */
-export function stakeLine(g: { stake?: number; pot?: number }): string {
+export function stakeLine(g: { stake: number; pot: number }): string {
   if (!g.stake) return "";
-  return `${formatGnot(g.stake)} stake · ${formatGnot(g.pot ?? 0)} pot`;
+  return `${formatGnot(g.stake)} stake · ${formatGnot(g.pot)} pot`;
 }
 
 /** What the winner of a full pot takes, for the form's note. */
@@ -41,8 +41,8 @@ export function winnings(stake: number, seats: number): number {
  * 9.5 GNOT", "Your 5 GNOT stake came back", "You lost your 5 GNOT stake";
  * "" for a free showdown or one not paid yet.
  */
-export function payoutLine(g: { stake?: number; payouts?: number[] }, seat: number): string {
-  if (!g.stake || !g.payouts?.length || seat < 0) return "";
+export function payoutLine(g: { stake: number; payouts: number[] }, seat: number): string {
+  if (!g.stake || !g.payouts.length || seat < 0) return "";
   const got = g.payouts[seat] ?? 0;
   // Every seat got its stake back, which only a refund gives (a split comes after the house's cut).
   if (g.payouts.every((p) => p === g.stake)) return `Your ${formatGnot(g.stake)} stake came back`;

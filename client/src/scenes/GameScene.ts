@@ -1161,7 +1161,7 @@ export class GameScene extends Phaser.Scene {
   private syncJoinSeat(view: GameView) {
     const setup = this.setup;
     if (!setup || setup.req.kind !== "join" || setup.busy) return;
-    setup.req.stake = view.stake ?? 0; // the join sends the stake the chain asks for
+    setup.req.stake = view.stake; // the join sends the stake the chain asks for
     const seat = nextSeat(view.players);
     if (seat < 0 || seat === setup.seat) return;
     const charKey = seatChar(seat);
@@ -1275,7 +1275,7 @@ export class GameScene extends Phaser.Scene {
     }
     const t = pb.turns[pb.index];
     const ground = this.groundBefore();
-    snapshotAfterSegment(startOfTurn(t, this.committed), t.events, pb.seg, ground, pb.cut ?? undefined);
+    snapshotAfterSegment(startOfTurn(t), t.events, pb.seg, ground, pb.cut ?? undefined);
     return ground;
   }
 
@@ -1290,7 +1290,7 @@ export class GameScene extends Phaser.Scene {
   private displayChars(): CharView[] {
     if (this.playback) {
       const t = this.playback.turns[this.playback.index];
-      return snapshotAfterSegment(startOfTurn(t, this.committed), t.events, this.playback.seg, this.groundBefore(), this.playback.cut ?? undefined);
+      return snapshotAfterSegment(startOfTurn(t), t.events, this.playback.seg, this.groundBefore(), this.playback.cut ?? undefined);
     }
     return this.committed.map((c, i) => {
       if (this.setup && i === this.setup.seat) return { ...c, hex: this.setup.hex ?? "", facing: this.setup.facing, down: false };
@@ -2229,7 +2229,7 @@ export class GameScene extends Phaser.Scene {
     openCharacterSheet(
       {
       name: charName(charKey),
-      player: p.name ?? "",
+      player: p.name,
       addr: p.addr,
       charKey,
       seat,
@@ -2240,7 +2240,7 @@ export class GameScene extends Phaser.Scene {
       status: c.status,
       committed: p.committed,
       revealed: p.revealed,
-      missed: p.missed ?? 0,
+      missed: p.missed,
       phase: view.phase,
       isMe: seat === this.myIndex,
       guns: c.guns,
@@ -3963,7 +3963,7 @@ export class GameScene extends Phaser.Scene {
     if (pb.seg === SEGMENTS && t.cards?.length) lines.push(`Result cards drawn: ${t.cards.join(", ")}`);
     // The showdown ends after the last turn: the recap of its victory points closes the log.
     if (this.finalReplay && pb.seg === SEGMENTS && pb.index === pb.turns.length - 1 && this.view) {
-      lines.push(...vpRecap(this.view.awards ?? [], this.view.vp ?? [], names));
+      lines.push(...vpRecap(this.view.awards, this.view.vp, names));
     }
     return lines;
   }
