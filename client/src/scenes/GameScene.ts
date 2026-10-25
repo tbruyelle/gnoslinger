@@ -802,6 +802,8 @@ export class GameScene extends Phaser.Scene {
     side: CardSide;
     choiceType: ChoiceType;
     options: { rel: RelativeDirection; hex: string | null; x: number; y: number }[];
+    /** Where the character moving stands (board pixels). */
+    from: { x: number; y: number };
   } | null = null;
   private choiceOverlays: Phaser.GameObjects.GameObject[] = [];
 
@@ -2414,7 +2416,7 @@ export class GameScene extends Phaser.Scene {
       // Moves: one option per hex (two directions can lead to the same half-hex);
       // a direction off the map is kept: moving there runs away (15.5).
       .filter((o, i, all) => isTurn || o.hex === null || all.findIndex((x) => x.hex === o.hex) === i);
-    this.choiceMode = { card, side, choiceType, options };
+    this.choiceMode = { card, side, choiceType, options, from };
     this.showChoiceOverlays();
   }
 
@@ -2422,39 +2424,70 @@ export class GameScene extends Phaser.Scene {
     this.clearChoiceOverlays();
     if (!this.choiceMode) return;
     const isTurn = this.choiceMode.choiceType === "turn_ahead" || this.choiceMode.choiceType === "turn_back";
+    // Running away (15.5) shows as one arrow, however many ways lead off the
+    // map: straight on, the way the character faces (or backs), when that
+    // leaves the map, else the one way that does.
+    const away = isTurn ? [] : this.choiceMode.options.filter((o) => !o.hex);
+    const out = away.find((o) => o.rel === "ahead" || o.rel === "back") ?? away[0];
+    if (out) this.runAwayArrow(out.rel, this.choiceMode.from, out);
     for (const opt of this.choiceMode.options) {
+      if (!isTurn && !opt.hex) continue;
       const { sx, sy } = this.boardToScreen(opt.x, opt.y);
       // A move highlights the hex it goes to; a turn, the hex-sized spot that way (always six apart).
       const outline = opt.hex && !isTurn ? BOARD_A.outline(opt.hex) : BOARD_A.regularOutline(opt.x, opt.y);
-      // A move off the map runs away: in gold, said so, and on hover what it means.
-      const away = !isTurn && !opt.hex;
-      const color = away ? RUN_AWAY_COLOR : 0x44cc44;
-      const circle = this.hexHighlight(outline, sx, sy, color, away ? 0.55 : 0.35, color);
+      const circle = this.hexHighlight(outline, sx, sy, 0x44cc44, 0.35, 0x44cc44);
       const label = this.add
-        .text(sx, sy, away ? "RUN\nAWAY" : opt.rel.replace(/_/g, "\n"), {
-          fontSize: away ? "12px" : "10px",
-          fontStyle: away ? "bold" : "normal",
-          color: away ? "#2A1C14" : "#fff",
-          align: "center",
-        })
+        .text(sx, sy, opt.rel.replace(/_/g, "\n"), { fontSize: "10px", color: "#fff", align: "center" })
         .setOrigin(0.5)
         .setMask(this.arrMask)
         .setDepth(501);
       circle.on("pointerup", () => this.resolveChoice(opt.rel));
       this.choiceOverlays.push(circle, label);
-      if (away) {
-        const r = (BOARD_A.hexRadius * this.displayTransform().scale * Math.sqrt(3)) / 2;
-        let detail: Phaser.GameObjects.Text | null = null;
-        circle.on("pointerover", () => {
-          detail = this.hoverDetail(sx, sy, r, ["Off the map: your character runs away,", "out of the showdown (Run away −2 VP)"]);
-          this.choiceOverlays.push(detail);
-        });
-        circle.on("pointerout", () => {
-          detail?.destroy();
-          detail = null;
-        });
-      }
     }
+  }
+
+  /**
+   * A move off the map, which runs away (15.5): a gold arrow pointing the
+   * way out, on the board's side of the edge. The hex out there lies
+   * beyond the board's image (the edge hexes are centred on its edges),
+   * which the view cuts off however its window is shaped, so the arrow
+   * stands for it, kept inside what the view shows.
+   */
+  private runAwayArrow(rel: RelativeDirection, from: { x: number; y: number }, to: { x: number; y: number }) {
+    const r = BOARD_A.hexRadius * this.displayTransform().scale;
+    const angle = Math.atan2(to.y - from.y, to.x - from.x);
+    const size = r * 0.5;
+    const start = this.boardToScreen(from.x, from.y);
+    // Most of the way to the edge hex's side that way, kept inside the board's image and its cell.
+    const topLeft = this.boardToScreen(0, 0);
+    const bottomRight = this.boardToScreen(BOARD_A.w, BOARD_A.h);
+    const b = this.board;
+    const keep = (v: number, lo: number, hi: number) => (lo > hi ? v : Phaser.Math.Clamp(v, lo, hi));
+    const cx = keep(start.sx + Math.cos(angle) * r * 0.6, Math.max(topLeft.sx, b.x) + size, Math.min(bottomRight.sx, b.x + b.w) - size);
+    const cy = keep(start.sy + Math.sin(angle) * r * 0.6, Math.max(topLeft.sy, b.y) + size, Math.min(bottomRight.sy, b.y + b.h) - size);
+    // A block arrow pointing right, turned the way out.
+    const shape: [number, number][] = [[-1, -0.4], [0.1, -0.4], [0.1, -0.85], [1, 0], [0.1, 0.85], [0.1, 0.4], [-1, 0.4]];
+    const points = shape.map(([x, y]) => new Phaser.Math.Vector2(x * size, y * size).rotate(angle));
+    const arrow = this.add
+      .polygon(cx, cy, points, RUN_AWAY_COLOR, 0.9)
+      .setOrigin(0)
+      .setStrokeStyle(2, 0x2a1c14, 1)
+      .setMask(this.arrMask)
+      .setInteractive({ hitArea: new Phaser.Geom.Polygon(points), hitAreaCallback: Phaser.Geom.Polygon.Contains, useHandCursor: true })
+      .setDepth(501);
+    let detail: Phaser.GameObjects.Text | null = null;
+    arrow.on("pointerover", () => {
+      arrow.setFillStyle(RUN_AWAY_COLOR, 1).setStrokeStyle(3, 0xffffff, 1);
+      detail = this.hoverDetail(cx, cy, size, ["Run away: off the map, your character leaves", "the showdown (Run away −2 VP)"]);
+      this.choiceOverlays.push(detail);
+    });
+    arrow.on("pointerout", () => {
+      arrow.setFillStyle(RUN_AWAY_COLOR, 0.9).setStrokeStyle(2, 0x2a1c14, 1);
+      detail?.destroy();
+      detail = null;
+    });
+    arrow.on("pointerup", () => this.resolveChoice(rel));
+    this.choiceOverlays.push(arrow);
   }
 
   /**

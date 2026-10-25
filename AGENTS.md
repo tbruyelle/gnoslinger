@@ -413,10 +413,13 @@ the edge hex left, `Facing` the way it went), its other actions dropped,
 AIM markers on it lost at the end of the segment (Reason `no_target`); it
 scores Run away −2 on that turn and nothing at the end of the showdown
 (15.6), and no SERIOUS check follows it (a simplification of 15.9). The
-client hides its token, says RAN AWAY on its panel, and offers each
-direction off the map as a gold "RUN AWAY" spot when picking a move
-(its hover says what it means; picking it, and its playback, play
-`run-away.wav`)
+client hides its token, says RAN AWAY on its panel, and offers running
+away as one gold arrow when picking a move (straight on, the
+way the character faces or backs, when that leaves the map, else the way
+that does; `runAwayArrow`: on the board's side of the edge, kept inside the
+view, since the hex out there lies beyond the board's image, the edge
+hexes being centred on its edges; its hover says what it means; picking
+it, and its playback, play `run-away.wav`)
 Unexecuted actions are cancelled after segment 5. End of
 turn (`EndTurn`, returns events) removes half the delay, rounded up, and a
 character with more delay than endurance at the end of two turns in a row
