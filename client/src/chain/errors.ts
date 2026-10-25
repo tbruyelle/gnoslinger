@@ -1,3 +1,5 @@
+import { isOutOfGas } from "./gas";
+
 export type ChainErrorKind =
   | "no-wallet"
   | "locked"
@@ -40,6 +42,11 @@ export function userMessage(e: unknown): string {
         return "A transaction is still pending.";
       case "timeout":
         return "Still waiting for the chain…";
+      case "delivertx":
+        // A reveal resolving the turn can draw more cards in its block than in
+        // the simulation its gas limit came from (Adena's has a 10 % margin).
+        if (isOutOfGas(`${e.message} ${e.detail ?? ""}`)) return "The transaction ran out of gas: send it again (in Adena, the Fast network fee gives it more room).";
+        return e.message;
       default:
         return e.message;
     }

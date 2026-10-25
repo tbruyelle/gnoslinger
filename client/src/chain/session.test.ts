@@ -50,7 +50,7 @@ function setup(opts: { session?: string | null; broadcastError?: { type: string;
       return sim;
     }),
   };
-  const adena = { address: MASTER, doContract: vi.fn(async (_call: unknown, _gas?: number) => ({ hash: "adena" })), doMessages: vi.fn() };
+  const adena = { address: MASTER, doContract: vi.fn(async (_call: unknown) => ({ hash: "adena" })), doMessages: vi.fn() };
   const wallet = new SessionWallet(adena as unknown as AdenaWallet, rpc as unknown as Rpc, { ...CFG, ...opts.cfg }, () => NOW);
   return { rpc, adena, wallet };
 }
@@ -130,7 +130,7 @@ describe("session accounts", () => {
     expect(s.wallet.state).toMatchObject({ kind: "ended", reason: "it reached its spending limit" });
   });
 
-  it("fits the gas limit to the simulated gas, on either path", async () => {
+  it("fits the session's gas limit to the simulated gas", async () => {
     // The fee: gas price 1 ugnot per 1000 gas, 20 % over.
     const fee = (tx: string) => /(\d+)ugnot/.exec(new TextDecoder("latin1").decode(base64.decode(tx)))?.[1];
     let s = setup({ simulate: { gasUsed: 20_000_000, error: null } });
@@ -141,22 +141,22 @@ describe("session accounts", () => {
     await s.wallet.doContract({ ...CALL, func: "Reveal" });
     expect(fee(s.rpc.broadcastTxSync.mock.calls[0][0])).toBe("120000"); // 100M
 
+    // Through Adena: it fits the limit itself, nothing is simulated here.
     localStorage.clear();
     s = setup({ simulate: { gasUsed: 20_000_000, error: null } });
     await s.wallet.doContract(CALL);
-    expect(s.adena.doContract).toHaveBeenCalledWith(CALL, 30_000_000);
-    // Not simulated (the account unknown, a realm refusal): the fixed limits.
-    s = setup();
-    await s.wallet.doContract({ ...CALL, func: "Reveal" });
-    expect(s.adena.doContract).toHaveBeenCalledWith({ ...CALL, func: "Reveal" }, 300_000_000);
+    expect(s.adena.doContract).toHaveBeenCalledWith(CALL);
+    expect(s.rpc.simulate).not.toHaveBeenCalled();
+    // Not simulated (a realm refusal): the fixed limit.
+    localStorage.setItem(`gnoslinger.session.dev.${MASTER}`, SECRET);
     s = setup({ simulate: { gasUsed: 9_000_000, error: "gnoslinger: not your turn" } });
     await s.wallet.doContract(CALL);
-    expect(s.adena.doContract).toHaveBeenCalledWith(CALL, 100_000_000);
+    expect(fee(s.rpc.broadcastTxSync.mock.calls[0][0])).toBe("120000"); // 100M
     // VITE_GAS_WANTED fixes it.
     s = setup({ simulate: { gasUsed: 20_000_000, error: null }, cfg: { gasWanted: 70_000_000 } });
     await s.wallet.doContract(CALL);
     expect(s.rpc.simulate).not.toHaveBeenCalled();
-    expect(s.adena.doContract).toHaveBeenCalledWith(CALL, 70_000_000);
+    expect(fee(s.rpc.broadcastTxSync.mock.calls[0][0])).toBe("84000"); // 70M
   });
 
   it("goes again once with twice the gas when it runs out", async () => {

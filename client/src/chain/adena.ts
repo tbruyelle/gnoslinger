@@ -153,15 +153,17 @@ export class AdenaWallet implements Wallet {
   ) {}
 
   /**
-   * gasWanted is the call's limit (chain/gas.ts, from SessionWallet's
-   * simulation), else VITE_GAS_WANTED or the fixed default. Left to itself
-   * Adena simulates the call and uses the result as the limit, with no
-   * margin: a reveal that resolves the turn shuffles the deck from a seed
-   * that includes the block height, so its block can draw more cards than
-   * the simulation did and run out of gas.
+   * The gas limit and fee sent are placeholders: Adena simulates the call
+   * itself and signs it with the simulated gas times its fee tier's rate
+   * (Slow 1, Average 1.1 by default, Fast 1.2) and the gas adjustment its
+   * user may set (1 by default), whatever the request says (its
+   * use-network-fee.ts, 2026-07). A reveal that resolves the turn may so
+   * run out of gas, its block drawing more cards than the simulation did
+   * (the deck's seed includes the block height): the player sees the
+   * failure and sends it again (Adena's Fast tier gives it 20 %).
    */
-  doContract(call: VmCall, gasWanted?: number): Promise<{ hash: string }> {
-    return this.doMessages([{ type: "/vm.m_call", value: call }], gasWanted ?? this.cfg.gasWanted ?? DEFAULT_GAS_WANTED);
+  doContract(call: VmCall): Promise<{ hash: string }> {
+    return this.doMessages([{ type: "/vm.m_call", value: call }], this.cfg.gasWanted ?? DEFAULT_GAS_WANTED);
   }
 
   /** Signs and broadcasts (sync) messages of this account through Adena's popup. */

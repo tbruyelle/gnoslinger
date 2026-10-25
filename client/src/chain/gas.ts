@@ -1,5 +1,6 @@
 /**
- * The gas limit each call goes out with. The fee is the gas price times the
+ * The gas limit each call signed with the session key goes out with (Adena
+ * fits its own, AdenaWallet.doContract). The fee is the gas price times the
  * limit, charged in full whatever the call uses, so a limit fitted to the
  * call costs less than a fixed one; and a fixed one runs out on the heaviest
  * turns (four seats all shooting: about 101M, measured 2026-10-25). The

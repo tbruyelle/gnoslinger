@@ -899,8 +899,12 @@ Clicking a token opens the **character
   where everyone shoots twice (about 101M, measured on gnodev 2026-10-25;
   its simulation said 100M, the block used 94.5M), and made every call
   pay 0.12 GNOT of fee where a commit uses about 16M gas (now 0.03).
-  Adena gets the limit from the client (`AdenaWallet.doContract`), its
-  own estimate having no margin.
+  That is the session's path: Adena fits a call's limit itself, whatever
+  the request says (its own simulation times its fee tier, Slow 1, Average
+  1.1 by default, Fast 1.2, and its user's gas adjustment; read in its
+  source, use-network-fee.ts, and seen on 2026-10-25: a commit simulated at
+  16.6M went out with 18.26M), so the client does not simulate an Adena
+  call; a reveal resolving the turn signed in Adena has that 10 % margin.
 
 ### Manual end-to-end test
 1. Two accounts in Adena; `ADENA_ADDRS="g1... g1..." make gnodev` (premines
