@@ -76,6 +76,7 @@ func TestCreateAndJoin(cur realm, t *testing.T) {
 	uassert.True(t, strings.HasSuffix(GamesJSON(carol.String()), `"mine":[]}`))
 	// Being played, the game is listed for anyone to watch.
 	uassert.True(t, strings.Contains(GamesJSON(carol.String()), `"open":[],"live":[{"id":"`+id+`"`), GamesJSON(carol.String()))
+	uassert.True(t, strings.Contains(GamesJSON(carol.String()), `"ended":[],"mine":[]`), GamesJSON(carol.String()))
 }
 
 func TestCreateValidation(cur realm, t *testing.T) {
@@ -560,6 +561,8 @@ func TestSurrender(cur realm, t *testing.T) {
 	uassert.Equal(t, "finished", g.Phase.String())
 	uassert.Equal(t, "surrender", g.EndReason)
 	uassert.Equal(t, "out", g.State.Chars[1].Status.String())
+	// Over, it is among the last finished, for anyone to replay.
+	uassert.True(t, strings.Contains(GamesJSON(carol.String()), `"ended":[{"id":"`+id+`"`), GamesJSON(carol.String()))
 	// Unhurt, bob surrenders (-2) and is captured (-4); alice survives and holds the field.
 	uassert.Equal(t, 4, g.VP[0])
 	uassert.Equal(t, -6, g.VP[1])

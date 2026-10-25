@@ -31,7 +31,7 @@ describe("RealmClient.send", () => {
 
   it("returns once the chain shows the effect even if the wallet never answers", async () => {
     let mine = [summary("0000001")];
-    const rpc = fakeRpc(() => JSON.stringify({ name: "", open: [], live: [], mine }));
+    const rpc = fakeRpc(() => JSON.stringify({ name: "", open: [], live: [], ended: [], mine }));
     const wallet = fakeWallet(() => new Promise(() => {})); // Adena's result screen never dismissed
     const realm = new RealmClient(rpc, wallet, PKG);
 
@@ -44,7 +44,7 @@ describe("RealmClient.send", () => {
 
   it("uses the wallet answer and the tx result when they come first", async () => {
     const rpc = fakeRpc(
-      () => JSON.stringify({ name: "", open: [], live: [], mine: [] }),
+      () => JSON.stringify({ name: "", open: [], live: [], ended: [], mine: [] }),
       { height: 3, error: null, log: "", data: '("0000007" string)\n', events: [] },
     );
     const wallet = fakeWallet(async () => ({ hash: utf8ToB64("h") }));
@@ -53,7 +53,7 @@ describe("RealmClient.send", () => {
   });
 
   it("surfaces a realm panic from the tx result", async () => {
-    const rpc = fakeRpc(() => JSON.stringify({ name: "", open: [], live: [], mine: [] }), {
+    const rpc = fakeRpc(() => JSON.stringify({ name: "", open: [], live: [], ended: [], mine: [] }), {
       height: 3, error: "gnoslinger: you cannot use both sides of a card", log: "", data: null, events: [],
     });
     const wallet = fakeWallet(async () => ({ hash: "x" }));
@@ -71,7 +71,7 @@ describe("RealmClient.send", () => {
   });
 
   it("rejects when the wallet rejects, and refuses a second call while one is pending", async () => {
-    const rpc = fakeRpc(() => JSON.stringify({ name: "", open: [], live: [], mine: [] }));
+    const rpc = fakeRpc(() => JSON.stringify({ name: "", open: [], live: [], ended: [], mine: [] }));
     let reject!: (e: unknown) => void;
     const wallet = fakeWallet(() => new Promise((_, r) => (reject = r)));
     const realm = new RealmClient(rpc, wallet, PKG);
@@ -107,7 +107,7 @@ describe("RealmClient reads", () => {
         asked.push(`${pkg}:${path}`);
         if (path.startsWith("json/profile/")) return "null";
         if (path.startsWith("json/players/")) return JSON.stringify({ total: 0, offset: 0, players: [] });
-        return JSON.stringify({ name: "", open: [], live: [], mine: [] });
+        return JSON.stringify({ name: "", open: [], live: [], ended: [], mine: [] });
       },
     } as unknown as Rpc;
     const realm = new RealmClient(rpc, fakeWallet(async () => ({}) as never), PKG, PROFILES);

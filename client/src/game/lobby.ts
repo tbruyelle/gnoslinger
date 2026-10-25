@@ -21,6 +21,8 @@ export interface LobbySections {
   open: GameSummary[];
   /** Games being played, not mine: to watch. */
   live: GameSummary[];
+  /** The last games finished, not mine: to replay. */
+  ended: GameSummary[];
 }
 
 /** A running game: its plans are committed or revealed. */
@@ -60,6 +62,7 @@ export function lobbySections(
     finished: games.mine.filter((g) => g.phase === "finished"),
     open: games.open.filter((g) => !g.players.some((p) => p.addr === me)),
     live: games.live.filter((g) => !g.players.some((p) => p.addr === me)),
+    ended: games.ended.filter((g) => !g.players.some((p) => p.addr === me)),
   };
 }
 

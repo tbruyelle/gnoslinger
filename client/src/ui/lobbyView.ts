@@ -481,6 +481,14 @@ export class LobbyView {
       })
       .join("");
 
+    // Anyone's showdown finished lately, replayed as a spectator.
+    const ended = s.ended
+      .map((g) => {
+        const title = g.players.filter((p) => p.addr).map((p) => `${charName(p.char)} · ${playerLabel(p)}`).join(" vs ");
+        return row("gl-line", g, title, withStake(`Game ${g.id} · ${outcomeLine(g, "")}`, g), openBtn(g, "Replay"));
+      })
+      .join("");
+
     const finished = s.finished
       .map((g) => {
         const paid = payoutLine(g, g.players.findIndex((p) => p.addr === m.address));
@@ -496,6 +504,7 @@ export class LobbyView {
       (waiting ? panel("gl-waiting", "Waiting on others", waiting) : "") +
       panel("gl-open-games", "Open showdowns", open || '<p class="gl-empty">No showdown is waiting for a player: call one.</p>') +
       (live ? panel("gl-live", "Current showdowns", live) : "") +
+      (ended ? panel("gl-ended", "Recently finished", ended) : "") +
       (finished ? panel("gl-finished", "Finished", finished) : "") +
       "</div>"
     );

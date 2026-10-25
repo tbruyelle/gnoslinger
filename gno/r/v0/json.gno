@@ -20,6 +20,9 @@ const listLimit = 50
 // there are.
 const liveScan = 200
 
+// endedLimit is how many of the last finished games GamesJSON lists.
+const endedLimit = 10
+
 // GameJSON is the full view of a game:
 //
 //	{"id","rev","phase","turn","maxTurns","timeout" (seconds),"board",
@@ -315,12 +318,14 @@ func writeEvent(b *strings.Builder, e engine.Event) {
 }
 
 // GamesJSON lists, for an address, the games with a free seat, the games
-// being played (live: planning or revealing, for anyone to watch; found
-// among the liveScan newest games, a running game being recent: a turn
-// times out within days) and the games it plays or played, newest first
-// (at most 50 each), with the address's registered name ("" if none):
+// being played (live: planning or revealing, for anyone to watch), the
+// last endedLimit games finished (ended, for anyone to replay) and the
+// games it plays or played, newest first (at most 50 each), with the
+// address's registered name ("" if none). live and ended are found among
+// the liveScan newest games, a running game being recent: a turn times
+// out within days.
 //
-//	{"name","open":[summary...],"live":[summary...],"mine":[summary...]}
+//	{"name","open":[summary...],"live":[summary...],"ended":[summary...],"mine":[summary...]}
 //	summary = {"id","rev","phase","turn","maxTurns","timeout","winner","endReason","vp","stake","pot","payouts","houseCut","createdAt","updatedAt","timeoutAt","lockRound","players":[{"addr","name","char","status","committed","revealed"}]}
 //
 // lockRound (0 unless planning or revealing) tells the lobby when the
@@ -340,20 +345,28 @@ func GamesJSON(addr string) string {
 		n++
 		return n >= listLimit
 	})
-	b.WriteString(`],"live":[`)
-	n, scanned := 0, 0
+	var live, ended strings.Builder
+	nLive, nEnded, scanned := 0, 0, 0
 	games.ReverseIterate("", "", func(_ string, v any) bool {
 		scanned++
-		if g := v.(*Game); g.Phase == PhasePlanning || g.Phase == PhaseRevealing {
-			if n > 0 {
-				b.WriteByte(',')
+		g := v.(*Game)
+		switch {
+		case (g.Phase == PhasePlanning || g.Phase == PhaseRevealing) && nLive < listLimit:
+			if nLive > 0 {
+				live.WriteByte(',')
 			}
-			writeSummary(&b, g)
-			n++
+			writeSummary(&live, g)
+			nLive++
+		case g.Phase == PhaseFinished && nEnded < endedLimit:
+			if nEnded > 0 {
+				ended.WriteByte(',')
+			}
+			writeSummary(&ended, g)
+			nEnded++
 		}
-		return n >= listLimit || scanned >= liveScan
+		return (nLive >= listLimit && nEnded >= endedLimit) || scanned >= liveScan
 	})
-	b.WriteString(`],"mine":[`)
+	b.WriteString(`],"live":[` + live.String() + `],"ended":[` + ended.String() + `],"mine":[`)
 	if v := byPlayer.Get(addr); v != nil {
 		for i, id := range v.([]string) {
 			if i >= listLimit {

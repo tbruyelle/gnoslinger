@@ -234,6 +234,8 @@ export interface GamesView {
   open: GameSummary[];
   /** Games being played (planning or revealing), anyone's, newest first: to watch. */
   live: GameSummary[];
+  /** The last games finished (10), anyone's, newest first: to replay. */
+  ended: GameSummary[];
   mine: GameSummary[];
 }
 
@@ -299,9 +301,10 @@ export function parseTurn(json: string): TurnResult {
 
 export function parseGamesView(json: string): GamesView {
   const v: unknown = JSON.parse(json);
-  if (!isRecord(v) || !Array.isArray(v.open) || !Array.isArray(v.live) || !Array.isArray(v.mine)) bad("games");
+  if (!isRecord(v) || !Array.isArray(v.open) || !Array.isArray(v.live) || !Array.isArray(v.ended) || !Array.isArray(v.mine)) bad("games");
   v.open.forEach(checkSummary);
   v.live.forEach(checkSummary);
+  v.ended.forEach(checkSummary);
   v.mine.forEach(checkSummary);
   return v as unknown as GamesView;
 }

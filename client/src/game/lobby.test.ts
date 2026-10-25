@@ -17,11 +17,15 @@ function game(id: string, p: Partial<Omit<GameSummary, "players">> & { players?:
 }
 
 describe("lobbySections", () => {
-  it("offers the showdowns being played to watch, but mine", () => {
+  it("offers the showdowns being played to watch, and the last finished to replay, but mine", () => {
     const theirs = game("7", { players: [{ addr: OTHER, char: "marshal" }, { addr: "g1c", char: "the_kid" }] });
     const mine = game("8", { players: [{ addr: ME, char: "marshal" }, { addr: OTHER, char: "the_kid" }] });
-    const s = lobbySections({ name: "", open: [], live: [theirs, mine], mine: [mine] }, ME, 0);
+    const over = (g: GameSummary) => ({ ...g, phase: "finished" as const, endReason: "last_standing", winner: 0 });
+    const s = lobbySections({ name: "", open: [], live: [theirs, mine], ended: [over(theirs), over(mine)], mine: [mine] }, ME, 0);
     expect(s.live.map((g) => g.id)).toEqual(["7"]);
+    expect(s.ended.map((g) => g.id)).toEqual(["7"]);
+    // Told as nobody's: "you" is for my own games.
+    expect(outcomeLine(s.ended[0], "")).toBe("won by Marshal");
   });
 
   it("sorts my games by whose move it is, and keeps others' open games", () => {
@@ -32,7 +36,7 @@ describe("lobbySections", () => {
       game("4", { phase: "finished", players: [{ addr: ME, char: "marshal" }, { addr: OTHER, char: "the_kid" }] }),
     ];
     const open = [mine[2], game("5", { phase: "waiting", players: [{ addr: OTHER, char: "marshal" }, { addr: "", char: "" }] })];
-    const s = lobbySections({ name: "", live: [], mine, open }, ME, 0);
+    const s = lobbySections({ name: "", live: [], ended: [], mine, open }, ME, 0);
     expect(s.yourMove.map((g) => g.id)).toEqual(["1"]);
     expect(s.waiting.map((g) => g.id)).toEqual(["2", "3"]);
     expect(s.finished.map((g) => g.id)).toEqual(["4"]);
@@ -41,13 +45,13 @@ describe("lobbySections", () => {
 
   it("puts my reveal in my move when this browser holds it and nothing sends it by itself", () => {
     const revealing = game("10", { phase: "revealing", timeoutAt: 1000, players: [{ addr: ME, char: "marshal", committed: true, revealed: false }, { addr: OTHER, char: "the_kid", committed: true, revealed: true }] });
-    expect(lobbySections({ name: "", live: [], mine: [revealing], open: [] }, ME, 0).waiting.map((g) => g.id)).toEqual(["10"]);
-    const s = lobbySections({ name: "", live: [], mine: [revealing], open: [] }, ME, 0, (g) => g.id === "10");
+    expect(lobbySections({ name: "", live: [], ended: [], mine: [revealing], open: [] }, ME, 0).waiting.map((g) => g.id)).toEqual(["10"]);
+    const s = lobbySections({ name: "", live: [], ended: [], mine: [revealing], open: [] }, ME, 0, (g) => g.id === "10");
     expect(s.yourMove.map((g) => g.id)).toEqual(["10"]);
     expect(s.waiting).toEqual([]);
     // Past the reveals' grace, it is a claim, unless a plan is still to reveal or to open.
     expect(claimable(revealing, 1000 + CHAIN_CLOCK_MARGIN)).toBe(true);
-    const late = lobbySections({ name: "", live: [], mine: [revealing], open: [] }, ME, 1000 + CHAIN_CLOCK_MARGIN, () => false, (g) => g.id === "10");
+    const late = lobbySections({ name: "", live: [], ended: [], mine: [revealing], open: [] }, ME, 1000 + CHAIN_CLOCK_MARGIN, () => false, (g) => g.id === "10");
     expect(late.yourMove.map((g) => g.id)).toEqual(["10"]);
     expect(late.waiting).toEqual([]);
   });
@@ -101,7 +105,7 @@ describe("outcomeLine", () => {
 
   it("does not wait for the plan of a character out of the fight", () => {
     const out = game("6", { players: [{ addr: ME, char: "marshal", status: "killed", committed: false }, { addr: OTHER, char: "the_kid", status: "alive", committed: false }, { addr: "g1c", char: "reb", status: "alive", committed: true }] });
-    const s = lobbySections({ name: "", live: [], mine: [out], open: [] }, ME, 0);
+    const s = lobbySections({ name: "", live: [], ended: [], mine: [out], open: [] }, ME, 0);
     expect(s.yourMove).toEqual([]);
     expect(s.waiting.map((g) => g.id)).toEqual(["6"]);
   });
@@ -136,7 +140,7 @@ describe("claimable", () => {
     expect(claimable(late, due)).toBe(true);
     expect(claimable(late, due - 1)).toBe(false);
     expect(claimable(open, due)).toBe(false);
-    const s = lobbySections({ name: "", live: [], mine: [late, mine, open], open: [] }, ME, due);
+    const s = lobbySections({ name: "", live: [], ended: [], mine: [late, mine, open], open: [] }, ME, due);
     expect(s.yourMove.map((g) => g.id)).toEqual(["8", "7"]);
     expect(s.waiting.map((g) => g.id)).toEqual(["9"]);
   });
