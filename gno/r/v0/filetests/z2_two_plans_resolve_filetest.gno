@@ -22,7 +22,7 @@ func main(cur realm) {
 	testing.SetRealm(testing.NewUserRealm(bob))
 	gnoslinger.JoinGame(cross(cur), id, "A-H7", 0)
 	testing.SetRealm(testing.NewUserRealm(alice))
-	println(gnoslinger.Commit(cross(cur), id, gnoslinger.PlanHash(id, 1, 0, "ab", "1f:ahead,2f:ahead"), "locked"))
+	println(gnoslinger.Commit(cross(cur), id, 1, gnoslinger.PlanHash(id, 1, 0, "ab", "1f:ahead,2f:ahead"), "locked"))
 	testing.SetRealm(testing.NewUserRealm(bob))
 	println(gnoslinger.Reveal(cross(cur), id, 1, 1, "cd", "5b"))
 	println(gnoslinger.Reveal(cross(cur), id, 1, 0, "ab", "1f:ahead,2f:ahead"))

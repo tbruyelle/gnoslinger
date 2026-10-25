@@ -96,15 +96,18 @@ export class RealmClient {
     await this.send("CancelGame", [id], () => this.gone(id));
   }
 
-  /** Commits my plan for the turn in progress: its hash (game/commit.ts planHash) and its timelocked copy ("" for none). */
-  async commit(id: string, hash: string, locked: string): Promise<void> {
+  /**
+   * Commits my plan for the turn, the one in progress (the realm refuses a
+   * commit for any other): its hash (game/commit.ts planHash) and its
+   * timelocked copy.
+   */
+  async commit(id: string, turn: number, hash: string, locked: string): Promise<void> {
     const me = this.wallet.address;
-    const before = await this.getGame(id);
-    await this.send("Commit", [id, hash, locked], async () => {
+    await this.send("Commit", [id, String(turn), hash, locked], async () => {
       const g = await this.getGame(id);
       const seat = seatOf(g, me);
       const mine = seat >= 0 && g.players[seat].committed;
-      return mine || g.turn !== before.turn || g.phase === "finished" ? true : null;
+      return mine || g.turn !== turn || g.phase === "finished" ? true : null;
     });
   }
 

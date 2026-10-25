@@ -66,7 +66,7 @@ describe("RealmClient.send", () => {
       height: 3, error: "gnoslinger: you cannot use both sides of a card", log: "", data: null, events: [],
     });
     const realm2 = new RealmClient(rpc2, wallet, PKG);
-    await expect(realm2.commit("1", "ab".repeat(32), "")).rejects.toThrow("both sides");
+    await expect(realm2.commit("1", 1, "ab".repeat(32), "")).rejects.toThrow("both sides");
     void rpc;
   });
 

@@ -176,28 +176,33 @@ func TestCommitAndReveal(cur realm, t *testing.T) {
 
 	testing.SetRealm(testing.NewUserRealm(carol))
 	uassert.AbortsWithMessage(t, cur, "gnoslinger: you are not a player of this game", func() {
-		Commit(cross(cur), id, hashOf(id, 0, "1f:ahead"), "locked")
+		Commit(cross(cur), id, getGame(id).Turn, hashOf(id, 0, "1f:ahead"), "locked")
 	})
 
 	testing.SetRealm(testing.NewUserRealm(alice))
 	uassert.AbortsWithMessage(t, cur, "gnoslinger: the hash must be 64 hex characters", func() {
-		Commit(cross(cur), id, "1f:ahead", "locked")
+		Commit(cross(cur), id, getGame(id).Turn, "1f:ahead", "locked")
 	})
 	uassert.AbortsWithMessage(t, cur, "gnoslinger: the hash must be 64 hex characters", func() {
-		Commit(cross(cur), id, strings.ToUpper(hashOf(id, 0, "")), "locked")
+		Commit(cross(cur), id, getGame(id).Turn, strings.ToUpper(hashOf(id, 0, "")), "locked")
 	})
 	uassert.AbortsWithMessage(t, cur, "gnoslinger: a commit needs its timelocked plan", func() {
-		Commit(cross(cur), id, hashOf(id, 0, ""), "")
+		Commit(cross(cur), id, getGame(id).Turn, hashOf(id, 0, ""), "")
 	})
 	uassert.AbortsWithMessage(t, cur, "gnoslinger: the timelocked plan is over 1024 bytes", func() {
-		Commit(cross(cur), id, hashOf(id, 0, "locked"), strings.Repeat("x", MaxLocked+1))
+		Commit(cross(cur), id, getGame(id).Turn, hashOf(id, 0, "locked"), strings.Repeat("x", MaxLocked+1))
+	})
+	// A commit meant for another turn (sent before time was called, say)
+	// would hold a hash no reveal of this turn can match.
+	uassert.AbortsWithMessage(t, cur, "gnoslinger: turn 2 is not the turn in progress", func() {
+		Commit(cross(cur), id, 2, PlanHash(id, 2, 0, salt, ""), "locked")
 	})
 	// Alice is not the last to commit: her plan may not go in clear.
 	uassert.AbortsWithMessage(t, cur, "gnoslinger: only the last plan to commit may be revealed at once", func() {
 		Reveal(cross(cur), id, 1, 0, salt, "1f:ahead,2f:ahead")
 	})
 
-	r := Commit(cross(cur), id, hashOf(id, 0, "1f:ahead,2f:ahead"), "sealed")
+	r := Commit(cross(cur), id, getGame(id).Turn, hashOf(id, 0, "1f:ahead,2f:ahead"), "sealed")
 	uassert.Equal(t, rev+1, r)
 	uassert.True(t, g.committed(0))
 	uassert.False(t, g.committed(1))
@@ -213,7 +218,7 @@ func TestCommitAndReveal(cur realm, t *testing.T) {
 	uassert.Equal(t, int64(300), g.revealUntil().Unix()-g.commitUntil().Unix())
 	uassert.True(t, strings.Contains(GamesJSON(alice.String()), `"status":"alive","committed":true,"revealed":false}`), GamesJSON(alice.String()))
 	uassert.AbortsWithMessage(t, cur, "gnoslinger: plan already submitted for this turn", func() {
-		Commit(cross(cur), id, hashOf(id, 0, ""), "locked")
+		Commit(cross(cur), id, getGame(id).Turn, hashOf(id, 0, ""), "locked")
 	})
 	uassert.AbortsWithMessage(t, cur, "gnoslinger: plan already submitted for this turn", func() {
 		Reveal(cross(cur), id, 1, 0, salt, "1f:ahead,2f:ahead")
@@ -256,7 +261,7 @@ func TestCommitAndReveal(cur realm, t *testing.T) {
 		Reveal(cross(cur), id, 1, 1, salt, "5b")
 	})
 	uassert.AbortsWithMessage(t, cur, "gnoslinger: game is not accepting plans", func() {
-		Commit(cross(cur), id, hashOf(id, 1, ""), "locked")
+		Commit(cross(cur), id, getGame(id).Turn, hashOf(id, 1, ""), "locked")
 	})
 	uassert.AbortsWithMessage(t, cur, "gnoslinger: the plans are being revealed: surrender at the start of a turn", func() {
 		Surrender(cross(cur), id)
@@ -315,7 +320,7 @@ func TestCommitAndReveal(cur realm, t *testing.T) {
 
 	// A second turn: the history keeps both, oldest first.
 	testing.SetRealm(testing.NewUserRealm(alice))
-	Commit(cross(cur), id, hashOf(id, 0, "1f:ahead,2f:ahead,3f"), "locked")
+	Commit(cross(cur), id, getGame(id).Turn, hashOf(id, 0, "1f:ahead,2f:ahead,3f"), "locked")
 	testing.SetRealm(testing.NewUserRealm(bob))
 	uassert.AbortsWithMessage(t, cur, "gnoslinger: sprint can only be played after a run on the previous turn", func() {
 		Reveal(cross(cur), id, 2, 1, salt, "1f:ahead,2f:ahead,3f")
@@ -345,7 +350,7 @@ func TestRevealShortcut(cur realm, t *testing.T) {
 	JoinGame(cross(cur), id, "A-E8", 3)
 	g := getGame(id)
 	testing.SetRealm(testing.NewUserRealm(alice))
-	Commit(cross(cur), id, hashOf(id, 0, ""), "locked")
+	Commit(cross(cur), id, getGame(id).Turn, hashOf(id, 0, ""), "locked")
 	testing.SetRealm(testing.NewUserRealm(bob))
 	uassert.AbortsWithMessage(t, cur, "gnoslinger: only the last plan to commit may be revealed at once", func() {
 		Reveal(cross(cur), id, 1, 1, salt, "")
@@ -372,14 +377,14 @@ func TestRevealMany(cur realm, t *testing.T) {
 	JoinGame(cross(cur), id, "A-E8", 3)
 	g := getGame(id)
 	testing.SetRealm(testing.NewUserRealm(alice))
-	Commit(cross(cur), id, hashOf(id, 0, "1f:ahead"), "locked")
+	Commit(cross(cur), id, getGame(id).Turn, hashOf(id, 0, "1f:ahead"), "locked")
 	uassert.AbortsWithMessage(t, cur, "gnoslinger: game is not collecting the reveals", func() {
 		RevealMany(cross(cur), id, 1, "0", salt, "1f:ahead")
 	})
 	testing.SetRealm(testing.NewUserRealm(bob))
-	Commit(cross(cur), id, hashOf(id, 1, ""), "locked")
+	Commit(cross(cur), id, getGame(id).Turn, hashOf(id, 1, ""), "locked")
 	testing.SetRealm(testing.NewUserRealm(carol))
-	Commit(cross(cur), id, hashOf(id, 2, "1f:ahead"), "locked")
+	Commit(cross(cur), id, getGame(id).Turn, hashOf(id, 2, "1f:ahead"), "locked")
 	uassert.Equal(t, "revealing", g.Phase.String())
 	// Bob reveals his own; an opener then sends the three: bob's is skipped.
 	testing.SetRealm(testing.NewUserRealm(bob))
@@ -423,7 +428,7 @@ func TestUnrevealed(cur realm, t *testing.T) {
 	g := getGame(id)
 	for turn := 1; turn <= MaxMissed; turn++ {
 		testing.SetRealm(testing.NewUserRealm(alice))
-		Commit(cross(cur), id, hashOf(id, 0, "1f:ahead"), "locked")
+		Commit(cross(cur), id, getGame(id).Turn, hashOf(id, 0, "1f:ahead"), "locked")
 		testing.SetRealm(testing.NewUserRealm(bob))
 		Reveal(cross(cur), id, turn, 1, salt, "3b:ahead_left")
 		testing.SetRealm(testing.NewUserRealm(carol))
@@ -462,9 +467,9 @@ func TestUnrevealed(cur realm, t *testing.T) {
 	JoinGame(cross(cur), id, "A-E8", 3)
 	g = getGame(id)
 	testing.SetRealm(testing.NewUserRealm(alice))
-	Commit(cross(cur), id, hashOf(id, 0, "1f:ahead"), "locked")
+	Commit(cross(cur), id, getGame(id).Turn, hashOf(id, 0, "1f:ahead"), "locked")
 	testing.SetRealm(testing.NewUserRealm(bob))
-	Commit(cross(cur), id, hashOf(id, 1, "1f:ahead"), "locked")
+	Commit(cross(cur), id, getGame(id).Turn, hashOf(id, 1, "1f:ahead"), "locked")
 	testing.SetRealm(testing.NewUserRealm(carol))
 	Reveal(cross(cur), id, 1, 2, salt, "")
 	Reveal(cross(cur), id, 1, 1, salt, "1f:ahead")
@@ -479,9 +484,9 @@ func TestUnrevealed(cur realm, t *testing.T) {
 	uassert.Equal(t, 0, g.VP[0])
 	// Alice reveals the next turn: her count goes back to 0.
 	testing.SetRealm(testing.NewUserRealm(alice))
-	Commit(cross(cur), id, hashOf(id, 0, ""), "locked")
+	Commit(cross(cur), id, getGame(id).Turn, hashOf(id, 0, ""), "locked")
 	testing.SetRealm(testing.NewUserRealm(bob))
-	Commit(cross(cur), id, hashOf(id, 1, ""), "locked")
+	Commit(cross(cur), id, getGame(id).Turn, hashOf(id, 1, ""), "locked")
 	testing.SetRealm(testing.NewUserRealm(carol))
 	Reveal(cross(cur), id, 2, 2, salt, "")
 	Reveal(cross(cur), id, 2, 0, salt, "")
@@ -496,13 +501,13 @@ func TestMaxTurnsFinish(cur realm, t *testing.T) {
 	g := getGame(id)
 	for turn := 1; turn <= 9; turn++ {
 		testing.SetRealm(testing.NewUserRealm(alice))
-		Commit(cross(cur), id, hashOf(id, 0, ""), "locked")
+		Commit(cross(cur), id, getGame(id).Turn, hashOf(id, 0, ""), "locked")
 		testing.SetRealm(testing.NewUserRealm(bob))
 		Reveal(cross(cur), id, turn, 1, salt, "")
 		Reveal(cross(cur), id, turn, 0, salt, "")
 	}
 	testing.SetRealm(testing.NewUserRealm(alice))
-	Commit(cross(cur), id, hashOf(id, 0, ""), "locked")
+	Commit(cross(cur), id, getGame(id).Turn, hashOf(id, 0, ""), "locked")
 	testing.SetRealm(testing.NewUserRealm(bob))
 	Reveal(cross(cur), id, 10, 1, salt, "3b:ahead_left")
 	Reveal(cross(cur), id, 10, 0, salt, "")
@@ -522,7 +527,7 @@ func TestMaxTurnsFinish(cur realm, t *testing.T) {
 	uassert.True(t, strings.Contains(GameJSON(id), `"phase":"finished"`))
 	uassert.True(t, strings.Contains(GameJSON(id), `"timeoutAt":0,"commitUntil":0,"revealUntil":0,"lockRound":0,`))
 	uassert.AbortsWithMessage(t, cur, "gnoslinger: game is not accepting plans", func() {
-		Commit(cross(cur), id, hashOf(id, 1, ""), "locked")
+		Commit(cross(cur), id, getGame(id).Turn, hashOf(id, 1, ""), "locked")
 	})
 	uassert.AbortsWithMessage(t, cur, "gnoslinger: game is not accepting plans", func() {
 		Reveal(cross(cur), id, 10, 1, salt, "")
@@ -604,7 +609,7 @@ func TestClaimTimeout(cur realm, t *testing.T) {
 	// The turn's clock is fixed at its start: a plan sent late in the turn
 	// does not give the others more time.
 	testing.SkipHeights(300) // 25 minutes
-	Commit(cross(cur), id, hashOf(id, 1, ""), "locked")
+	Commit(cross(cur), id, getGame(id).Turn, hashOf(id, 1, ""), "locked")
 	testing.SkipHeights(61) // 30 minutes and 5 seconds after the turn started
 	testing.SetRealm(testing.NewUserRealm(carol))
 	ClaimTimeout(cross(cur), id)
@@ -620,7 +625,7 @@ func TestClaimTimeout(cur realm, t *testing.T) {
 	testing.SetRealm(testing.NewUserRealm(bob))
 	JoinGame(cross(cur), id, "A-H7", 0)
 	testing.SetRealm(testing.NewUserRealm(alice))
-	Commit(cross(cur), id, hashOf(id, 0, ""), "locked")
+	Commit(cross(cur), id, getGame(id).Turn, hashOf(id, 0, ""), "locked")
 	testing.SkipHeights(361)
 	testing.SetRealm(testing.NewUserRealm(carol))
 	ClaimTimeout(cross(cur), id)
@@ -633,7 +638,7 @@ func TestClaimTimeout(cur realm, t *testing.T) {
 	uassert.Equal(t, "alive", g.State.Chars[1].Status.String())
 	// A revealed plan resets the count, a commit alone does not.
 	testing.SetRealm(testing.NewUserRealm(bob))
-	Commit(cross(cur), id, hashOf(id, 1, ""), "locked")
+	Commit(cross(cur), id, getGame(id).Turn, hashOf(id, 1, ""), "locked")
 	uassert.Equal(t, 1, g.Missed[1])
 	testing.SetRealm(testing.NewUserRealm(alice))
 	Reveal(cross(cur), id, 2, 0, salt, "")
@@ -643,7 +648,7 @@ func TestClaimTimeout(cur realm, t *testing.T) {
 	// Three missed turns in a row: out of the fight, the game ends.
 	for i := 0; i < MaxMissed; i++ {
 		testing.SetRealm(testing.NewUserRealm(alice))
-		Commit(cross(cur), id, hashOf(id, 0, ""), "locked")
+		Commit(cross(cur), id, getGame(id).Turn, hashOf(id, 0, ""), "locked")
 		testing.SkipHeights(361)
 		testing.SetRealm(testing.NewUserRealm(carol))
 		ClaimTimeout(cross(cur), id)
@@ -712,11 +717,11 @@ func TestLateMoves(cur realm, t *testing.T) {
 	testing.SetRealm(testing.NewUserRealm(bob))
 	JoinGame(cross(cur), id, "A-H7", 0)
 	testing.SetRealm(testing.NewUserRealm(alice))
-	Commit(cross(cur), id, hashOf(id, 0, ""), "locked")
+	Commit(cross(cur), id, getGame(id).Turn, hashOf(id, 0, ""), "locked")
 	testing.SkipHeights(361)
 	testing.SetRealm(testing.NewUserRealm(bob))
 	uassert.AbortsWithMessage(t, cur, "gnoslinger: out of time: the game can only be claimed now", func() {
-		Commit(cross(cur), id, hashOf(id, 1, "1f:ahead"), "locked")
+		Commit(cross(cur), id, getGame(id).Turn, hashOf(id, 1, "1f:ahead"), "locked")
 	})
 	uassert.AbortsWithMessage(t, cur, "gnoslinger: out of time: the game can only be claimed now", func() {
 		Reveal(cross(cur), id, 1, 1, salt, "1f:ahead")
@@ -743,7 +748,7 @@ func TestRender(cur realm, t *testing.T) {
 	uassert.True(t, strings.Contains(page, "func=Commit"), page)
 
 	testing.SetRealm(testing.NewUserRealm(alice))
-	Commit(cross(cur), id, hashOf(id, 0, "1f:ahead"), "locked")
+	Commit(cross(cur), id, getGame(id).Turn, hashOf(id, 0, "1f:ahead"), "locked")
 	page = Render("game/" + id)
 	uassert.True(t, strings.Contains(page, "| alive | committed |"), page)
 	testing.SetRealm(testing.NewUserRealm(bob))
@@ -770,7 +775,7 @@ func TestDrawAndCock(cur realm, t *testing.T) {
 	testing.SetRealm(testing.NewUserRealm(bob))
 	JoinGame(cross(cur), id, "A-H7", 0)
 	testing.SetRealm(testing.NewUserRealm(alice))
-	Commit(cross(cur), id, hashOf(id, 0, "9f:1:0"), "locked")
+	Commit(cross(cur), id, getGame(id).Turn, hashOf(id, 0, "9f:1:0"), "locked")
 	testing.SetRealm(testing.NewUserRealm(bob))
 	uassert.AbortsWithMessage(t, cur, "gnoslinger: you have no such gun", func() {
 		Reveal(cross(cur), id, 1, 1, salt, "9f:2:0")
@@ -785,7 +790,7 @@ func TestDrawAndCock(cur realm, t *testing.T) {
 	uassert.True(t, strings.Contains(js, `"location":"gun_hand","cocked":true,"shells":6`), js)
 	uassert.True(t, strings.Contains(js, `{"seg":3,"p":0,"kind":"draw","action":"draw_and_cock","from":"holstered","to":"gun_hand","facing":0,"down":false,"n":0,"delay":0,"reason":"","card":0,"result":"","endurance":0,"target":0,"hit":"","range":0,"gun":"colt45","gunId":1,"step":3,"chart":"","status":""}`), js)
 	// Drawing again into the gun hand: the gun is already there.
-	Commit(cross(cur), id, hashOf(id, 1, ""), "locked")
+	Commit(cross(cur), id, getGame(id).Turn, hashOf(id, 1, ""), "locked")
 	testing.SetRealm(testing.NewUserRealm(alice))
 	uassert.AbortsWithMessage(t, cur, "gnoslinger: that gun is already there", func() {
 		Reveal(cross(cur), id, 2, 0, salt, "9f:1:0")
@@ -801,12 +806,12 @@ func TestShootout(cur realm, t *testing.T) {
 
 	// Turn 1: both draw and cock. Turn 2: alice aims twice (4 AIM points).
 	testing.SetRealm(testing.NewUserRealm(alice))
-	Commit(cross(cur), id, hashOf(id, 0, "9f:1:0"), "locked")
+	Commit(cross(cur), id, getGame(id).Turn, hashOf(id, 0, "9f:1:0"), "locked")
 	testing.SetRealm(testing.NewUserRealm(bob))
 	Reveal(cross(cur), id, 1, 1, salt, "9f:1:0")
 	Reveal(cross(cur), id, 1, 0, salt, "9f:1:0")
 	testing.SetRealm(testing.NewUserRealm(alice))
-	Commit(cross(cur), id, hashOf(id, 0, "5f:aim:@1,6f:aim:@1"), "locked")
+	Commit(cross(cur), id, getGame(id).Turn, hashOf(id, 0, "5f:aim:@1,6f:aim:@1"), "locked")
 	testing.SetRealm(testing.NewUserRealm(bob))
 	Reveal(cross(cur), id, 2, 1, salt, "")
 	Reveal(cross(cur), id, 2, 0, salt, "5f:aim:@1,6f:aim:@1")
@@ -818,7 +823,7 @@ func TestShootout(cur realm, t *testing.T) {
 
 	// Turn 3: alice shoots (aim time 1 + 4 = 5, range 4); bob does nothing with his gun.
 	testing.SetRealm(testing.NewUserRealm(alice))
-	Commit(cross(cur), id, hashOf(id, 0, "7f:shoot:@1"), "locked")
+	Commit(cross(cur), id, getGame(id).Turn, hashOf(id, 0, "7f:shoot:@1"), "locked")
 	testing.SetRealm(testing.NewUserRealm(bob))
 	Reveal(cross(cur), id, 3, 1, salt, "7f")
 	Reveal(cross(cur), id, 3, 0, salt, "7f:shoot:@1")
@@ -859,7 +864,7 @@ func TestAutoPass(cur realm, t *testing.T) {
 	// is recorded as an empty plan.
 	g.State.Chars[0].Delay = 5
 	g.State.Chars[0].PlayedFoot = true
-	Commit(cross(cur), id, hashOf(id, 1, "1f:ahead"), "locked")
+	Commit(cross(cur), id, getGame(id).Turn, hashOf(id, 1, "1f:ahead"), "locked")
 	uassert.Equal(t, "revealing", g.Phase.String())
 	uassert.True(t, g.Revealed[0])
 	Reveal(cross(cur), id, 1, 1, salt, "1f:ahead")
@@ -933,7 +938,7 @@ func TestLineOfSight(cur realm, t *testing.T) {
 	g.State.Chars[0].Guns[0].Location, g.State.Chars[0].Guns[0].Cocked = engine.GunHand, true
 	g.State.Chars[1].Hex, g.State.Chars[1].Facing, g.State.Chars[1].Down = "A-I12", hex.N, true
 	testing.SetRealm(testing.NewUserRealm(alice))
-	Commit(cross(cur), id, hashOf(id, 0, "5f:aim:@1,7f:shoot:@1"), "locked")
+	Commit(cross(cur), id, getGame(id).Turn, hashOf(id, 0, "5f:aim:@1,7f:shoot:@1"), "locked")
 	testing.SetRealm(testing.NewUserRealm(bob))
 	Reveal(cross(cur), id, 1, 1, salt, "")
 	Reveal(cross(cur), id, 1, 0, salt, "5f:aim:@1,7f:shoot:@1")
@@ -1004,11 +1009,11 @@ func TestFourSeats(cur realm, t *testing.T) {
 	uassert.Equal(t, davePlayed+1, played(dave))
 
 	testing.SetRealm(testing.NewUserRealm(bob))
-	Commit(cross(cur), id, hashOf(id, 1, ""), "locked")
+	Commit(cross(cur), id, getGame(id).Turn, hashOf(id, 1, ""), "locked")
 	testing.SetRealm(testing.NewUserRealm(carol))
-	Commit(cross(cur), id, hashOf(id, 2, "9f:1:0"), "locked")
+	Commit(cross(cur), id, getGame(id).Turn, hashOf(id, 2, "9f:1:0"), "locked")
 	testing.SetRealm(testing.NewUserRealm(dave))
-	Commit(cross(cur), id, hashOf(id, 3, "1f:ahead"), "locked")
+	Commit(cross(cur), id, getGame(id).Turn, hashOf(id, 3, "1f:ahead"), "locked")
 	uassert.Equal(t, "planning", g.Phase.String()) // alice's plan is still missing
 	// Targets name any seat of the game but one's own.
 	testing.SetRealm(testing.NewUserRealm(alice))
@@ -1031,11 +1036,11 @@ func TestFourSeats(cur realm, t *testing.T) {
 	// Turn 2: alice aims at the reb (seat 2), who then walks: the markers
 	// follow it; the JSON says which seat.
 	testing.SetRealm(testing.NewUserRealm(alice))
-	Commit(cross(cur), id, hashOf(id, 0, "5f:aim:@2"), "locked")
+	Commit(cross(cur), id, getGame(id).Turn, hashOf(id, 0, "5f:aim:@2"), "locked")
 	testing.SetRealm(testing.NewUserRealm(bob))
-	Commit(cross(cur), id, hashOf(id, 1, ""), "locked")
+	Commit(cross(cur), id, getGame(id).Turn, hashOf(id, 1, ""), "locked")
 	testing.SetRealm(testing.NewUserRealm(carol))
-	Commit(cross(cur), id, hashOf(id, 2, "1f:ahead"), "locked")
+	Commit(cross(cur), id, getGame(id).Turn, hashOf(id, 2, "1f:ahead"), "locked")
 	testing.SetRealm(testing.NewUserRealm(dave))
 	Reveal(cross(cur), id, 2, 3, salt, "")
 	RevealMany(cross(cur), id, 2, "0;1;2", "ab;ab;ab", "5f:aim:@2;;1f:ahead")
@@ -1049,12 +1054,12 @@ func TestFourSeats(cur realm, t *testing.T) {
 	g.State.Chars[1].Status = engine.Killed
 	testing.SetRealm(testing.NewUserRealm(bob))
 	uassert.AbortsWithMessage(t, cur, "gnoslinger: your character is out of the fight", func() {
-		Commit(cross(cur), id, hashOf(id, 1, ""), "locked")
+		Commit(cross(cur), id, getGame(id).Turn, hashOf(id, 1, ""), "locked")
 	})
 	testing.SetRealm(testing.NewUserRealm(alice))
-	Commit(cross(cur), id, hashOf(id, 0, ""), "locked")
+	Commit(cross(cur), id, getGame(id).Turn, hashOf(id, 0, ""), "locked")
 	testing.SetRealm(testing.NewUserRealm(carol))
-	Commit(cross(cur), id, hashOf(id, 2, ""), "locked")
+	Commit(cross(cur), id, getGame(id).Turn, hashOf(id, 2, ""), "locked")
 	testing.SetRealm(testing.NewUserRealm(dave))
 	Reveal(cross(cur), id, 3, 3, salt, "")
 	RevealMany(cross(cur), id, 3, "0;2", "ab;ab", ";")
@@ -1073,7 +1078,7 @@ func TestSurrenderGoesOn(cur realm, t *testing.T) {
 	// Alice's plan is in; bob surrenders: the showdown goes on between
 	// alice and carol, and carol's plan, the last, starts the reveals.
 	testing.SetRealm(testing.NewUserRealm(alice))
-	Commit(cross(cur), id, hashOf(id, 0, "1f:ahead"), "locked")
+	Commit(cross(cur), id, getGame(id).Turn, hashOf(id, 0, "1f:ahead"), "locked")
 	testing.SetRealm(testing.NewUserRealm(bob))
 	Surrender(cross(cur), id)
 	uassert.Equal(t, "planning", g.Phase.String())
@@ -1118,9 +1123,9 @@ func TestClaimTimeoutGoesOn(cur realm, t *testing.T) {
 	JoinGame(cross(cur), id, "A-E8", 3)
 	g := getGame(id)
 	testing.SetRealm(testing.NewUserRealm(alice))
-	Commit(cross(cur), id, hashOf(id, 0, "1f:ahead"), "locked")
+	Commit(cross(cur), id, getGame(id).Turn, hashOf(id, 0, "1f:ahead"), "locked")
 	testing.SetRealm(testing.NewUserRealm(bob))
-	Commit(cross(cur), id, hashOf(id, 1, ""), "locked")
+	Commit(cross(cur), id, getGame(id).Turn, hashOf(id, 1, ""), "locked")
 	testing.SkipHeights(361)
 	ClaimTimeout(cross(cur), id)
 	uassert.Equal(t, "revealing", g.Phase.String())
@@ -1137,9 +1142,9 @@ func TestClaimTimeoutGoesOn(cur realm, t *testing.T) {
 	})
 	for turn := 2; turn <= 3; turn++ {
 		testing.SetRealm(testing.NewUserRealm(alice))
-		Commit(cross(cur), id, hashOf(id, 0, ""), "locked")
+		Commit(cross(cur), id, getGame(id).Turn, hashOf(id, 0, ""), "locked")
 		testing.SetRealm(testing.NewUserRealm(bob))
-		Commit(cross(cur), id, hashOf(id, 1, ""), "locked")
+		Commit(cross(cur), id, getGame(id).Turn, hashOf(id, 1, ""), "locked")
 		testing.SkipHeights(361)
 		ClaimTimeout(cross(cur), id)
 		RevealMany(cross(cur), id, turn, "0;1", "ab;ab", ";")
@@ -1151,7 +1156,7 @@ func TestClaimTimeoutGoesOn(cur realm, t *testing.T) {
 	// too, and the game ends.
 	for turn := 4; turn <= 6; turn++ {
 		testing.SetRealm(testing.NewUserRealm(bob))
-		Commit(cross(cur), id, hashOf(id, 1, ""), "locked")
+		Commit(cross(cur), id, getGame(id).Turn, hashOf(id, 1, ""), "locked")
 		testing.SkipHeights(361)
 		ClaimTimeout(cross(cur), id)
 		if g.Phase == PhaseRevealing {

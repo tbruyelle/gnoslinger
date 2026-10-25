@@ -12,9 +12,9 @@ import (
 	"strconv"
 	"time"
 
+	"gno.land/p/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/engine/v0"
 	"gno.land/p/nt/avl/v0"
 	"gno.land/p/nt/seqid/v0"
-	"gno.land/p/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/engine/v0"
 	profiles "gno.land/r/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/profiles/v0"
 )
 

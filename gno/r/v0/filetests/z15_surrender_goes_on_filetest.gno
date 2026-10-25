@@ -24,9 +24,9 @@ func main(cur realm) {
 	testing.SetRealm(testing.NewUserRealm(carol))
 	gnoslinger.JoinGame(cross(cur), id, "A-E8", 3)
 	testing.SetRealm(testing.NewUserRealm(alice))
-	gnoslinger.Commit(cross(cur), id, gnoslinger.PlanHash(id, 1, 0, "ab", "1f:ahead"), "locked")
+	gnoslinger.Commit(cross(cur), id, 1, gnoslinger.PlanHash(id, 1, 0, "ab", "1f:ahead"), "locked")
 	testing.SetRealm(testing.NewUserRealm(carol))
-	gnoslinger.Commit(cross(cur), id, gnoslinger.PlanHash(id, 1, 2, "ab", "1f:ahead"), "locked")
+	gnoslinger.Commit(cross(cur), id, 1, gnoslinger.PlanHash(id, 1, 2, "ab", "1f:ahead"), "locked")
 	testing.SetRealm(testing.NewUserRealm(bob))
 	gnoslinger.Surrender(cross(cur), id) // the others' plans are committed: the reveals start
 	gnoslinger.RevealMany(cross(cur), id, 1, "0;2", "ab;ab", "1f:ahead;1f:ahead")

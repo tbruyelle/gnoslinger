@@ -21,17 +21,17 @@ func main(cur realm) {
 	gnoslinger.JoinGame(cross(cur), id, "A-H7", 0)
 	for turn := 1; turn <= 9; turn++ {
 		testing.SetRealm(testing.NewUserRealm(alice))
-		gnoslinger.Commit(cross(cur), id, gnoslinger.PlanHash(id, turn, 0, "ab", ""), "locked")
+		gnoslinger.Commit(cross(cur), id, turn, gnoslinger.PlanHash(id, turn, 0, "ab", ""), "locked")
 		testing.SetRealm(testing.NewUserRealm(bob))
 		gnoslinger.Reveal(cross(cur), id, turn, 1, "ab", "")
 		gnoslinger.Reveal(cross(cur), id, turn, 0, "ab", "")
 	}
 	testing.SetRealm(testing.NewUserRealm(alice))
-	gnoslinger.Commit(cross(cur), id, gnoslinger.PlanHash(id, 10, 0, "ab", ""), "locked")
+	gnoslinger.Commit(cross(cur), id, 10, gnoslinger.PlanHash(id, 10, 0, "ab", ""), "locked")
 	testing.SetRealm(testing.NewUserRealm(bob))
 	gnoslinger.Reveal(cross(cur), id, 10, 1, "ab", "")
 	gnoslinger.Reveal(cross(cur), id, 10, 0, "ab", "")
-	gnoslinger.Commit(cross(cur), id, gnoslinger.PlanHash(id, 10, 1, "ab", ""), "locked")
+	gnoslinger.Commit(cross(cur), id, 10, gnoslinger.PlanHash(id, 10, 1, "ab", ""), "locked")
 }
 
 // Error:

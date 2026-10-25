@@ -77,7 +77,7 @@ to commit once only. Here B commits last:
    │ hash ← sha256(…)               │                                         │
    │ locked ← tlock(salt‖plan       │                                         │
    │          → round R)            │                                         │
-   ├── Commit(id, hash, locked) ───►│ Commits[0] = {hash, locked}             │
+   ├── Commit(id, t, hash, locked) ►│ Commits[0] = {hash, locked}             │
    │                                │                                         │ poll: A committed, B is last
    │                                │◄── Reveal(id, t, 1, salt', plan') ──────┤ (in clear: A's plan is fixed)
    │                                │ every alive seat in → revealing         │
@@ -204,7 +204,7 @@ opening of its own plan, until a missed turn if nobody opens it.
  hash ← sha256("gnoslinger|" id "|" turn "|" seat     check sha256(…) == Commits[seat].Hash
                "|" salt "|" plan), hex                RevealMany(id, seats, salts, plans), every seat opened
  locked ← timelockEncrypt(R, salt‖plan, quicknet)      realm: same sha256, ParsePlan, Validate, store
- Commit(id, hash, locked)
+ Commit(id, turn, hash, locked)
 ```
 
 - drand **quicknet**: chain hash `52db9ba7…c84e971`, genesis 1692803367,
@@ -283,7 +283,7 @@ events. Replays and the history view do not change.
 
 | Function | Caller | Does |
 |---|---|---|
-| `Commit(cur, id, hash, locked string) int` | the seat | phase `planning`, before D, character alive, not yet committed; `hash` 64 hex chars, `locked` ≤ 1 KB; stores; when every alive seat has committed, phase `revealing` (event `AllCommitted`). Returns Rev |
+| `Commit(cur, id, turn, hash, locked string) int` | the seat | `turn` the one in progress (a commit for another turn could never be revealed), phase `planning`, before D, character alive, not yet committed; `hash` 64 hex chars, `locked` ≤ 1 KB; stores; when every alive seat has committed, phase `revealing` (event `AllCommitted`). Returns Rev |
 | `Reveal(cur, id string, turn, seat int, salt, plan string) int` | anyone | `turn` the current one; phase `revealing`, seat committed and not revealed, sha256 matches; or phase `planning` (the last commit in clear), before D, by the seat itself, not committed, every other alive seat committed, no hash to check (any other reveal while planning would leak); then exactly today's `SubmitPlan` checks (parse, validate, ground ids, targets, `PlayedFoot`/`PlayedRun`); stores plan and salt and clears the seat's commit (its deposit refunded to the caller); when every seat is revealed, `resolveTurn` in the same tx. Returns Rev |
 | `RevealMany(cur, id, seats, salts, plans string) int` | anyone | the opened reveals of a turn in one transaction: `seats`, `salts` and `plans` are lists separated by `;` (a plan string never holds one; an empty plan is an empty field), the same length. Each seat as `Reveal`, in the order given; a seat already revealed is skipped (its player's own reveal landed first), and so is one whose salt and plan do not match its hash or whose plan is not valid (event `PlanUnopened`; the opener cannot check that before opening, and one bad copy must not hold the others back): that seat stays unrevealed, for the claim. Bad lists, an unknown seat, the wrong turn or phase abort. Each cleared commit is refunded to the caller; when the call completes the turn, `resolveTurn` in the same tx. Returns Rev |
 | `Surrender(cur, id)` | the seat | `planning` only; drops the seat's commit; as today otherwise |

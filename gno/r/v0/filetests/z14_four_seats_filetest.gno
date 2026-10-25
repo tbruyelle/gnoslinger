@@ -29,11 +29,11 @@ func main(cur realm) {
 	testing.SetRealm(testing.NewUserRealm(dave))
 	gnoslinger.JoinGame(cross(cur), id, "A-F5", 3)
 	testing.SetRealm(testing.NewUserRealm(alice))
-	gnoslinger.Commit(cross(cur), id, gnoslinger.PlanHash(id, 1, 0, "ab", "9f:1:0,5f:aim:@2"), "locked")
+	gnoslinger.Commit(cross(cur), id, 1, gnoslinger.PlanHash(id, 1, 0, "ab", "9f:1:0,5f:aim:@2"), "locked")
 	testing.SetRealm(testing.NewUserRealm(bob))
-	gnoslinger.Commit(cross(cur), id, gnoslinger.PlanHash(id, 1, 1, "ab", ""), "locked")
+	gnoslinger.Commit(cross(cur), id, 1, gnoslinger.PlanHash(id, 1, 1, "ab", ""), "locked")
 	testing.SetRealm(testing.NewUserRealm(carol))
-	gnoslinger.Commit(cross(cur), id, gnoslinger.PlanHash(id, 1, 2, "ab", "1f:ahead"), "locked")
+	gnoslinger.Commit(cross(cur), id, 1, gnoslinger.PlanHash(id, 1, 2, "ab", "1f:ahead"), "locked")
 	testing.SetRealm(testing.NewUserRealm(dave))
 	gnoslinger.Reveal(cross(cur), id, 1, 3, "ab", "3b:ahead_right") // the last plan, in clear
 	gnoslinger.RevealMany(cross(cur), id, 1, "0;1;2", "ab;ab;ab", "9f:1:0,5f:aim:@2;;1f:ahead")
@@ -62,6 +62,6 @@ func main(cur realm) {
 // - seg 3: marshal draws the Colt 45 to the gun hand and cocks it
 // - seg 5: marshal aims at A-F7 (reb): 2 AIM points
 //
-// Plans are hidden: commit `PlanHash(id, turn, seat, salt, plan)`, reveal once every plan is committed. [Commit a plan]($help&func=Commit&hash=&id=0000001&locked=) · [Surrender]($help&func=Surrender&id=0000001) · [Claim timeout]($help&func=ClaimTimeout&id=0000001) (after 2009-02-15 23:31 UTC)
+// Plans are hidden: commit `PlanHash(id, turn, seat, salt, plan)`, reveal once every plan is committed. [Commit a plan]($help&func=Commit&hash=&id=0000001&locked=&turn=2) · [Surrender]($help&func=Surrender&id=0000001) · [Claim timeout]($help&func=ClaimTimeout&id=0000001) (after 2009-02-15 23:31 UTC)
 //
 // [Back to the lobby](/r/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/v0:)

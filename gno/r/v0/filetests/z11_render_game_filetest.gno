@@ -21,13 +21,13 @@ func main(cur realm) {
 	testing.SetRealm(testing.NewUserRealm(bob))
 	gnoslinger.JoinGame(cross(cur), id, "A-H7", 0)
 	testing.SetRealm(testing.NewUserRealm(alice))
-	gnoslinger.Commit(cross(cur), id, gnoslinger.PlanHash(id, 1, 0, "ab", "1f:ahead_left,2f:ahead"), "locked")
+	gnoslinger.Commit(cross(cur), id, 1, gnoslinger.PlanHash(id, 1, 0, "ab", "1f:ahead_left,2f:ahead"), "locked")
 	testing.SetRealm(testing.NewUserRealm(bob))
 	gnoslinger.Reveal(cross(cur), id, 1, 1, "ab", "4b,1f:ahead")
 	gnoslinger.Reveal(cross(cur), id, 1, 0, "ab", "1f:ahead_left,2f:ahead")
 	// Turn 2: alice ran on turn 1, so she can sprint now.
 	testing.SetRealm(testing.NewUserRealm(alice))
-	gnoslinger.Commit(cross(cur), id, gnoslinger.PlanHash(id, 2, 0, "ab", "1f:ahead,2f:ahead,3f"), "locked")
+	gnoslinger.Commit(cross(cur), id, 2, gnoslinger.PlanHash(id, 2, 0, "ab", "1f:ahead,2f:ahead,3f"), "locked")
 	testing.SetRealm(testing.NewUserRealm(bob))
 	gnoslinger.Reveal(cross(cur), id, 2, 1, "ab", "")
 	gnoslinger.Reveal(cross(cur), id, 2, 0, "ab", "1f:ahead,2f:ahead,3f")
@@ -81,6 +81,6 @@ func main(cur realm) {
 // - seg 4: marshal sprint: A-E9 → A-E10
 // - seg 4: marshal draws card 83 (sprint): gains 2 delay, now 2
 //
-// Plans are hidden: commit `PlanHash(id, turn, seat, salt, plan)`, reveal once every plan is committed. [Commit a plan]($help&func=Commit&hash=&id=0000001&locked=) · [Surrender]($help&func=Surrender&id=0000001) · [Claim timeout]($help&func=ClaimTimeout&id=0000001) (after 2009-02-15 23:31 UTC)
+// Plans are hidden: commit `PlanHash(id, turn, seat, salt, plan)`, reveal once every plan is committed. [Commit a plan]($help&func=Commit&hash=&id=0000001&locked=&turn=3) · [Surrender]($help&func=Surrender&id=0000001) · [Claim timeout]($help&func=ClaimTimeout&id=0000001) (after 2009-02-15 23:31 UTC)
 //
 // [Back to the lobby](/r/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/v0:)

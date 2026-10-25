@@ -5,13 +5,13 @@ import (
 	"strings"
 	"time"
 
+	"gno.land/p/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/cards/v0"
+	"gno.land/p/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/engine/v0"
+	"gno.land/p/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/hex/v0"
 	"gno.land/p/moul/md/v0"
 	"gno.land/p/moul/txlink/v0"
 	"gno.land/p/nt/markdown/sanitize/v0"
 	"gno.land/p/nt/mux/v0"
-	"gno.land/p/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/cards/v0"
-	"gno.land/p/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/engine/v0"
-	"gno.land/p/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/hex/v0"
 	profiles "gno.land/r/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/profiles/v0"
 )
 
@@ -177,7 +177,7 @@ func renderGame(res *mux.ResponseWriter, req *mux.Request) {
 	case PhasePlanning:
 		res.Write(md.Paragraph("Plans are hidden: commit " + md.InlineCode("PlanHash(id, turn, seat, salt, plan)") +
 			", reveal once every plan is committed. " +
-			md.Link("Commit a plan", txlink.Call("Commit", "id", g.ID, "hash", "", "locked", "")) +
+			md.Link("Commit a plan", txlink.Call("Commit", "id", g.ID, "turn", strconv.Itoa(g.Turn), "hash", "", "locked", "")) +
 			" · " + md.Link("Surrender", txlink.Call("Surrender", "id", g.ID)) +
 			" · " + md.Link("Claim timeout", txlink.Call("ClaimTimeout", "id", g.ID)) +
 			" (after " + when(g.timeoutAt()) + ")"))

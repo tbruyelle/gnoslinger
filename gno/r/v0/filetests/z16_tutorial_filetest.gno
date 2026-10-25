@@ -36,7 +36,7 @@ func main(cur realm) {
 	for i, t := range turns {
 		n := i + 1
 		testing.SetRealm(testing.NewUserRealm(bob))
-		gnoslinger.Commit(cross(cur), id, gnoslinger.PlanHash(id, n, 1, t.kSalt, t.kPlan), "locked")
+		gnoslinger.Commit(cross(cur), id, n, gnoslinger.PlanHash(id, n, 1, t.kSalt, t.kPlan), "locked")
 		println(gnoslinger.GameJSON(id))
 		testing.SetRealm(testing.NewUserRealm(alice))
 		gnoslinger.Reveal(cross(cur), id, n, 0, t.mSalt, t.mPlan)

@@ -24,7 +24,7 @@ func main(cur realm) {
 	gnoslinger.JoinGame(cross(cur), id, "A-H7", 0)
 	for turn := 1; turn <= 3; turn++ {
 		testing.SetRealm(testing.NewUserRealm(alice))
-		gnoslinger.Commit(cross(cur), id, gnoslinger.PlanHash(id, turn, 0, "ab", ""), "locked")
+		gnoslinger.Commit(cross(cur), id, turn, gnoslinger.PlanHash(id, turn, 0, "ab", ""), "locked")
 		testing.SkipHeights(361) // 5s per height
 		testing.SetRealm(testing.NewUserRealm(carol))
 		gnoslinger.ClaimTimeout(cross(cur), id)

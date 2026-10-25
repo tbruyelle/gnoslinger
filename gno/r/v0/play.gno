@@ -12,17 +12,23 @@ import (
 	"gno.land/p/g1th0masp67zfs9lg6d34qhghldhg6kjcqjuv7c2/gnoslinger/hex/v0"
 )
 
-// Commit seals the caller's plan for the current turn and returns the game
-// revision. hash is PlanHash of a salt and the plan, which a Reveal shows
+// Commit seals the caller's plan for the given turn, the one in progress,
+// and returns the game revision (a commit meant for another turn, say one
+// still on its way when time was called, is refused: its hash, which covers
+// the turn, could never be revealed in this one, and it would take the
+// seat's commit). hash is PlanHash of a salt and the plan, which a Reveal shows
 // once every character still in the fight committed; locked is the salt
 // and plan timelocked to the turn's LockRound (at most MaxLocked bytes,
 // required: encrypting needs no drand node), which anyone can open and
 // reveal from then if the player does not. When this commit is the last one the turn waits for, the game
 // moves on to the reveals.
-func Commit(cur realm, id string, hash string, locked string) int {
+func Commit(cur realm, id string, turn int, hash string, locked string) int {
 	assertNoSend()
 	caller := cur.Previous().Address()
 	g := getGame(id)
+	if turn != g.Turn {
+		panic("gnoslinger: turn " + strconv.Itoa(turn) + " is not the turn in progress")
+	}
 	if g.Phase != PhasePlanning {
 		panic("gnoslinger: game is not accepting plans")
 	}

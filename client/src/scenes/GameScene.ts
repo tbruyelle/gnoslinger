@@ -3783,7 +3783,7 @@ export class GameScene extends Phaser.Scene {
     const sealed: Sealed = { salt: newSalt(), plan };
     const locked = await lockSealed(view.lockRound, sealed);
     savePending(this.revealScope(), this.gameID, turn, seat, sealed);
-    await this.chain.realm.commit(this.gameID, planHash(this.gameID, turn, seat, sealed.salt, sealed.plan), locked);
+    await this.chain.realm.commit(this.gameID, turn, planHash(this.gameID, turn, seat, sealed.salt, sealed.plan), locked);
   }
 
   /** My committed plan, held by this browser, waits for its reveal (auto-sign off: a click). */
