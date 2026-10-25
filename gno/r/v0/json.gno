@@ -15,6 +15,11 @@ import (
 
 const listLimit = 50
 
+// liveScan is how many of the newest games GamesJSON looks through for the
+// ones being played: what the view costs stays bounded however many games
+// there are.
+const liveScan = 200
+
 // GameJSON is the full view of a game:
 //
 //	{"id","rev","phase","turn","maxTurns","timeout" (seconds),"board",
@@ -309,11 +314,13 @@ func writeEvent(b *strings.Builder, e engine.Event) {
 	b.WriteByte('}')
 }
 
-// GamesJSON lists, for an address, the games with a free seat and the
-// games it plays or played, newest first (at most 50 each), with the
-// address's registered name ("" if none):
+// GamesJSON lists, for an address, the games with a free seat, the games
+// being played (live: planning or revealing, for anyone to watch; found
+// among the liveScan newest games, a running game being recent: a turn
+// times out within days) and the games it plays or played, newest first
+// (at most 50 each), with the address's registered name ("" if none):
 //
-//	{"name","open":[summary...],"mine":[summary...]}
+//	{"name","open":[summary...],"live":[summary...],"mine":[summary...]}
 //	summary = {"id","rev","phase","turn","maxTurns","timeout","winner","endReason","vp","stake","pot","payouts","houseCut","createdAt","updatedAt","timeoutAt","lockRound","players":[{"addr","name","char","status","committed","revealed"}]}
 //
 // lockRound (0 unless planning or revealing) tells the lobby when the
@@ -332,6 +339,19 @@ func GamesJSON(addr string) string {
 		writeSummary(&b, v.(*Game))
 		n++
 		return n >= listLimit
+	})
+	b.WriteString(`],"live":[`)
+	n, scanned := 0, 0
+	games.ReverseIterate("", "", func(_ string, v any) bool {
+		scanned++
+		if g := v.(*Game); g.Phase == PhasePlanning || g.Phase == PhaseRevealing {
+			if n > 0 {
+				b.WriteByte(',')
+			}
+			writeSummary(&b, g)
+			n++
+		}
+		return n >= listLimit || scanned >= liveScan
 	})
 	b.WriteString(`],"mine":[`)
 	if v := byPlayer.Get(addr); v != nil {

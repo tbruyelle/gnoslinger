@@ -472,6 +472,15 @@ export class LobbyView {
       })
       .join("");
 
+    // Anyone's showdown being played, opened as a spectator.
+    const live = s.live
+      .map((g) => {
+        const title = g.players.filter((p) => p.addr).map((p) => `${charName(p.char)} · ${playerLabel(p)}`).join(" vs ");
+        const where = g.phase === "revealing" ? "revealing the plans" : "planning";
+        return row("gl-line", g, title, withStake(`Game ${g.id} · Turn ${g.turn} of ${g.maxTurns} · ${where}`, g), openBtn(g, "Watch"));
+      })
+      .join("");
+
     const finished = s.finished
       .map((g) => {
         const paid = payoutLine(g, g.players.findIndex((p) => p.addr === m.address));
@@ -486,6 +495,7 @@ export class LobbyView {
       yourMovePanel +
       (waiting ? panel("gl-waiting", "Waiting on others", waiting) : "") +
       panel("gl-open-games", "Open showdowns", open || '<p class="gl-empty">No showdown is waiting for a player: call one.</p>') +
+      (live ? panel("gl-live", "Current showdowns", live) : "") +
       (finished ? panel("gl-finished", "Finished", finished) : "") +
       "</div>"
     );

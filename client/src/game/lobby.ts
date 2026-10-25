@@ -19,6 +19,8 @@ export interface LobbySections {
   finished: GameSummary[];
   /** Games waiting for a player, not mine. */
   open: GameSummary[];
+  /** Games being played, not mine: to watch. */
+  live: GameSummary[];
 }
 
 /** A running game: its plans are committed or revealed. */
@@ -57,6 +59,7 @@ export function lobbySections(
     waiting: games.mine.filter((g) => g.phase === "waiting" || (running(g) && !myMove(g))),
     finished: games.mine.filter((g) => g.phase === "finished"),
     open: games.open.filter((g) => !g.players.some((p) => p.addr === me)),
+    live: games.live.filter((g) => !g.players.some((p) => p.addr === me)),
   };
 }
 

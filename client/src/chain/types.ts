@@ -232,6 +232,8 @@ export interface GamesView {
   /** The registered name of the address listed, "" if none. */
   name: string;
   open: GameSummary[];
+  /** Games being played (planning or revealing), anyone's, newest first: to watch. */
+  live: GameSummary[];
   mine: GameSummary[];
 }
 
@@ -297,8 +299,9 @@ export function parseTurn(json: string): TurnResult {
 
 export function parseGamesView(json: string): GamesView {
   const v: unknown = JSON.parse(json);
-  if (!isRecord(v) || !Array.isArray(v.open) || !Array.isArray(v.mine)) bad("games");
+  if (!isRecord(v) || !Array.isArray(v.open) || !Array.isArray(v.live) || !Array.isArray(v.mine)) bad("games");
   v.open.forEach(checkSummary);
+  v.live.forEach(checkSummary);
   v.mine.forEach(checkSummary);
   return v as unknown as GamesView;
 }

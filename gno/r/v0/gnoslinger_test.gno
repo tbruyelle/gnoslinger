@@ -74,6 +74,8 @@ func TestCreateAndJoin(cur realm, t *testing.T) {
 	uassert.True(t, strings.Contains(GamesJSON(alice.String()), `"mine":[{"id":"`+id+`"`))
 	uassert.True(t, strings.Contains(GamesJSON(bob.String()), `"mine":[{"id":"`+id+`"`))
 	uassert.True(t, strings.HasSuffix(GamesJSON(carol.String()), `"mine":[]}`))
+	// Being played, the game is listed for anyone to watch.
+	uassert.True(t, strings.Contains(GamesJSON(carol.String()), `"open":[],"live":[{"id":"`+id+`"`), GamesJSON(carol.String()))
 }
 
 func TestCreateValidation(cur realm, t *testing.T) {
