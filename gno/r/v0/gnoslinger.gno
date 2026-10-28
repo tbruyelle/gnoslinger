@@ -355,6 +355,7 @@ func (g *Game) finish(cur realm, reason string) {
 		w = g.Players[g.Winner].Addr.String()
 	}
 	emit("GameEnded", "id", g.ID, "reason", reason, "winner", w)
+	g.notifyOver()
 	g.payPot(cur)
 }
 

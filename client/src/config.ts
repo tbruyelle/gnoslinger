@@ -15,6 +15,8 @@ export interface ChainConfig {
   gasFee?: number;
   /** How often the game view is polled, in milliseconds. */
   pollMs: number;
+  /** The gnotif server pushing the browser notifications (game/notifications.ts), "" for none offered: http://127.0.0.1:8080 with make notif. */
+  gnotifServer: string;
 }
 
 function str(value: string | undefined, fallback: string): string {
@@ -36,4 +38,5 @@ export const CONFIG: ChainConfig = {
   gasWanted: num(import.meta.env.VITE_GAS_WANTED),
   gasFee: num(import.meta.env.VITE_GAS_FEE),
   pollMs: num(import.meta.env.VITE_POLL_MS) ?? 2000,
+  gnotifServer: str(import.meta.env.VITE_GNOTIF_SERVER, ""),
 };

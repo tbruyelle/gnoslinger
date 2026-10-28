@@ -260,6 +260,7 @@ func progress(cur realm, g *Game) {
 			}
 			g.Phase = PhaseRevealing
 			emit("AllCommitted", "id", g.ID, "turn", strconv.Itoa(g.Turn))
+			g.notifyRevealDue()
 		}
 		if g.Phase != PhaseRevealing || !g.allRevealed() {
 			return
@@ -267,6 +268,7 @@ func progress(cur realm, g *Game) {
 		turn := g.Turn
 		seed := resolveTurn(cur, g)
 		emit("TurnResolved", "id", g.ID, "turn", strconv.Itoa(turn), "rev", strconv.Itoa(g.Rev+1), "seed", seed)
+		g.notifyPlanDue()
 	}
 }
 

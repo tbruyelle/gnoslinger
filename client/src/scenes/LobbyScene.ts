@@ -6,6 +6,7 @@ import { subscribeAccountChanged, subscribeNetworkChanged, subscribeWalletLocked
 import { userMessage } from "../chain/errors";
 import { formatCoins } from "../chain/rpc";
 import { subscribeSession } from "../chain/session";
+import { newNotifications, notificationsMessage, unregistered, type Notifications } from "../game/notifications";
 import type { GamesView, PlayersView } from "../chain/types";
 import { SOUND_FILES, SOUND_VOLUME, soundKey } from "../game/sounds";
 import { LobbyView, PLAYERS_PAGE, SESSION_DAYS, SESSION_LIMITS, type LobbyDialog } from "../ui/lobbyView";
@@ -107,6 +108,10 @@ export class LobbyScene extends Phaser.Scene {
   private dialogSeq = 0;
   private balance: string | null = null;
   private sessionBusy = false;
+  /** The browser notifications of my moves, null without a gnotif server configured. */
+  private notif: Notifications | null = null;
+  private notifOn = false;
+  private notifBusy = false;
   /** Games where my reveal, held by this browser, waits for a click; and a reveal sent from the lobby (auto-sign), in flight. */
   private revealIds: string[] = [];
   private openIds: string[] = [];
@@ -150,6 +155,7 @@ export class LobbyScene extends Phaser.Scene {
 
   create() {
     this.shutDown = false;
+    this.notif = CONFIG.gnotifServer ? newNotifications(CONFIG.gnotifServer, CONFIG.chainId, CONFIG.realmPath) : null;
     this.view = new LobbyView({
       retry: () => void this.connect(),
       quit: () => this.quit(),
@@ -193,6 +199,7 @@ export class LobbyScene extends Phaser.Scene {
       revokeSession: () => void this.changeSession("revoke"),
       setSessionDays: (index) => (this.sessionDays = index),
       setSessionLimit: (index) => (this.sessionLimit = index),
+      toggleNotifications: () => void this.toggleNotifications(),
       closeDialog: () => {
         this.dialogSeq++;
         this.dialog = null;
@@ -285,6 +292,7 @@ export class LobbyScene extends Phaser.Scene {
       this.chain = await initChain(CONFIG);
       this.status = "ready";
       void this.loadBalance(this.chain.wallet.address);
+      void this.syncNotifications(this.chain.wallet.address);
       installWalletNotices();
       if (this.unsubscribe.length === 0) {
         this.unsubscribe.push(
@@ -308,6 +316,42 @@ export class LobbyScene extends Phaser.Scene {
       this.status = "error";
       this.errorMsg = userMessage(e);
       this.buildAll();
+    }
+  }
+
+  /** Keeps this browser's opt-ins current for the account, when it is subscribed: the triggers' ids may change, and so may the account. */
+  private async syncNotifications(address: string) {
+    if (!this.notif) return;
+    try {
+      this.notifOn = await this.notif.enabled();
+      if (this.notifOn) await this.notif.optIn(address);
+    } catch (e) {
+      if (unregistered(e)) this.notifOn = false;
+      else showToast(this, notificationsMessage(e), "error", 8000);
+    }
+    if (this.screen === "lobby") this.renderView();
+  }
+
+  /** Turns the browser notifications of my moves on (the browser asks for permission) or off. */
+  private async toggleNotifications() {
+    if (!this.notif || !this.chain || this.notifBusy) return;
+    this.notifBusy = true;
+    this.renderView();
+    try {
+      if (this.notifOn) {
+        await this.notif.disable();
+        this.notifOn = false;
+        showToast(this, "Notifications off", "info", 2500);
+      } else {
+        await this.notif.enable(this.chain.wallet.address);
+        this.notifOn = true;
+        showToast(this, "Notifications on: this browser is told when it is your move", "info", 4000);
+      }
+    } catch (e) {
+      showToast(this, notificationsMessage(e), "error", 8000);
+    } finally {
+      this.notifBusy = false;
+      if (this.screen === "lobby") this.renderView();
     }
   }
 
@@ -507,6 +551,7 @@ export class LobbyScene extends Phaser.Scene {
         daysIndex: this.sessionDays,
         limitIndex: this.sessionLimit,
       },
+      notifications: { available: this.notif !== null, on: this.notifOn, busy: this.notifBusy },
       games: this.games,
       creatorChar: CREATOR_CHAR,
       seats: this.seats,

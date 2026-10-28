@@ -43,6 +43,15 @@ export interface SessionModel {
   limitIndex: number;
 }
 
+/** The browser notifications of my moves (game/notifications.ts). */
+export interface NotificationsModel {
+  /** Offered at all: a gnotif server is configured. */
+  available: boolean;
+  on: boolean;
+  /** Waiting on the browser or the server for a change. */
+  busy: boolean;
+}
+
 export interface LobbyModel {
   status: "connecting" | "ready" | "error";
   error: string;
@@ -55,6 +64,7 @@ export interface LobbyModel {
   balance: string;
   locked: boolean;
   session: SessionModel;
+  notifications: NotificationsModel;
   games: GamesView | null;
   /** The character I play in a game I create: the first seat's (joining, I play the next free seat's). */
   creatorChar: string;
@@ -100,6 +110,8 @@ export interface LobbyActions {
   revokeSession(): void;
   setSessionDays(index: number): void;
   setSessionLimit(index: number): void;
+  /** Turns the browser notifications of my moves on (the browser asks for permission) or off. */
+  toggleNotifications(): void;
   closeDialog(): void;
 }
 
@@ -284,6 +296,8 @@ export class LobbyView {
           return this.actions.enableSession();
         case "session-off":
           return this.actions.revokeSession();
+        case "notif":
+          return this.actions.toggleNotifications();
         case "close":
           return this.actions.closeDialog();
         case "retry":
@@ -345,6 +359,7 @@ export class LobbyView {
         `<span class="gl-net">${esc(m.chainId)} network</span>` +
         (m.locked ? '<span class="gl-locked">Adena locked</span>' : "") +
         this.sessionPill(m.session) +
+        this.notifPill(m.notifications) +
         `<div class="gl-account"><button type="button" class="gl-account-btn" data-act="profile" data-id="${esc(m.address)}" title="My profile · ${esc(m.address)}">` +
         `<b>${esc(playerLabel({ addr: m.address, name: m.name }))}</b><span>${esc(m.balance || "…")}</span></button>` +
         `<button type="button" class="gl-icon" data-act="copy" aria-label="Copy my address">${COPY_ICON}</button>` +
@@ -366,6 +381,16 @@ export class LobbyView {
     }
     const cls = st.kind === "ended" ? " ended" : "";
     return `<button type="button" class="gl-session${cls}" data-act="session" title="Sign your moves without Adena popups">Auto-sign off</button>`;
+  }
+
+  /** The notifications pill in the top bar: this browser told of my moves, or not. */
+  private notifPill(n: NotificationsModel): string {
+    if (!n.available) return "";
+    const dis = n.busy ? " disabled" : "";
+    if (n.on) {
+      return `<button type="button" class="gl-session on" data-act="notif"${dis} title="This browser is told when it is your move, even with the game closed">Notifications on</button>`;
+    }
+    return `<button type="button" class="gl-session" data-act="notif"${dis} title="Be told when it is your move, even with the game closed">Notifications off</button>`;
   }
 
   private lists(m: LobbyModel): string {

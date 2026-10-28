@@ -105,6 +105,7 @@ func JoinGame(cur realm, id string, startHex string, facing int) {
 		// The game starts: it counts as played for every seat.
 		g.Phase = PhasePlanning
 		g.startTurn()
+		g.notifyPlanDue()
 		openGames.Remove(id)
 		for _, p := range g.Players {
 			profiles.AddGamePlayed(cross(cur), p.Addr)
@@ -154,4 +155,5 @@ func CancelGame(cur realm, id string) {
 		}
 	}
 	emit("GameEnded", "id", id, "reason", "cancelled", "winner", "")
+	g.notifyCancelled(caller)
 }

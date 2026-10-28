@@ -5,7 +5,6 @@
 
 ## UI
 - change window size to see how things fit
-- use gnotiff
 - add report bug button
 
 ## General

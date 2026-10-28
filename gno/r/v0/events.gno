@@ -20,8 +20,13 @@ import "chain"
 //	StakeRefunded id seat player amount   (a showdown cancelled, or ended with everyone out of time, gives the stakes back)
 //	HouseWithdrawn to amount
 //	AdminChanged  admin
+//	PlanDue       id turn turns to char vs left   (a turn started: one per player with a plan to send; char its character, vs the others', left the time the turn gives; notify.gno)
+//	RevealDue     id turn turns to char vs   (the reveals started: one per player whose committed plan is not revealed)
+//	ShowdownOver  id to char vs outcome   (the game ended: one per player, "you won", "you lost", "a draw"; a cancelled game, to the players who had joined)
 //
 // They land in transaction results; clients still poll Game.Rev to sync.
+// PlanDue, RevealDue and ShowdownOver name their recipient, for the
+// browser notifications (notify.gno).
 func emit(typ string, attrs ...string) {
 	chain.Emit(typ, attrs...)
 }

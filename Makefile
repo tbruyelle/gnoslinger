@@ -29,6 +29,28 @@ web:
 dev:
 	npx concurrently -n chain,web "$(MAKE) gnodev" "$(MAKE) web"
 
+# --- Notifications (gnotif) ---
+
+# tx-indexer + gnotifd against the running gnodev (scripts/notif.sh),
+# following its reloads. The client needs
+# VITE_GNOTIF_SERVER=http://127.0.0.1:8080 to offer the notifications.
+notif:
+	scripts/notif.sh
+
+# Refetches the gnotif registry and its trigger package as deployed on Onyx
+# into gno/third_party/gnotif (its README).
+ONYX_RPC := https://rpc.onyx.testnets.gno.land:443
+GNOTIF_REGISTRY := gno.land/r/nym-gfanton001/gnotif/v1
+GNOTIF_TRIGGER := gno.land/p/nym-gfanton001/gnotif/trigger/v0
+fetch-gnotif:
+	for f in gnotif.gno record.gno render.gno validate.gno; do \
+		go tool gnokey query vm/qfile -remote $(ONYX_RPC) -data $(GNOTIF_REGISTRY)/$$f | sed '1d; 2s/^data: //' > gno/third_party/gnotif/registry/$$f || exit 1; \
+	done
+	go tool gnokey query vm/qfile -remote $(ONYX_RPC) -data $(GNOTIF_TRIGGER)/trigger.gno | sed '1d; 2s/^data: //' > gno/third_party/gnotif/trigger/trigger.gno
+	printf 'module = "%s"\ngno = "0.9"\n' $(GNOTIF_REGISTRY) > gno/third_party/gnotif/registry/gnomod.toml
+	printf 'module = "%s"\ngno = "0.9"\n' $(GNOTIF_TRIGGER) > gno/third_party/gnotif/trigger/gnomod.toml
+	go tool gno fmt -w gno/third_party/gnotif
+
 # --- Gno ---
 
 test:
@@ -94,4 +116,4 @@ update-fork:
 	go mod edit -replace github.com/gnolang/gno/contribs/gnodev=$(FORK_REPO)/contribs/gnodev@$(FORK_REF)
 	go mod tidy
 
-.PHONY: gnodev web dev test test-v lint fmt check gen-board gen-tutorial mod-download update-fork
+.PHONY: gnodev web dev notif fetch-gnotif test test-v lint fmt check gen-board gen-tutorial mod-download update-fork
