@@ -156,18 +156,15 @@ const CSS = `
 .gl-card{display:flex;flex-wrap:wrap;align-items:center;gap:12px 18px;background:#FBF4E4;border:2px solid #2A1C14;border-radius:12px;padding:12px 14px}
 .gl-line{display:flex;flex-wrap:wrap;align-items:center;gap:12px 18px;border-bottom:2px dashed #CBB892;padding:6px 4px 12px}
 .gl-line:last-child{border-bottom:0;padding-bottom:4px}
-.gl-crest{position:relative;flex-shrink:0;width:50px;height:50px}
-.gl-card .gl-crest{width:58px;height:58px}
-.gl-crest-me{display:block;width:44px;height:44px;border-radius:50%;background:#FBF4E4;box-shadow:0 0 0 3px var(--seat)}
-.gl-card .gl-crest-me{width:52px;height:52px}
-.gl-crest-me img{width:100%;height:100%}
-.gl-minis{position:absolute;right:0;bottom:0;display:flex}
-.gl-mini{width:22px;height:22px;margin-left:-8px;border-radius:50%;background:#FBF4E4;border:2px solid var(--seat);overflow:hidden}
-.gl-mini:first-child{margin-left:0}
-.gl-mini img{width:100%;height:100%;display:block}
-.gl-mini.free{border-style:dashed;background:#F3E7CE}
+.gl-crest{display:block;flex-shrink:0;width:44px;height:44px;border-radius:50%;background:#FBF4E4;box-shadow:0 0 0 3px var(--seat)}
+.gl-card .gl-crest{width:52px;height:52px}
+.gl-crest img{width:100%;height:100%}
 .gl-what{flex:1 1 220px;min-width:0;display:flex;flex-direction:column;gap:2px}
-.gl-title{font-size:19px;font-weight:700}
+.gl-title{font-size:19px;font-weight:700;display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px}
+.gl-vs{font-size:16px;font-style:italic;font-weight:400;color:#5A4636}
+.gl-seat{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.gl-seat img{width:28px;height:28px;border-radius:50%;background:#FBF4E4;box-shadow:0 0 0 2px var(--seat)}
+.gl-seat small{font-size:15px;font-weight:400;color:#5A4636}
 .gl-card .gl-title{font-size:20px}
 .gl-detail{font-size:16px;color:#5A4636}
 .gl-pill{font-size:16px;font-weight:700;color:#2A1C14;border:2px solid #2A1C14;border-radius:999px;padding:3px 12px;white-space:nowrap}
@@ -247,26 +244,33 @@ function tokenImg(char: string, cls = "gl-token"): string {
   return `<img class="${cls}" src="char_${esc(char)}.png" alt="" style="transform: rotate(${uprightTokenAngle(char)}deg)">`;
 }
 
-/**
- * A showdown's line icon: the character I play (or would join as), ringed in
- * its seat colour, and the other seats' tokens small over its corner, an empty
- * seat as a dashed ring.
- */
+/** A showdown's line icon: the character I play (or would join as), ringed in its seat colour; the others are in the title's line-up. */
 function crest(players: GameSummary["players"], seat: number): string {
-  const main = players[seat];
-  const char = main?.char || seatChar(seat);
-  const minis = players
-    .map((p, i) => {
-      if (i === seat) return "";
-      const style = `style="--seat:${seatColor(i)}"`;
-      if (!p.addr) return `<span class="gl-mini free" ${style} title="${esc(`Free seat: ${charName(seatChar(i))}`)}"></span>`;
-      return `<span class="gl-mini" ${style} title="${esc(`${charName(p.char)} · ${playerLabel(p)}`)}">${tokenImg(p.char, "")}</span>`;
+  const char = players[seat]?.char || seatChar(seat);
+  return `<span class="gl-crest" style="--seat:${seatColor(seat)}" title="${esc(charName(char))}">${tokenImg(char, "")}</span>`;
+}
+
+/** A word between the seats of a line-up ("vs", "With"), or a note after it. */
+function vs(text: string): string {
+  return `<em class="gl-vs">${esc(text)}</em>`;
+}
+
+/**
+ * The seats given of a game, in a row's title: each character's token
+ * ringed in its seat's colour and its name, the player's registered name
+ * after it when it has one, the address on hover (an address on the line
+ * was unreadable).
+ */
+function lineup(players: GameSummary["players"], seats: number[], sep = ""): string {
+  return seats
+    .map((i) => {
+      const p = players[i];
+      return (
+        `<span class="gl-seat" style="--seat:${seatColor(i)}" title="${esc(`${charName(p.char)} · ${p.addr}`)}">${tokenImg(p.char, "")}` +
+        `<b>${esc(charName(p.char))}</b>${p.name ? `<small>${esc(p.name)}</small>` : ""}</span>`
+      );
     })
-    .join("");
-  return (
-    `<span class="gl-crest"><span class="gl-crest-me" style="--seat:${seatColor(seat)}" title="${esc(charName(char))}">${tokenImg(char, "")}</span>` +
-    `<span class="gl-minis">${minis}</span></span>`
-  );
+    .join(sep);
 }
 
 export class LobbyView {
@@ -407,20 +411,22 @@ export class LobbyView {
       (g) => m.revealIds.includes(g.id),
       (g) => m.openIds.includes(g.id),
     );
-    const others = (g: GameSummary) => g.players.filter((p) => p.addr && p.addr !== m.address);
+    // The seats taken, mine aside or not.
+    const seated = (g: GameSummary, mine: boolean) => g.players.map((p, i) => i).filter((i) => g.players[i].addr && (mine || g.players[i].addr !== m.address));
     // The creator holds seat 0.
     const gameLabel = (g: GameSummary) => `Game ${g.id} · created by ${g.players[0]?.addr === m.address ? "you" : charName(g.players[0]?.char)}`;
+    // A row's title (HTML): the others in the showdown.
     const versus = (g: GameSummary) => {
-      const o = others(g);
-      const names = o.map((p) => `${charName(p.char)} · ${playerLabel(p)}`).join(", ");
-      if (g.phase === "waiting") return o.length === 0 ? `Waiting for players · ${seatsTaken(g)}` : `With ${names} · ${seatsTaken(g)}`;
-      return "vs " + names;
+      const o = seated(g, false);
+      if (g.phase === "waiting") return (o.length === 0 ? vs("Waiting for players") : vs("With") + lineup(g.players, o)) + vs(`· ${seatsTaken(g)}`);
+      return vs("vs") + lineup(g.players, o);
     };
     // The lobby lists my games: I hold a seat in each (seat 0 should I not).
     const mySeat = (g: GameSummary) => Math.max(0, g.players.findIndex((p) => p.addr === m.address));
-    const row = (cls: string, g: GameSummary, title: string, detail: string, extra: string) =>
-      `<div class="${cls}">${crest(g.players, mySeat(g))}<div class="gl-what">` +
-      `<span class="gl-title">${esc(title)}</span><span class="gl-detail">${esc(detail)}</span></div>${extra}</div>`;
+    // A row's crest is the seat I hold; anyone's showdown has none, its line-up naming every seat.
+    const row = (cls: string, g: GameSummary, title: string, detail: string, extra: string, seat: number | null = mySeat(g)) =>
+      `<div class="${cls}">${seat === null ? "" : crest(g.players, seat)}<div class="gl-what">` +
+      `<span class="gl-title">${title}</span><span class="gl-detail">${esc(detail)}</span></div>${extra}</div>`;
 
     const yourMove = s.yourMove
       .map((g) => {
@@ -488,11 +494,9 @@ export class LobbyView {
       .filter((g) => stillOffered(g, now) && nextSeat(g.players) >= 0)
       .map((g) => {
         const seat = nextSeat(g.players);
-        const seated = g.players.filter((p) => p.addr);
-        const title = seated.map((p) => `${charName(p.char)} · ${playerLabel(p)}`).join(", ");
         return (
           `<div class="gl-line">${crest(g.players, seat)}<div class="gl-what">` +
-          `<span class="gl-title">${esc(title)}</span>` +
+          `<span class="gl-title">${lineup(g.players, seated(g, true), vs("vs"))}</span>` +
           `<span class="gl-detail">${esc(withStake(`Game ${g.id} · ${seatsTaken(g)} · ${g.maxTurns} turns · ${formatDuration(g.timeout)} per turn`, g))}</span></div>` +
           openBtn(g) +
           `<button type="button" class="gl-join" data-act="join" data-id="${esc(g.id)}">Join as ${esc(charName(seatChar(seat)))}${g.stake ? ` · ${esc(formatGnot(g.stake))}` : ""}</button></div>`
@@ -503,17 +507,17 @@ export class LobbyView {
     // Anyone's showdown being played, opened as a spectator.
     const live = s.live
       .map((g) => {
-        const title = g.players.filter((p) => p.addr).map((p) => `${charName(p.char)} · ${playerLabel(p)}`).join(" vs ");
+        const title = lineup(g.players, seated(g, true), vs("vs"));
         const where = g.phase === "revealing" ? "revealing the plans" : "planning";
-        return row("gl-line", g, title, withStake(`Game ${g.id} · Turn ${g.turn} of ${g.maxTurns} · ${where}`, g), openBtn(g, "Watch"));
+        return row("gl-line", g, title, withStake(`Game ${g.id} · Turn ${g.turn} of ${g.maxTurns} · ${where}`, g), openBtn(g, "Watch"), null);
       })
       .join("");
 
     // Anyone's showdown finished lately, replayed as a spectator.
     const ended = s.ended
       .map((g) => {
-        const title = g.players.filter((p) => p.addr).map((p) => `${charName(p.char)} · ${playerLabel(p)}`).join(" vs ");
-        return row("gl-line", g, title, withStake(`Game ${g.id} · ${outcomeLine(g, "")}`, g), openBtn(g, "Replay"));
+        const title = lineup(g.players, seated(g, true), vs("vs"));
+        return row("gl-line", g, title, withStake(`Game ${g.id} · ${outcomeLine(g, "")}`, g), openBtn(g, "Replay"), null);
       })
       .join("");
 

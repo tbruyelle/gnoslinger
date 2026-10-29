@@ -116,6 +116,21 @@ export interface Button {
   disabled?: boolean;
 }
 
+/**
+ * A seat in the header's line-up: its character's token ringed in the seat's
+ * colour and its name, the player on hover, YOU after mine; an empty seat
+ * has no character.
+ */
+export interface HeaderSeat {
+  charKey: string;
+  name: string;
+  color: string;
+  /** Who plays it (name or short address) and its address, for the hover; "" for an empty seat or one I am setting up in. */
+  player: string;
+  addr: string;
+  you: boolean;
+}
+
 export interface TimelineRow {
   name: string;
   charKey: string;
@@ -141,8 +156,10 @@ export interface ShowdownModel {
   status: string;
   /** move: my move; wait: waiting; replay; over; info (loading, spectating). */
   statusTone: "move" | "wait" | "replay" | "over" | "info";
-  right: string;
-  rightError: boolean;
+  /** The header's right end: the seats in order. */
+  lineup: HeaderSeat[];
+  /** The RPC error, shown there instead; "" when the chain answers. */
+  error: string;
   /** Left column: the characters (mine first, marked as such). */
   left: CharPanel[];
   /** Under them while planning or waiting: my plan on the segments. */
@@ -212,8 +229,13 @@ const CSS = `
 25%{box-shadow:0 0 0 8px rgba(242,181,68,.45);border-color:#F2B544;transform:scale(1)}
 100%{box-shadow:0 0 0 14px rgba(242,181,68,0)}}
 @media (prefers-reduced-motion:reduce){.gv-status.flash{animation:none;border-color:#F2B544}}
-.gv-hright{margin-left:auto;font-size:15px;color:#D9C9A8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-.gv-hright.err{color:#F2B544}
+.gv-herr{margin-left:auto;font-size:15px;color:#F2B544;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.gv-lineup{margin-left:auto;display:flex;align-items:center;gap:12px;min-width:0;overflow:hidden;white-space:nowrap}
+.gv-vs{font-size:14px;font-style:italic;color:#8E7A5E}
+.gv-seat{display:inline-flex;align-items:center;gap:8px;font-size:17px;font-weight:700;color:#F3E7CE}
+.gv-seat img{width:32px;height:32px;border-radius:50%;box-shadow:0 0 0 2px #2A1C14,0 0 0 4px var(--seat)}
+.gv-free{width:32px;height:32px;border-radius:50%;border:2px dashed #8E7A5E}
+.gv-seat small{font-size:11px;font-weight:700;letter-spacing:1.5px;color:#F2B544}
 .gv-x{position:absolute;top:4px;right:6px;width:44px;height:44px;display:flex;align-items:center;justify-content:center;background:transparent;border:0;border-radius:8px;color:#F2B544;cursor:pointer}
 .gv-x:hover{color:#FBF4E4;background:#5A4636}
 .gv-left,.gv-right{background:#1E1618;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:12px}
@@ -585,7 +607,7 @@ export class ShowdownView {
     return (
       `<button type="button" class="gv-lobby" data-act="btn" data-id="lobby">${BACK_SVG}Lobby</button>` +
       `<span class="gv-title">${esc(m.title)}</span>` +
-      `<span class="gv-hright${m.rightError ? " err" : ""}">${esc(m.right)}</span>`
+      (m.error ? `<span class="gv-herr">${esc(m.error)}</span>` : `<div class="gv-lineup">${this.lineupHtml(m.lineup)}</div>`)
     );
   }
 
@@ -615,6 +637,20 @@ export class ShowdownView {
       (c.player ? `<span class="gv-player" title="${esc(c.addr)}">${esc(c.player)}</span>` : "") +
       `<span class="gv-where">${esc(c.where)}</span></div>${badge}</div>${detail}</button>`
     );
+  }
+
+  /** The header's line-up: the seats' tokens and names, "vs" between them. */
+  private lineupHtml(seats: HeaderSeat[]): string {
+    return seats
+      .map((s) => {
+        const title = s.addr ? `${s.name} · ${s.player} · ${s.addr}` : s.name;
+        return (
+          `<span class="gv-seat" style="--seat:${esc(s.color)}" title="${esc(title)}">` +
+          (s.charKey ? tokenImg(s.charKey) : '<i class="gv-free"></i>') +
+          `<b>${esc(s.name)}</b>${s.you ? "<small>YOU</small>" : ""}</span>`
+        );
+      })
+      .join('<em class="gv-vs">vs</em>');
   }
 
   /** My plan on the turn's five segments, inside the plan panel. */

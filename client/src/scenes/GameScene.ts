@@ -29,7 +29,7 @@ import { canSee, standingOn } from "../game/sight";
 import { SOUND_FILES, SOUND_VOLUME, THROW_FLIGHT_MS, aimTaken, shotDelays, soundKey, soundsForDelay, soundsForEvents, soundsForPreview, throwLandings, variantIndex, woundDelays, type SoundCue, type SoundGroup } from "../game/sounds";
 import { SHOOT_OPTIONS, STRENGTH_DAMAGE, STRENGTH_WIELD, TARGET_OPTIONS, isShooting, isStrength, planAllows, throwReach, type ShootOption, type StrengthOption } from "../game/plan";
 import { closeCharacterSheet, openCharacterSheet, type GunPick } from "../ui/characterSheet";
-import { ShowdownView, showdownLayout, type BoardRect, type CharPanel, type HandSide, type ShowdownLayout, type ShowdownModel, type TimelineRow } from "../ui/showdownView";
+import { ShowdownView, showdownLayout, type BoardRect, type CharPanel, type HandSide, type HeaderSeat, type ShowdownLayout, type ShowdownModel, type TimelineRow } from "../ui/showdownView";
 import { showToast } from "../ui/toast";
 import { CHAIN_CLOCK_MARGIN, charName, formatDuration, formatLeft, MAX_MISSED, missOutcome, pastTimeout, seatsTaken } from "../game/lobby";
 import { defaultFacing, nextSeat, seatChar, setupZone, startingChar } from "../game/setup";
@@ -1871,8 +1871,8 @@ export class GameScene extends Phaser.Scene {
           : `Game ${this.gameID}`,
       status: view || this.mode === "setup" ? this.statusLine() : "Loading…",
       statusTone: tone,
-      right: this.headerRight(),
-      rightError: !!this.netError,
+      lineup: this.headerLineup(),
+      error: this.netError ? `RPC offline: ${this.netError}` : "",
     };
 
     // Replay: every character as the segment shown leaves it, the log, the timeline.
@@ -1953,18 +1953,18 @@ export class GameScene extends Phaser.Scene {
     return { ...base, left, tracker, others, plan: this.planPanel(names), hand: this.handModel(), replay: null };
   }
 
-  /** The header's right end: the RPC error, else who sits in each seat (me by my character, a seat I am setting up in included). */
-  private headerRight(): string {
-    if (this.netError) return `RPC offline: ${this.netError}`;
+  /** The header's line-up: who sits in each seat (me by my character, a seat I am setting up in included). */
+  private headerLineup(): HeaderSeat[] {
     const seats = this.view ? this.view.players.length : this.setup?.req.kind === "create" ? this.setup.req.seats : 0;
-    const labels: string[] = [];
+    const lineup: HeaderSeat[] = [];
     for (let i = 0; i < seats; i++) {
       const p = this.view?.players[i];
-      if (p?.addr) labels.push(`${charName(p.char)} (${i === this.myIndex ? "you" : playerLabel(p)})`);
-      else if (this.setup && i === this.setup.seat) labels.push(`${charName(this.setup.req.charKey)} (you)`);
-      else labels.push("empty seat");
+      const color = seatColor(i);
+      if (p?.addr) lineup.push({ charKey: p.char, name: charName(p.char), color, player: playerLabel(p), addr: p.addr, you: i === this.myIndex });
+      else if (this.setup && i === this.setup.seat) lineup.push({ charKey: this.setup.req.charKey, name: charName(this.setup.req.charKey), color, player: "", addr: "", you: true });
+      else lineup.push({ charKey: "", name: "Empty seat", color, player: "", addr: "", you: false });
     }
-    return labels.join("  vs  ");
+    return lineup;
   }
 
   /** The right column's plan panel: my plan while I pick it, the plan sent, or what the game waits for. */
