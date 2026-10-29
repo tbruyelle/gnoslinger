@@ -102,18 +102,17 @@ mod-download:
 
 # --- Pin management ---
 
-export FORK_REPO := github.com/gnolang/gno
+# GNO_REF is what `make update-gno` pins gnolang/gno to: a release tag (what
+# Onyx runs, `build_version` at https://rpc.onyx.testnets.gno.land/status),
+# a branch or a commit. contribs/gnodev is a module of its own that upstream
+# never tags, so it is pinned at the ref's commit (a pseudo-version in
+# go.mod), which Go reads off the ref. Run `make mod-download` afterwards.
+GNO_REF ?= master
 
-# FORK_REF is what `make update-fork` re-pins to: a branch name, a tag, or a
-# commit hash, handed to `go mod edit -replace` for `go mod tidy` to resolve
-# into a pseudo-version. Run `make mod-download` afterwards.
-FORK_REF ?= master
-
-update-fork:
-	@echo "pinning $(FORK_REPO) to '$(FORK_REF)'"
-	go mod edit -replace github.com/gnolang/gno=$(FORK_REPO)@$(FORK_REF)
+update-gno:
+	@echo "pinning github.com/gnolang/gno to '$(GNO_REF)'"
+	go get github.com/gnolang/gno@$(GNO_REF)
+	go get github.com/gnolang/gno/contribs/gnodev@$$(go list -m -f '{{.Origin.Hash}}' github.com/gnolang/gno@$(GNO_REF))
 	go mod tidy
-	go mod edit -replace github.com/gnolang/gno/contribs/gnodev=$(FORK_REPO)/contribs/gnodev@$(FORK_REF)
-	go mod tidy
 
-.PHONY: gnodev web dev notif fetch-gnotif test test-v lint fmt check gen-board gen-tutorial mod-download update-fork
+.PHONY: gnodev web dev notif fetch-gnotif test test-v lint fmt check gen-board gen-tutorial mod-download update-gno

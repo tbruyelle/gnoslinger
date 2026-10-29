@@ -2,11 +2,6 @@ module gnoslinger
 
 go 1.25.9
 
-replace (
-	github.com/gnolang/gno => github.com/gnolang/gno v0.0.0-20260924083950-05f8db1cf33b
-	github.com/gnolang/gno/contribs/gnodev => github.com/gnolang/gno/contribs/gnodev v0.0.0-20260924083950-05f8db1cf33b
-)
-
 tool (
 	github.com/gnolang/gno/contribs/gnodev
 	github.com/gnolang/gno/gno.land/cmd/gnokey
@@ -51,8 +46,8 @@ require (
 	github.com/erigontech/mdbx-go v0.40.1 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/getsentry/sentry-go v0.35.0 // indirect
-	github.com/gnolang/gno v0.2.0 // indirect
-	github.com/gnolang/gno/contribs/gnodev v0.0.0-20251127092746-53fd1928eb26 // indirect
+	github.com/gnolang/gno v1.7.0-rc.1 // indirect
+	github.com/gnolang/gno/contribs/gnodev v0.0.0-20261029065625-e4c2e7d9fe0f // indirect
 	github.com/go-logfmt/logfmt v0.6.0 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect

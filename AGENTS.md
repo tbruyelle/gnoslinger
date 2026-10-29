@@ -69,8 +69,8 @@ make gen-board     # regenerate board A adjacency + fences + obstacles + half-he
 make gen-tutorial  # replay the tutorial's showdown through the realm (filetest z16) into client/src/tutorial/showdown.json
 make notif         # tx-indexer + gnotifd against the running gnodev, following its reloads (scripts/notif.sh): the browser notifications, with VITE_GNOTIF_SERVER=http://127.0.0.1:8080 in the client
 make fetch-gnotif  # refetch the gnotif registry as deployed on Onyx into gno/third_party/gnotif
-make mod-download  # sync ~/.config/gno/pkg/mod with the pinned gno (after update-fork)
-make update-fork FORK_REF=<ref>   # re-pin gnolang/gno in go.mod
+make mod-download  # sync ~/.config/gno/pkg/mod with the pinned gno (after update-gno)
+make update-gno GNO_REF=<ref>     # re-pin gnolang/gno in go.mod: a release tag (what Onyx runs), a branch or a commit; contribs/gnodev has no tags, so it is pinned at the ref's commit
 ```
 
 **Always use `go tool gno` / `go tool gnodev` / `go tool gnokey`**, never a
