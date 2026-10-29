@@ -32,13 +32,16 @@ come later.
   toolchain through `go.mod` + `go tool` (like `~/src/aibgno`).
 - **Client**: TypeScript + Phaser 3 + Vite (port 5173), tests with vitest,
   wallet through the injected `window.adena` API.
-- **Deployment**: the realm is not deployed yet (`make deploy-onyx` will,
-  Key Commands): no network (Onyx included)
-  holds the realm or any of its games, only local gnodev chains, which
-  replay their transactions with the new code on every reload. A change
-  needs no compatibility with records stored by earlier versions: the
-  decoders read the current formats only, the client expects every field
-  the realm writes.
+- **Deployment**: the v0 realm is on **Onyx** (`onyx-1`, gno
+  v1.7.0-rc.1) since 2026-10-29, deployed with `make deploy-onyx` (Key
+  Commands), and the client at **https://gnoslinger.xyz**, GitHub Pages
+  built from master (Client, Production build). A package on the chain is
+  final: a change to the rules or the records is a new version
+  (`gnoslinger/v1`, `Allow`ed in the profiles realm, then
+  `VITE_REALM_PATH`), whose decoders read its own formats only, the
+  client expecting every field the realm writes; the profiles realm is
+  kept across versions. Development runs on local gnodev chains, which
+  replay their transactions with the new code on every reload.
 - **Rules reference**: `bga/` (separate git repo, gitignored, private
   `github.com/tbruyelle/gunslinger-bga`) holds an abandoned Board Game Arena
   PHP implementation and `bga/doc/RULES.md`, the full rules transcription.
