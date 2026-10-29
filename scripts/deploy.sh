@@ -18,6 +18,12 @@
 # GNOT for the whole deployment, the engine alone 96: AGENTS.md, Storage
 # deposit) up to MAX_DEPOSIT, which must cover it: the chain's default cap
 # (100 GNOT on Onyx) is too close to the engine's.
+#
+# Seen on Onyx (2026-10-29): the dry run of DeclareTriggers, a second
+# after the realm's deploy, failed inside the node ("unexpected node with
+# location <realm>:0:0"): its simulation store held the new realm's value
+# but not yet its loaded code. A query or a moment later, running the
+# script again went through.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
