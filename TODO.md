@@ -6,6 +6,19 @@
 ## UI
 - change window size to see how things fit
 - add report bug button
+- add profile page clickable from where the player is displayed
+- might be better to open showdown before being able to join
+  - join showdown from showdown page
+  - add share option to let people join
+- show connect from adena button from any page
+- add welcome panel that suggest to enable notif and auto sign
+- add link to gnoslinger.xyz to the render node
+- marketting video
+The app footage is the real Bolo, recorded with Playwright on a local gno test
+chain. The rest (chat, captions, animations) is code in Remotion, the voice is
+Kokoro (open-source text-to-speech), and Claude reviewed the script, design and
+final render several times before it was done 🙂 Happy to share the repo if
+you're curious.
 
 ## General
 - check albttx/drand, how this can be used ?
