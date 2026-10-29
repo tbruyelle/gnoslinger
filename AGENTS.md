@@ -696,7 +696,8 @@ calls; `testing.SkipHeights(n)` advances block time 5 s per height.
   `GetAccount` poll, since the event is not always delivered. The same poll
   tracks the lock (`GetAccount` answers `WALLET_LOCKED`):
   `ui/walletNotices.ts` toasts "locked"/"unlocked" and the lobby top bar
-  shows an "Adena locked" badge; a call left unanswered for
+  swaps the account box for a **Connect with Adena** button (the splash's
+  style, `gl-connect`; it connects again, through Adena's unlock); a call left unanswered for
   `WALLET_NOTICE_MS` (6 s) shows "Waiting for Adena…" until it answers.
 - `chain/session.ts`: **account sessions** (the chain's `auth` module,
   `MsgCreateSession`; no realm code). `SessionWallet` is the `Wallet` every

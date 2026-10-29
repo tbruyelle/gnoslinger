@@ -122,19 +122,21 @@ const CSS = `
 .gl-root button:focus-visible,.gl-root select:focus-visible{outline:3px solid #F2B544;outline-offset:2px}
 .gl-root button:disabled{opacity:.5;cursor:default}
 .gl-top{background:#2A1C14;border-bottom:3px solid #5A4636;box-shadow:0 3px 0 #1E1618,0 5px 0 #5A4636}
-.gl-top-in{max-width:80rem;margin:0 auto;padding:12px 24px;display:flex;flex-wrap:wrap;align-items:center;gap:12px 28px}
-.gl-mark{font-family:Rye,Georgia,serif;font-size:30px;letter-spacing:2px;color:#F3E7CE}
-.gl-nav{min-height:44px;padding:0 6px;background:transparent;border:0;color:#D9C9A8;font-size:18px;font-weight:700;cursor:pointer}
+.gl-top-in{max-width:80rem;margin:0 auto;padding:12px 24px;display:flex;align-items:center;gap:20px}
+.gl-mark{flex-shrink:0;white-space:nowrap;font-family:Rye,Georgia,serif;font-size:30px;letter-spacing:2px;color:#F3E7CE}
+.gl-nav{flex-shrink:0;white-space:nowrap;min-height:44px;padding:0 6px;background:transparent;border:0;color:#D9C9A8;font-size:18px;font-weight:700;cursor:pointer}
 .gl-nav:hover{color:#F2B544}
-.gl-right{margin-left:auto;display:flex;flex-wrap:wrap;align-items:center;gap:12px;color:#F3E7CE}
-.gl-net{font-size:15px;font-weight:700;border:2px solid #5A4636;border-radius:999px;padding:4px 12px}
-.gl-session{font-size:15px;font-weight:700;line-height:inherit;background:transparent;color:#F3E7CE;border:2px solid #5A4636;border-radius:999px;padding:4px 12px;cursor:pointer}
+.gl-right{margin-left:auto;min-width:0;display:flex;flex-wrap:wrap;justify-content:flex-end;align-items:center;gap:10px;color:#F3E7CE}
+.gl-net{white-space:nowrap;font-size:15px;font-weight:700;border:2px solid #5A4636;border-radius:999px;padding:4px 12px}
+.gl-session{white-space:nowrap;font-size:15px;font-weight:700;line-height:inherit;background:transparent;color:#F3E7CE;border:2px solid #5A4636;border-radius:999px;padding:4px 12px;cursor:pointer}
 .gl-session:hover{border-color:#F3E7CE}
 .gl-session.on{color:#F2B544;border-color:#F2B544}
 .gl-session.on:hover{background:rgba(242,181,68,.12)}
 .gl-session.ended{border-color:#B5482A}
 .gl-actions{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
-.gl-locked{font-size:15px;font-weight:700;background:#B5482A;color:#FBF4E4;border-radius:999px;padding:4px 12px}
+.gl-connect{display:flex;align-items:center;gap:10px;min-height:46px;margin:3px 3px 9px;padding:0 18px;background:#F3E7CE;color:#2A1C14;border:3px solid #2A1C14;border-radius:12px;box-shadow:0 0 0 3px #B5482A,0 6px 0 3px #8E2F1A;font-size:18px;font-weight:700;white-space:nowrap;cursor:pointer}
+.gl-connect:hover{background:#FBF4E4}
+.gl-connect img{width:28px;height:28px;flex-shrink:0}
 .gl-account{display:flex;align-items:center;gap:8px;background:#F3E7CE;color:#2A1C14;border-radius:12px;padding:4px 6px 4px 12px}
 .gl-icon{width:44px;height:44px;display:flex;align-items:center;justify-content:center;background:transparent;border:0;border-radius:8px;cursor:pointer;color:#2A1C14}
 .gl-icon:hover{background:#E9DCC0}
@@ -355,15 +357,14 @@ export class LobbyView {
   private top(m: LobbyModel): string {
     let right: string;
     if (m.status === "ready") {
-      right =
-        `<span class="gl-net">${esc(m.chainId)} network</span>` +
-        (m.locked ? '<span class="gl-locked">Adena locked</span>' : "") +
-        this.sessionPill(m.session) +
-        this.notifPill(m.notifications) +
-        `<div class="gl-account"><button type="button" class="gl-account-btn" data-act="profile" data-id="${esc(m.address)}" title="My profile · ${esc(m.address)}">` +
-        `<b>${esc(playerLabel({ addr: m.address, name: m.name }))}</b><span>${esc(m.balance || "…")}</span></button>` +
-        `<button type="button" class="gl-icon" data-act="copy" aria-label="Copy my address">${COPY_ICON}</button>` +
-        '<button type="button" class="gl-quit" data-act="quit">Quit</button></div>';
+      // Adena locked: the account box gives way to Connect with Adena (the splash's button), which connects again, through Adena's unlock.
+      const account = m.locked
+        ? '<button type="button" class="gl-connect" data-act="retry"><img src="adena_icon.png" alt="">Connect with Adena</button>'
+        : `<div class="gl-account"><button type="button" class="gl-account-btn" data-act="profile" data-id="${esc(m.address)}" title="My profile · ${esc(m.address)}">` +
+          `<b>${esc(playerLabel({ addr: m.address, name: m.name }))}</b><span>${esc(m.balance || "…")}</span></button>` +
+          `<button type="button" class="gl-icon" data-act="copy" aria-label="Copy my address">${COPY_ICON}</button>` +
+          '<button type="button" class="gl-quit" data-act="quit">Quit</button></div>';
+      right = `<span class="gl-net">${esc(m.chainId)} network</span>` + this.sessionPill(m.session) + this.notifPill(m.notifications) + account;
     } else if (m.status === "connecting") {
       right = "<span>Connecting to Adena…</span>";
     } else {
