@@ -113,7 +113,7 @@ client/src/
 scripts/gen_board_data.py   generates hex/v0/board_a.gno and client/src/board/board_A.json
 scripts/gen_tutorial.py     extracts the tutorial's showdown from filetest z16 into client/src/tutorial/showdown.json
 scripts/deploy.sh           make deploy-onyx: deploys on Onyx, signed by the namespace owner's key
-.github/workflows/pages.yml builds the client for Onyx and publishes it to GitHub Pages on every push to master
+.github/workflows/pages.yml builds the client for Onyx and publishes it to GitHub Pages on every push to master touching the client or the assets
 scripts/notif.sh            make notif: the local notification stack (tx-indexer + gnotifd, tools and VAPID keys in .tools/)
 assets/                     served as the Vite public dir, shipped whole by a build: only what the client loads (board A, tokens, cards, markers, sounds, hex_grid.json)
 assets-src/                 the rest, kept for later: other boards, result cards, rifle sounds, the VASSAL module and its images (vassal_v2/, local/: untracked)
@@ -1014,7 +1014,8 @@ Clicking a token opens the **character
   RPC, chain id `onyx-1`, chain name `Onyx` for Adena, the realm paths,
   `https://gnotif.xyz/onyx`), which `vite build` reads over `.env.local`;
   `.github/workflows/pages.yml` runs the type check, the tests and the
-  build on every push to master and publishes `client/dist` to GitHub
+  build on every push to master touching the client, the assets, the
+  root package files or itself, and publishes `client/dist` to GitHub
   Pages (the repository's Pages source is GitHub Actions; its custom
   domain, gnoslinger.xyz, is set in the repository's settings). Vite's
   `base` is `./` and the paths the code builds itself (the service

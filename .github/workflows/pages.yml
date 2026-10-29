@@ -1,12 +1,19 @@
 # Builds the client for Onyx (client/.env.production) and publishes it to
-# GitHub Pages on every push to master. The repository's Pages source must
-# be "GitHub Actions"; its custom domain (gnoslinger.xyz) is set in the
-# repository's settings, not here.
+# GitHub Pages on every push to master that touches what the build reads
+# (a realm-only push changes nothing in the site). The repository's Pages
+# source must be "GitHub Actions"; its custom domain (gnoslinger.xyz) is
+# set in the repository's settings, not here.
 name: pages
 
 on:
   push:
     branches: [master]
+    paths:
+      - client/**
+      - assets/**
+      - package.json
+      - package-lock.json
+      - .github/workflows/pages.yml
   workflow_dispatch:
 
 permissions:
