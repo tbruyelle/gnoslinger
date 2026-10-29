@@ -16,7 +16,7 @@ export const NOTIFIED_EVENTS = ["PlanDue", "RevealDue", "ShowdownOver"] as const
 export const RECIPIENT_PARAM = "to";
 
 /** The notification's icon, a PNG the service worker shows. */
-export const NOTIFICATION_ICON = "/char_marshal.png";
+export const NOTIFICATION_ICON = import.meta.env.BASE_URL + "char_marshal.png";
 
 /** The opt-ins for an address: one per notified event among the realm's verified triggers, by event since ids may change. */
 export function optinsFor(triggers: Trigger[], address: string): Optin[] {
@@ -71,7 +71,7 @@ export class Notifications {
 
 /** The notifications of the realm through the gnotif server at server (VITE_GNOTIF_SERVER). */
 export function newNotifications(server: string, chainId: string, realmPath: string): Notifications {
-  return new Notifications(new Gnotif({ network: chainId, server, serviceWorker: "/sw.js", icon: NOTIFICATION_ICON }), realmPath);
+  return new Notifications(new Gnotif({ network: chainId, server, serviceWorker: import.meta.env.BASE_URL + "sw.js", icon: NOTIFICATION_ICON }), realmPath);
 }
 
 /**

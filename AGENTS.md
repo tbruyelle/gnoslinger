@@ -32,8 +32,8 @@ come later.
   toolchain through `go.mod` + `go tool` (like `~/src/aibgno`).
 - **Client**: TypeScript + Phaser 3 + Vite (port 5173), tests with vitest,
   wallet through the injected `window.adena` API.
-- **Deployment**: nothing is deployed yet (`make deploy-onyx` will, Key
-  Commands): no network (Onyx included)
+- **Deployment**: the realm is not deployed yet (`make deploy-onyx` will,
+  Key Commands): no network (Onyx included)
   holds the realm or any of its games, only local gnodev chains, which
   replay their transactions with the new code on every reload. A change
   needs no compatibility with records stored by earlier versions: the
@@ -113,6 +113,7 @@ client/src/
 scripts/gen_board_data.py   generates hex/v0/board_a.gno and client/src/board/board_A.json
 scripts/gen_tutorial.py     extracts the tutorial's showdown from filetest z16 into client/src/tutorial/showdown.json
 scripts/deploy.sh           make deploy-onyx: deploys on Onyx, signed by the namespace owner's key
+.github/workflows/pages.yml builds the client for Onyx and publishes it to GitHub Pages on every push to master
 scripts/notif.sh            make notif: the local notification stack (tx-indexer + gnotifd, tools and VAPID keys in .tools/)
 assets/                     served as the Vite public dir, shipped whole by a build: only what the client loads (board A, tokens, cards, markers, sounds, hex_grid.json)
 assets-src/                 the rest, kept for later: other boards, result cards, rifle sounds, the VASSAL module and its images (vassal_v2/, local/: untracked)
@@ -1008,6 +1009,18 @@ Clicking a token opens the **character
   source, use-network-fee.ts, and seen on 2026-10-25: a commit simulated at
   16.6M went out with 18.26M), so the client does not simulate an Adena
   call; a reveal resolving the turn signed in Adena has that 10 % margin.
+
+- Production build: `client/.env.production` holds the Onyx values (its
+  RPC, chain id `onyx-1`, chain name `Onyx` for Adena, the realm paths,
+  `https://gnotif.xyz/onyx`), which `vite build` reads over `.env.local`;
+  `.github/workflows/pages.yml` runs the type check, the tests and the
+  build on every push to master and publishes `client/dist` to GitHub
+  Pages (the repository's Pages source is GitHub Actions; its custom
+  domain, gnoslinger.xyz, is set in the repository's settings). Vite's
+  `base` is `./` and the paths the code builds itself (the service
+  worker, the notification icon, the sheet's images) start with
+  `import.meta.env.BASE_URL`, so the build also works under a sub-path
+  (`tbruyelle.github.io/gnoslinger/`, before the domain is attached).
 
 ### Manual end-to-end test
 1. Two accounts in Adena; `ADENA_ADDRS="g1... g1..." make gnodev` (premines

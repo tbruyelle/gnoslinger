@@ -191,7 +191,7 @@ export function isCharacterSheetOpen(): boolean {
 /** The token turned to stand upright (uprightTokenAngle). */
 function tokenImage(d: SheetData): string {
   const deg = uprightTokenAngle(d.charKey);
-  return `<img src="/char_${escapeHtml(d.charKey)}.png" alt="" style="width: 84px; height: 84px; border-radius: 50%; border: 3px solid #2A1C14; background: #FBF4E4; transform: rotate(${deg}deg); flex: none">`;
+  return `<img src="${import.meta.env.BASE_URL}char_${escapeHtml(d.charKey)}.png" alt="" style="width: 84px; height: 84px; border-radius: 50%; border: 3px solid #2A1C14; background: #FBF4E4; transform: rotate(${deg}deg); flex: none">`;
 }
 
 function statusRow(d: SheetData, accent: string): string {
@@ -346,7 +346,7 @@ function gunCard(g: GunView, draggable: string | null): string {
     `style="display: flex; align-items: center; gap: 12px; border: 2px solid #2A1C14; border-radius: 10px; padding: 8px 14px; background: #F3E7CE; min-width: 220px${
       draggable ? "; cursor: grab; box-shadow: 0 0 0 3px #8E2F1A" : ""
     }">` +
-    `<img src="/guns/${escapeHtml(g.type)}.gif" alt="" style="width: 56px; height: 56px; image-rendering: pixelated; flex: none">` +
+    `<img src="${import.meta.env.BASE_URL}guns/${escapeHtml(g.type)}.gif" alt="" style="width: 56px; height: 56px; image-rendering: pixelated; flex: none">` +
     `<div>` +
     `<div style="font-family: Rye, Georgia, serif; font-size: 22px; letter-spacing: 1px">${escapeHtml(g.name)}</div>` +
     `<div style="font-size: 16px; font-weight: 700">${g.cocked ? "cocked" : "uncocked"} · ${g.shells}/${g.capacity} shells${
