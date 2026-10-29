@@ -100,6 +100,12 @@ mod-download:
 	go tool gno clean -modcache=true; \
 	go tool gno mod download -remote-overrides gno.land=http://127.0.0.1:26657
 
+# Deploys the packages, the realms and the gnotif triggers on Onyx
+# (scripts/deploy.sh), signed by the th0mas key, whose address owns the
+# namespace; KEY, REMOTE and CHAINID pick another key or network.
+deploy-onyx:
+	scripts/deploy.sh
+
 # --- Pin management ---
 
 # GNO_REF is what `make update-gno` pins gnolang/gno to: a release tag (what
@@ -115,4 +121,4 @@ update-gno:
 	go get github.com/gnolang/gno/contribs/gnodev@$$(go list -m -f '{{.Origin.Hash}}' github.com/gnolang/gno@$(GNO_REF))
 	go mod tidy
 
-.PHONY: gnodev web dev notif fetch-gnotif test test-v lint fmt check gen-board gen-tutorial mod-download update-gno
+.PHONY: gnodev web dev notif fetch-gnotif test test-v lint fmt check gen-board gen-tutorial mod-download update-gno deploy-onyx

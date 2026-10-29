@@ -32,7 +32,8 @@ come later.
   toolchain through `go.mod` + `go tool` (like `~/src/aibgno`).
 - **Client**: TypeScript + Phaser 3 + Vite (port 5173), tests with vitest,
   wallet through the injected `window.adena` API.
-- **Deployment**: nothing is deployed for now: no network (Onyx included)
+- **Deployment**: nothing is deployed yet (`make deploy-onyx` will, Key
+  Commands): no network (Onyx included)
   holds the realm or any of its games, only local gnodev chains, which
   replay their transactions with the new code on every reload. A change
   needs no compatibility with records stored by earlier versions: the
@@ -70,6 +71,7 @@ make gen-tutorial  # replay the tutorial's showdown through the realm (filetest 
 make notif         # tx-indexer + gnotifd against the running gnodev, following its reloads (scripts/notif.sh): the browser notifications, with VITE_GNOTIF_SERVER=http://127.0.0.1:8080 in the client
 make fetch-gnotif  # refetch the gnotif registry as deployed on Onyx into gno/third_party/gnotif
 make mod-download  # sync ~/.config/gno/pkg/mod with the pinned gno (after update-gno)
+make deploy-onyx   # deploy the packages, the realms and the gnotif triggers on Onyx (scripts/deploy.sh: in import order, without the tests, each simulated first and skipped if already there; signed by the th0mas key, which owns the namespace)
 make update-gno GNO_REF=<ref>     # re-pin gnolang/gno in go.mod: a release tag (what Onyx runs), a branch or a commit; contribs/gnodev has no tags, so it is pinned at the ref's commit
 ```
 
@@ -110,6 +112,7 @@ client/src/
   ui/toast.ts
 scripts/gen_board_data.py   generates hex/v0/board_a.gno and client/src/board/board_A.json
 scripts/gen_tutorial.py     extracts the tutorial's showdown from filetest z16 into client/src/tutorial/showdown.json
+scripts/deploy.sh           make deploy-onyx: deploys on Onyx, signed by the namespace owner's key
 scripts/notif.sh            make notif: the local notification stack (tx-indexer + gnotifd, tools and VAPID keys in .tools/)
 assets/                     served as the Vite public dir, shipped whole by a build: only what the client loads (board A, tokens, cards, markers, sounds, hex_grid.json)
 assets-src/                 the rest, kept for later: other boards, result cards, rifle sounds, the VASSAL module and its images (vassal_v2/, local/: untracked)
@@ -170,6 +173,17 @@ Its one cost is its deployment. A player's first game costs about 4.3 KB
 more to create and 8.2 KB more to join than a later one: the new profile,
 its ranking entry and the address's first `byPlayer` entry. A join of a
 returning player frees bytes, the game leaving `openGames`.
+
+Deploying the whole thing (`make deploy-onyx`, measured on gnodev on
+2026-10-29 by deploying copies of the production files under another
+namespace, the same bytes as on Onyx) locks about 148 GNOT of deposits:
+hex 318,042 bytes (31.8 GNOT, 71M gas), cards 37,046 (3.7, 12M), engine
+961,694 (96.2 GNOT, 330M gas: the result deck and the tables as objects),
+profiles 38,600 (3.9, 31M), the realm 104,669 (10.5, 153M), and
+`DeclareTriggers` 17,971 (1.8, 31M, nearly all of it in the gnotif
+registry); the fees add about 0.75 GNOT at Onyx's gas price. The engine's
+deposit is right under the chain's default cap of 100 GNOT per
+transaction, so the script passes `-max-deposit` (150 GNOT).
 
 A turn costs about 1.8–2.8 KB (0.18–0.28 GNOT; an earlier aim + shoot +
 aim turn, with more hits, measured 2,679), nearly all of it paid by the
