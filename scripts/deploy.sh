@@ -125,10 +125,12 @@ send() {
 
 deployed() { gnokey query vm/qfile -remote "$REMOTE" -data "$1" >/dev/null 2>&1; }
 
-# production <dir>: a copy of the package without its tests and filetests.
+# production <dir>: a copy of the package without its tests and filetests,
+# in a directory of its own (every package's directory is named v0).
 production() {
-	local dir="$TMP/$(basename "$1")"
-	cp -r "$1" "$dir"
+	local dir
+	dir=$(mktemp -d "$TMP/pkg.XXXXXX")
+	cp -r "$1"/. "$dir"
 	rm -rf "$dir/filetests"
 	find "$dir" -name '*_test.gno' -delete
 	echo "$dir"
