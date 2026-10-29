@@ -2,7 +2,9 @@ import Phaser from "phaser";
 import type { CardNumber, CardSide, ChoiceType, RelativeDirection } from "../rules";
 import { AHEAD_DIRS, BACK_DIRS, dirIndexToAngle, getActionCardAsset, getActionDef, relativeToAbsoluteDir, CHAR_ARROW_DIR } from "../rules";
 import { BOARD_A } from "../board/boardA";
-import { currentChain, viewerChain, type Chain } from "../chain";
+import { currentChain, initChain, resetChain, viewerChain, type Chain } from "../chain";
+import { CONFIG } from "../config";
+import { installWalletNotices } from "../ui/walletNotices";
 import { subscribeAccountChanged, subscribeNetworkChanged } from "../chain/adena";
 import { userMessage } from "../chain/errors";
 import { GamePoller } from "../chain/poller";
@@ -66,6 +68,27 @@ type Mode = "sync" | "setup" | "select" | "submitting" | "waiting" | "playback" 
 export type SetupRequest =
   | { kind: "create"; charKey: string; seats: number; turns: number; timeoutMinutes: number; stake: number }
   | { kind: "join"; seat: number; charKey: string; stake: number };
+
+/**
+ * Setting my character up before calling or joining (SetupRequest): the
+ * seat it takes, the hex and facing picked so far, the highlights of the
+ * hexes it may stand in, the ghost of my token on the one under the
+ * pointer, and whether the call is being signed.
+ */
+type Setup = {
+  req: SetupRequest;
+  seat: number;
+  hex: string | null;
+  facing: number;
+  zone: Phaser.GameObjects.GameObject[];
+  ghost: Phaser.GameObjects.Image | null;
+  busy: boolean;
+};
+
+/** A set up just begun: no position picked yet, the character facing its default way. */
+function newSetup(req: SetupRequest): Setup {
+  return { req, seat: req.kind === "create" ? 0 : req.seat, hex: null, facing: defaultFacing(req.charKey), zone: [], ghost: null, busy: false };
+}
 
 /** Depth of the setup zone's highlights: under the aim zone shown on token hover (0.5) and the tokens (from 1). */
 const SETUP_ZONE_DEPTH = 0.3;
@@ -819,21 +842,10 @@ export class GameScene extends Phaser.Scene {
   private routeTurn: number | null = null;
   /** The plan sent this turn, shown while waiting: known from sending it, else read back from the chain. */
   private sentPlan: { turn: number; plan: string } | null = null;
-  /**
-   * Setting my character up before calling or joining (SetupRequest): the
-   * seat it takes, the hex and facing picked so far, the highlights of the
-   * hexes it may stand in, the ghost of my token on the one under the
-   * pointer, and whether the call is being signed.
-   */
-  private setup: {
-    req: SetupRequest;
-    seat: number;
-    hex: string | null;
-    facing: number;
-    zone: Phaser.GameObjects.GameObject[];
-    ghost: Phaser.GameObjects.Image | null;
-    busy: boolean;
-  } | null = null;
+  /** My character's set up before calling or joining, while it lasts. */
+  private setup: Setup | null = null;
+  /** Adena being connected from this screen (a viewer without a wallet): its popups are up. */
+  private connecting = false;
 
   // Zoom & pan
   private zoom = 1;
@@ -873,9 +885,7 @@ export class GameScene extends Phaser.Scene {
     this.tutorial = !!data.tutorial;
     this.routeTurn = data.turn ?? null;
     this.gameID = this.tutorial ? TUTORIAL_GAME : (data.gameID ?? "");
-    this.setup = data.setup
-      ? { req: data.setup, seat: data.setup.kind === "create" ? 0 : data.setup.seat, hex: null, facing: defaultFacing(data.setup.charKey), zone: [], ghost: null, busy: false }
-      : null;
+    this.setup = data.setup ? newSetup(data.setup) : null;
     this.view = null;
     this.myIndex = -1;
     this.renderedTurn = -1;
@@ -896,6 +906,7 @@ export class GameScene extends Phaser.Scene {
     this.revealFailedAt = { own: 0 };
     this.openRetryAt = 0;
     this.passWarnedAt = 0;
+    this.connecting = false;
     this.zoom = 1;
     this.panX = 0;
     this.panY = 0;
@@ -1164,6 +1175,48 @@ export class GameScene extends Phaser.Scene {
     this.refreshTokens(false);
     this.showSetupZone();
     this.renderView();
+  }
+
+  /**
+   * Watching an open showdown with a wallet: takes its next free seat and
+   * sets up there, as the lobby's Join does (the seat follows the chain the
+   * same way, syncJoinSeat).
+   */
+  private beginJoin() {
+    const view = this.view;
+    if (!view || this.setup || view.phase !== "waiting" || !this.canJoin()) return;
+    const seat = nextSeat(view.players);
+    if (seat < 0) return;
+    this.setup = newSetup({ kind: "join", seat, charKey: seatChar(seat), stake: view.stake });
+    void this.onGame(view);
+  }
+
+  /** Whether this screen can join the showdown watched: an account signs here (not the tutorial's, not a viewer without a wallet). */
+  private canJoin(): boolean {
+    return !this.tutorial && !!currentChain();
+  }
+
+  /**
+   * A viewer without a wallet (a game opened at its address) connects Adena
+   * from the board, as the lobby does: the chain shared by the scenes is set
+   * up, then the scene starts over on the game as the account's player.
+   */
+  private async connectAdena() {
+    if (this.connecting || this.tutorial || currentChain()) return;
+    this.connecting = true;
+    this.renderView();
+    try {
+      resetChain();
+      await initChain(CONFIG);
+      if (!this.scene.isActive()) return;
+      installWalletNotices();
+      this.scene.restart({ gameID: this.gameID });
+    } catch (e) {
+      this.connecting = false;
+      if (!this.scene.isActive()) return;
+      showToast(this, userMessage(e), "error");
+      this.renderView();
+    }
   }
 
   /** Leaves the set up: its highlights and ghost go, my seat is whatever the chain says. */
@@ -1658,7 +1711,7 @@ export class GameScene extends Phaser.Scene {
         return this.finalReplay ? `${this.overLine()} · turn ${t.turn}, ${where}` : `Replay · turn ${t.turn}, ${where}`;
       }
       case "spectate":
-        return "Spectating";
+        return view.phase === "waiting" ? `Open showdown, waiting for players (${seatsTaken(view)})…` : "Spectating";
       case "ended":
         return this.overLine();
     }
@@ -1744,6 +1797,10 @@ export class GameScene extends Phaser.Scene {
         return void this.cancelGame();
       case "setup":
         return void this.sendSetup();
+      case "join":
+        return this.beginJoin();
+      case "connect":
+        return void this.connectAdena();
       case "turnLeft":
         return this.turnSetup(-1);
       case "turnRight":
@@ -2079,6 +2136,32 @@ export class GameScene extends Phaser.Scene {
     }
     if (this.mode === "ended") {
       return { title: "Game over", points: "", lines: [], empty: this.statusLine(), note: payoutLine(view, this.myIndex), warn: false, buttons: [replay, lobby] };
+    }
+    // An open showdown watched: join it from here, in its next free seat (the lobby's Join, from the board).
+    if (this.mode === "spectate" && view.phase === "waiting") {
+      const left = view.players.length - view.players.filter((p) => p.addr).length;
+      const seat = nextSeat(view.players);
+      const join = seat >= 0 && this.canJoin() ? charName(seatChar(seat)) : "";
+      // Without a wallet, Adena is connected from here (a link shared by the caller, say).
+      const connect = seat >= 0 && !this.tutorial && !currentChain();
+      return {
+        title: "Waiting for players",
+        points: seatsTaken(view),
+        lines: [],
+        empty: `The showdown is open: it starts once ${left > 1 ? `${left} more players join` : "one more player joins"}.`,
+        note: join
+          ? `Join it: you take position on the board first${view.stake ? `, and put in the ${formatGnot(view.stake)} stake` : ""}.`
+          : connect
+            ? "Connect with Adena to join it."
+            : "",
+        warn: false,
+        you: join ? { charKey: seatChar(seat), name: join } : undefined,
+        buttons: [
+          ...(join ? [{ id: "join", label: `JOIN AS\n${join.toUpperCase()}${view.stake ? `\n${formatGnot(view.stake)}` : ""}`, tone: "primary" as const }] : []),
+          ...(connect ? [{ id: "connect", label: this.connecting ? "Connecting…" : "Connect with Adena", tone: "adena" as const, disabled: this.connecting }] : []),
+          lobby,
+        ],
+      };
     }
     return { title: this.mode === "spectate" ? "Spectating" : "Loading", points: "", lines: [], empty: this.statusLine(), note: "", warn: false, buttons: [replay, lobby] };
   }

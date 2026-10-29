@@ -481,7 +481,8 @@ export class LobbyView {
     const panel = (id: string, title: string, body: string) =>
       `<section class="gl-panel" aria-labelledby="${id}"><div class="gl-head"><h2 id="${id}" class="gl-h2">${title}</h2></div>${body}</section>`;
 
-    // A showdown nobody joined for a week is no longer offered (the realm keeps it open).
+    // A showdown nobody joined for a week is no longer offered (the realm keeps
+    // it open). Open shows it first, as a spectator, where Join is offered too.
     const open = s.open
       .filter((g) => stillOffered(g, now) && nextSeat(g.players) >= 0)
       .map((g) => {
@@ -492,6 +493,7 @@ export class LobbyView {
           `<div class="gl-line">${crest(g.players, seat)}<div class="gl-what">` +
           `<span class="gl-title">${esc(title)}</span>` +
           `<span class="gl-detail">${esc(withStake(`Game ${g.id} · ${seatsTaken(g)} · ${g.maxTurns} turns · ${formatDuration(g.timeout)} per turn`, g))}</span></div>` +
+          openBtn(g) +
           `<button type="button" class="gl-join" data-act="join" data-id="${esc(g.id)}">Join as ${esc(charName(seatChar(seat)))}${g.stake ? ` · ${esc(formatGnot(g.stake))}` : ""}</button></div>`
         );
       })

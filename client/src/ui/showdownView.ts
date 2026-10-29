@@ -111,7 +111,8 @@ export interface PlanLine {
 export interface Button {
   id: string;
   label: string;
-  tone: "primary" | "plain" | "danger";
+  /** adena: the splash's Connect with Adena (paper in a red ring, the wallet's icon before the label). */
+  tone: "primary" | "plain" | "danger" | "adena";
   disabled?: boolean;
 }
 
@@ -155,6 +156,8 @@ export interface ShowdownModel {
     empty: string;
     note: string;
     warn: boolean;
+    /** The character the buttons' call gives me, its token over them (joining from the board, as the lobby's form shows the caller's). */
+    you?: { charKey: string; name: string };
     buttons: Button[];
   } | null;
   hand: { cards: HandSide[][]; note: string } | null;
@@ -284,12 +287,19 @@ const CSS = `
 .gv-empty{margin:0;font-size:15px;font-style:italic;color:#5A4636}
 .gv-note{margin:0;font-size:15px;color:#5A4636}
 .gv-note.warn{color:#8E2F1A;font-weight:700}
+.gv-you{display:flex;align-items:center;gap:12px;background:#FBF4E4;border:2px solid #2A1C14;border-radius:12px;padding:8px 12px}
+.gv-you img{width:56px;height:56px;flex-shrink:0}
+.gv-you small{display:block;font-size:13px;font-weight:700;letter-spacing:1.5px;color:#8E2F1A}
+.gv-you span{font-family:Rye,Georgia,serif;font-size:22px}
 .gv-buttons{display:flex;flex-wrap:wrap;gap:8px}
 .gv-btn{flex:1 1 auto;min-height:44px;white-space:pre-line;padding:0 12px;background:#FBF4E4;color:#2A1C14;border:2px solid #2A1C14;border-radius:10px;font-size:16px;font-weight:700;cursor:pointer}
 .gv-btn:hover:not(:disabled){background:#FFFFFF}
 .gv-btn.danger{color:#8E2F1A;border-color:#8E2F1A}
-.gv-btn.primary{flex:1 1 100%;min-height:54px;margin-bottom:5px;background:#B5482A;color:#FBF4E4;border:3px solid #2A1C14;border-radius:12px;box-shadow:0 5px 0 #2A1C14;font-family:Rye,Georgia,serif;font-size:21px;font-weight:400;letter-spacing:1.5px}
+.gv-btn.primary{flex:1 1 100%;min-height:54px;padding:8px 16px;margin-bottom:5px;background:#B5482A;color:#FBF4E4;border:3px solid #2A1C14;border-radius:12px;box-shadow:0 5px 0 #2A1C14;font-family:Rye,Georgia,serif;font-size:21px;font-weight:400;letter-spacing:1.5px}
 .gv-btn.primary:hover:not(:disabled){background:#C65634}
+.gv-btn.adena{flex:1 1 100%;display:flex;align-items:center;justify-content:center;gap:10px;min-height:54px;margin:3px 3px 11px;padding:6px 20px;background:#F3E7CE;border:3px solid #2A1C14;border-radius:12px;box-shadow:0 0 0 3px #B5482A,0 6px 0 3px #8E2F1A;font-family:'Zilla Slab',Rockwell,Georgia,serif;font-size:20px;font-weight:700}
+.gv-btn.adena:hover:not(:disabled){background:#FBF4E4}
+.gv-btn.adena img{width:28px;height:28px;flex-shrink:0}
 .gv-bottom{grid-area:bottom;position:relative;background:#2A1C14;border-top:3px solid #5A4636;padding:8px 18px 12px;color:#F3E7CE;min-width:0;overflow:hidden;display:flex;flex-direction:column}
 .gv-hand-head{display:flex;align-items:baseline;gap:14px;margin-bottom:6px}
 .gv-hand-head h2{margin:0;font-family:Rye,Georgia,serif;font-weight:400;font-size:18px}
@@ -641,13 +651,18 @@ export class ShowdownView {
       .map((l, i) => `<li><b>${i + 1}</b><div><strong>${esc(l.name)}</strong>${l.detail ? `<small>${detailHtml(l)}</small>` : ""}</div>${l.cost === undefined ? "" : `<em>${l.cost}</em>`}</li>`)
       .join("");
     const buttons = p.buttons
-      .map((b) => `<button type="button" class="gv-btn ${b.tone}" data-act="btn" data-id="${esc(b.id)}"${b.disabled ? " disabled" : ""}>${esc(b.label)}</button>`)
+      .map(
+        (b) =>
+          `<button type="button" class="gv-btn ${b.tone}" data-act="btn" data-id="${esc(b.id)}"${b.disabled ? " disabled" : ""}>` +
+          `${b.tone === "adena" ? '<img src="adena_icon.png" alt="">' : ""}${esc(b.label)}</button>`,
+      )
       .join("");
     return (
       `<section class="${bare ? "gv-bare" : "gv-panel"} gv-plan" aria-labelledby="gv-plan"><div class="gv-plan-head"><h2 id="gv-plan">${esc(p.title)}</h2><span>${esc(p.points)}</span></div>` +
       this.trackerHtml(m.tracker) +
       (lines ? `<ol>${lines}</ol>` : `<p class="gv-empty">${esc(p.empty)}</p>`) +
       (p.note ? `<p class="gv-note${p.warn ? " warn" : ""}">${esc(p.note)}</p>` : "") +
+      (p.you ? `<div class="gv-you">${tokenImg(p.you.charKey)}<div><small>YOU PLAY</small><span>${esc(p.you.name)}</span></div></div>` : "") +
       `<div class="gv-buttons">${buttons}</div></section>`
     );
   }

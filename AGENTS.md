@@ -777,7 +777,7 @@ calls; `testing.SkipHeights(n)` advances block time 5 s per height.
   the turn goes on without the late ones, an empty turn if nobody played;
   the game screen's button says CALL TIME too, the UI's words for a
   claim), **Waiting on others**,
-  **Open showdowns** to join (those with a join or the call within a week, `stillOffered`), **Current showdowns** (anyone's being played, mine aside: **Watch** opens it as a spectator), **Recently finished** (anyone's last 10 finished, mine aside, told as nobody's, `outcomeLine(g, "")`: **Replay**), **Finished** (mine: Replay) and the **New showdown**
+  **Open showdowns** to join (those with a join or the call within a week, `stillOffered`; **Open** shows one first, as a spectator, the game screen offering the join too, **Join** goes straight to the set up), **Current showdowns** (anyone's being played, mine aside: **Watch** opens it as a spectator), **Recently finished** (anyone's last 10 finished, mine aside, told as nobody's, `outcomeLine(g, "")`: **Replay**), **Finished** (mine: Replay) and the **New showdown**
   form (turns 10 to 30, time per turn, **Stake**: Free, 1, 5, 10 or 25
   GNOT, `game/stakes.ts`, its note saying what the winner takes; a line
   shows the stake and pot, a finished one what I won or lost, the game
@@ -818,7 +818,14 @@ played, victory points, since). `game/lobby.ts` sorts the games into
   **CALL THE SHOWDOWN** / **JOIN THE SHOWDOWN** (`sendSetup`: `CreateGame`
   then the scene restarts on the game created; `JoinGame` then the poll
   takes over), the hand shows greyed out. A join whose game started without
-  me drops to spectating. The board (Phaser)
+  me drops to spectating. Watching an open showdown with a wallet (from the
+  lobby's Open, or at its address, shared by its caller say), the panel
+  says how many players it waits for and offers **JOIN AS <character>**,
+  the next free seat's, which begins that set up in place (`beginJoin`,
+  `newSetup`; `canJoin`: not in the tutorial nor without a wallet); without
+  a wallet it offers **CONNECT WITH ADENA** instead (`connectAdena`:
+  connects as the lobby does, then the scene starts over on the game as
+  the account's player). The board (Phaser)
   sits in the centre cell of an HTML overlay, `ui/showdownView.ts` after the
   Design canvas's game mockups, laid out by `showdownLayout` (the scene's
   board transform, mask, zoom/pan and input bounds use the same rectangle)
