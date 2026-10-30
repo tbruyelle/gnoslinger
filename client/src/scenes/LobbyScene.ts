@@ -160,8 +160,9 @@ export class LobbyScene extends Phaser.Scene {
       retry: () => void this.connect(),
       quit: () => this.quit(),
       tutorial: () => this.scene.start("GameScene", { tutorial: true }),
-      copyAddress: () => {
-        if (this.chain) void this.copyAddress(this.chain.wallet.address);
+      copyAddress: (addr) => {
+        const a = addr ?? this.chain?.wallet.address;
+        if (a) void this.copyAddress(a);
       },
       open: (id) => this.scene.start("GameScene", { gameID: id }),
       // Calling and joining go through the board first, where the player takes position (GameScene's set up).

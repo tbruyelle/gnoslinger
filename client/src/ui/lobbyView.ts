@@ -95,7 +95,8 @@ export interface LobbyActions {
   quit(): void;
   /** How to play: the tutorial. */
   tutorial(): void;
-  copyAddress(): void;
+  /** Copies an address: a player's in their profile, else mine. */
+  copyAddress(addr?: string): void;
   open(id: string): void;
   join(id: string): void;
   create(): void;
@@ -220,6 +221,8 @@ const CSS = `
 .gl-close{width:44px;height:44px;background:transparent;border:0;border-radius:8px;font-size:28px;line-height:1;color:#2A1C14;cursor:pointer}
 .gl-close:hover{background:#E9DCC0}
 .gl-addr{font-size:15px;color:#5A4636;word-break:break-all}
+.gl-addr-row{display:flex;align-items:center;gap:4px}
+.gl-addr-row .gl-icon{flex-shrink:0;width:36px;height:36px}
 .gl-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
 .gl-stat{background:#FBF4E4;border:2px solid #2A1C14;border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:2px}
 .gl-stat b{font-family:Rye,Georgia,serif;font-weight:400;font-size:28px;color:#33307F}
@@ -315,7 +318,7 @@ export class LobbyView {
         case "tutorial":
           return this.actions.tutorial();
         case "copy":
-          return this.actions.copyAddress();
+          return this.actions.copyAddress(id || undefined);
         case "open":
           return this.actions.open(id);
         case "join":
@@ -657,7 +660,9 @@ export class LobbyView {
 
   private profileBody(d: Extract<LobbyDialog, { kind: "profile" }>, me: string): string {
     const p = d.profile;
-    let body = `<span class="gl-addr">${esc(d.addr)}</span>`;
+    let body =
+      `<div class="gl-addr-row"><span class="gl-addr">${esc(d.addr)}</span>` +
+      `<button type="button" class="gl-icon" data-act="copy" data-id="${esc(d.addr)}" aria-label="Copy the address" title="Copy the address">${COPY_ICON}</button></div>`;
     if (d.loading) body += '<p class="gl-empty">Loading…</p>';
     else if (d.error) body += `<p class="gl-empty">${esc(d.error)}</p>`;
     else if (!p) body += `<p class="gl-empty">No profile yet: it comes with the first showdown ${d.addr === me ? "you call or join" : "this player calls or joins"}.</p>`;
