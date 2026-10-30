@@ -116,6 +116,8 @@ export interface LobbyActions {
   closeDialog(): void;
   /** Closes the welcome panel for good. */
   closeWelcome(): void;
+  /** The trailer, in a dialog (ui/trailerDialog.ts). */
+  openTrailer(): void;
 }
 
 const CSS = `
@@ -157,6 +159,7 @@ const CSS = `
 .gl-wl-sub{margin:-6px 0 0;font-size:16px;color:#2A1C14}
 .gl-wl-tips{margin:0;padding-left:22px;display:flex;flex-direction:column;gap:8px;font-size:17px;line-height:1.35}
 .gl-wl-link{padding:0;background:transparent;border:0;color:#33307F;font-size:inherit;font-weight:700;text-decoration:underline;cursor:pointer}
+.gl-wl-link:hover{color:#8E2F1A}
 .gl-wl-opts{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:10px}
 .gl-wl-opts li{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px 16px;background:#FBF4E4;border:2px solid #2A1C14;border-radius:12px;padding:10px 14px}
 .gl-wl-opts li div{display:flex;flex-direction:column;gap:2px;flex:1 1 240px}
@@ -324,6 +327,8 @@ export class LobbyView {
           return this.actions.closeDialog();
         case "welcome-close":
           return this.actions.closeWelcome();
+        case "trailer":
+          return this.actions.openTrailer();
         case "retry":
           return this.actions.retry();
         case "quit":
@@ -443,7 +448,8 @@ export class LobbyView {
       "<li><b>Call a showdown</b> with the form on the right: the number of players, the turns, the time per turn and a stake if you like. You take position on the board, then sign.</li>" +
       "<li><b>Or join one</b> under Open showdowns (Open shows it first), or open the link a friend shared with you.</li>" +
       "<li><b>Each turn</b> you pick up to 5 time points of action cards in secret. Once every plan is in, they are revealed and play out together.</li>" +
-      '<li><b>New to the game?</b> <button type="button" class="gl-wl-link" data-act="tutorial">How to play</button> walks you through a duel against the Kid.</li>' +
+      '<li><b>New to the game?</b> <button type="button" class="gl-wl-link" data-act="tutorial">How to play</button> walks you through a duel against the Kid, ' +
+      'and <button type="button" class="gl-wl-link" data-act="trailer">the trailer</button> shows a showdown in two minutes.</li>' +
       "</ol>" +
       '<ul class="gl-wl-opts">' +
       `<li><div><b>Auto-sign</b><span>Sign your moves without an Adena popup each time, within a daily spending limit.</span></div>${session}</li>` +

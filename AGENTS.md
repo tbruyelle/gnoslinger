@@ -786,7 +786,10 @@ calls; `testing.SkipHeights(n)` advances block time 5 s per height.
   cleared on leaving. Editing the address to another game while the app
   runs reloads the page onto it.
 - `LobbyScene`: splash screen as in the Design canvas (the cover framed like
-  a card in a double-ruled page, the tagline, **Connect with Adena**, the
+  a card in a double-ruled page, the tagline, **Connect with Adena**, **How
+  to play** and **Watch the trailer** (the video of `video/` on YouTube, played in a
+  dialog over the page, `ui/trailerDialog.ts`, `links.ts`; the welcome
+  panel links it too), the
   Avalon Hill credit), animated (intro, slow zoom, blowing dust, gun smoke;
   Connect with Adena fires a gunshot, always `gunshot1.wav`; the western music,
   `sounds/music-splash.mp3`, then plays once in the lobby, fading out when a game

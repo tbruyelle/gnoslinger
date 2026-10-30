@@ -20,6 +20,7 @@ import { openAndReveal } from "../game/opener";
 import type { GamesView as GamesList } from "../chain/types";
 import type { SetupRequest } from "./GameScene";
 import { setWelcomed, welcomed } from "../game/welcome";
+import { closeTrailerDialog, openTrailerDialog } from "../ui/trailerDialog";
 import { closeProfileDialog, copyAddress, openProfileDialog } from "../ui/profileDialog";
 import { STAKE_OPTIONS } from "../game/stakes";
 
@@ -211,6 +212,7 @@ export class LobbyScene extends Phaser.Scene {
         setWelcomed();
         this.renderView();
       },
+      openTrailer: () => openTrailerDialog(),
     });
     if (this.screen === "lobby") this.playMusic();
     this.loadGunshots();
@@ -222,6 +224,7 @@ export class LobbyScene extends Phaser.Scene {
     this.time.addEvent({ delay: 30_000, loop: true, callback: () => this.screen === "lobby" && this.renderView() });
     this.events.once("shutdown", () => {
       closeProfileDialog();
+      closeTrailerDialog();
       this.scale.off("resize", onResize);
       this.refreshTimer?.remove();
       for (const u of this.unsubscribe) u();
@@ -659,18 +662,15 @@ export class LobbyScene extends Phaser.Scene {
         wordWrap: { width: w - 100 },
       })
       .setOrigin(0.5, 0);
-    // Connect with Adena and How to play side by side, centred together.
-    const how = this.add
-      .text(0, 0, "How to play", { fontFamily: ZILLA, fontStyle: "bold", fontSize: "19px", color: SPLASH_GOLD_STR })
-      .setOrigin(0, 0.5)
-      .setInteractive({ useHandCursor: true });
+    // Connect with Adena, How to play and Watch the trailer side by side, centred together.
+    const how = this.splashLink("How to play", () => this.scene.start("GameScene", { tutorial: true }));
+    const trailer = this.splashLink("Watch the trailer", () => openTrailerDialog());
     const rowY = line.y + line.height + 26 + 29;
-    const bw = this.makeSplashButton(w / 2 - (SPLASH_LINK_GAP + how.width) / 2, rowY, "Connect with Adena", () => this.enter());
-    how.setPosition(w / 2 - (SPLASH_LINK_GAP + how.width) / 2 + bw / 2 + SPLASH_LINK_GAP, rowY).setDepth(2);
-    const underline = this.add.rectangle(how.x, rowY + how.height / 2, how.width, 2, SPLASH_GOLD).setOrigin(0, 0).setDepth(2);
-    how.on("pointerover", () => (how.setColor(SPLASH_CREAM_STR), underline.setFillStyle(SPLASH_CREAM)));
-    how.on("pointerout", () => (how.setColor(SPLASH_GOLD_STR), underline.setFillStyle(SPLASH_GOLD)));
-    how.on("pointerup", () => this.scene.start("GameScene", { tutorial: true }));
+    const links = how.text.width + SPLASH_LINK_GAP + trailer.text.width;
+    const bw = this.makeSplashButton(w / 2 - (SPLASH_LINK_GAP + links) / 2, rowY, "Connect with Adena", () => this.enter());
+    const linksX = w / 2 - (SPLASH_LINK_GAP + links) / 2 + bw / 2 + SPLASH_LINK_GAP;
+    how.place(linksX, rowY);
+    trailer.place(linksX + how.text.width + SPLASH_LINK_GAP, rowY);
     this.add
       .text(w / 2, creditY, CREDIT, { fontFamily: ZILLA, fontSize: "14px", color: "#B9A88A", align: "center", lineSpacing: 4, wordWrap: { width: Math.min(832, w - 100) } })
       .setOrigin(0.5, 1);
@@ -678,6 +678,24 @@ export class LobbyScene extends Phaser.Scene {
       const rest = this.children.list.slice(first);
       this.splashFx.push(this.tweens.add({ targets: rest, alpha: { from: 0, to: 1 }, delay: SPLASH_INTRO_MS * 0.7, duration: 600 }));
     }
+  }
+
+  /** A gold underlined link of the splash (How to play, Watch the trailer), lighter under the pointer; placed by its left end and middle. */
+  private splashLink(label: string, onClick: () => void): { text: Phaser.GameObjects.Text; place: (x: number, y: number) => void } {
+    const text = this.add
+      .text(0, 0, label, { fontFamily: ZILLA, fontStyle: "bold", fontSize: "19px", color: SPLASH_GOLD_STR })
+      .setOrigin(0, 0.5)
+      .setInteractive({ useHandCursor: true });
+    return {
+      text,
+      place: (x, y) => {
+        text.setPosition(x, y).setDepth(2);
+        const underline = this.add.rectangle(x, y + text.height / 2, text.width, 2, SPLASH_GOLD).setOrigin(0, 0).setDepth(2);
+        text.on("pointerover", () => (text.setColor(SPLASH_CREAM_STR), underline.setFillStyle(SPLASH_CREAM)));
+        text.on("pointerout", () => (text.setColor(SPLASH_GOLD_STR), underline.setFillStyle(SPLASH_GOLD)));
+        text.on("pointerup", onClick);
+      },
+    };
   }
 
   /** The splash's big button: parchment ringed in ink and brick red, sitting on a dark red edge; lighter under the pointer. */
