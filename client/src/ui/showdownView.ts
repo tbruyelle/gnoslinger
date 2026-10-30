@@ -162,6 +162,8 @@ export interface ShowdownModel {
   error: string;
   /** The link to a GitHub issue about what the screen shows (game/bugReport.ts), at the header's end. */
   reportUrl: string;
+  /** Share, before Report a bug: copies an invitation with the showdown's link; null without a game on the chain (calling one, the tutorial), "join" while a seat is free. */
+  share: "join" | "watch" | null;
   /** Left column: the characters (mine first, marked as such). */
   left: CharPanel[];
   /** Under them while planning or waiting: my plan on the segments. */
@@ -221,7 +223,7 @@ const CSS = `
 .gv-header{grid-area:header;background:#2A1C14;border-bottom:3px solid #5A4636;display:flex;align-items:center;gap:10px 20px;padding:0 18px;color:#F3E7CE;min-width:0;overflow:hidden}
 .gv-lobby{display:flex;align-items:center;gap:6px;min-height:44px;padding:0 6px;background:transparent;border:0;color:#F2B544;font-size:17px;font-weight:700;cursor:pointer}
 .gv-lobby:hover{color:#FBF4E4}
-.gv-report{flex-shrink:0;white-space:nowrap;font-size:14px;font-weight:700;color:#D9C9A8;text-decoration:none;border:2px solid #5A4636;border-radius:999px;padding:3px 10px}
+.gv-report{flex-shrink:0;background:transparent;font-family:inherit;cursor:pointer;white-space:nowrap;font-size:14px;font-weight:700;color:#D9C9A8;text-decoration:none;border:2px solid #5A4636;border-radius:999px;padding:3px 10px}
 .gv-report:hover{color:#F2B544;border-color:#F2B544}
 .gv-title{font-family:Rye,Georgia,serif;font-size:21px;letter-spacing:1px;white-space:nowrap}
 .gv-ribbon{grid-area:ribbon;display:flex;align-items:center;padding:6px 12px 0;min-width:0}
@@ -619,6 +621,9 @@ export class ShowdownView {
       `<button type="button" class="gv-lobby" data-act="btn" data-id="lobby">${BACK_SVG}Lobby</button>` +
       `<span class="gv-title">${esc(m.title)}</span>` +
       (m.error ? `<span class="gv-herr">${esc(m.error)}</span>` : `<div class="gv-lineup">${this.lineupHtml(m.lineup)}</div>`) +
+      (m.share
+        ? `<button type="button" class="gv-report" data-act="btn" data-id="share" title="${m.share === "join" ? "Copy an invitation to join, with the showdown's link" : "Copy the showdown's link, to watch it"}">Share</button>`
+        : "") +
       `<a class="gv-report" href="${esc(m.reportUrl)}" target="_blank" rel="noopener" title="Open a GitHub issue about this game and turn">Report a bug</a>`
     );
   }

@@ -736,6 +736,13 @@ calls; `testing.SkipHeights(n)` advances block time 5 s per height.
   triggers' ids may change). The notification's click opens the game.
   Brave refuses to subscribe until "Use Google services for push
   messaging" is on in its privacy settings; the toast says so.
+- **Share** (`game/share.ts`): beside Report a bug in the game header,
+  copies an invitation with the showdown's link: while a seat is free, to
+  join, with the terms (seats, turns, time per turn, stake; not the
+  character, which follows the join order), else to come and watch as a
+  spectator, or watch its replay once over; the link opens the game screen,
+  where a newcomer connects Adena and joins. Not in the tutorial nor
+  while calling a showdown (no game yet).
 - **Report a bug** (`game/bugReport.ts`): a link in the lobby's top bar and
   at the game header's end opens a new GitHub issue
   (`github.com/tbruyelle/gnoslinger/issues/new`, label `bug`) filled with

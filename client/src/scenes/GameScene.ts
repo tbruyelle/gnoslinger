@@ -42,6 +42,7 @@ import { seatColor, seatColorNum } from "../ui/seats";
 import { TUTORIAL_GAME, TUTORIAL_HASH, tutorialChain, tutorialCoach } from "../tutorial/tutorial";
 import { formatGnot, payoutLine } from "../game/stakes";
 import { reportUrl, type BugContext } from "../game/bugReport";
+import { shareText } from "../game/share";
 import { closeProfileDialog, openProfileDialog } from "../ui/profileDialog";
 
 // ── Layout constants ────────────────────────────────────────────────────────
@@ -1225,6 +1226,19 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  /** Copies the invitation to the showdown (game/share.ts), its link included. */
+  private async share() {
+    const view = this.view;
+    if (!view || this.tutorial) return;
+    const text = shareText(view, location.origin + location.pathname, this.chain.wallet.address);
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast(this, view.phase === "waiting" ? "Invitation copied: paste it to a friend" : "Link copied", "info", 3000);
+    } catch {
+      showToast(this, "Could not copy: " + text, "error", 10000);
+    }
+  }
+
   /** Leaves the set up: its highlights and ghost go, my seat is whatever the chain says. */
   private endSetup() {
     for (const o of this.setup?.zone ?? []) o.destroy();
@@ -1807,6 +1821,8 @@ export class GameScene extends Phaser.Scene {
         return this.beginJoin();
       case "connect":
         return void this.connectAdena();
+      case "share":
+        return void this.share();
       case "turnLeft":
         return this.turnSetup(-1);
       case "turnRight":
@@ -1880,6 +1896,7 @@ export class GameScene extends Phaser.Scene {
       lineup: this.headerLineup(),
       error: this.netError ? `RPC offline: ${this.netError}` : "",
       reportUrl: reportUrl(this.bugContext()),
+      share: (this.tutorial || !view ? null : view.phase === "waiting" && nextSeat(view.players) >= 0 ? "join" : "watch") as ShowdownModel["share"],
     };
 
     // Replay: every character as the segment shown leaves it, the log, the timeline.
