@@ -11,6 +11,9 @@ interface ImportMetaEnv {
   readonly VITE_GAS_FEE?: string;
 }
 
+/** The commit built (vite.config.ts). */
+declare const __BUILD__: string;
+
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }

@@ -5,11 +5,11 @@
 
 ## UI
 - change window size to see how things fit
-- add report bug button
 - add profile page clickable from where the player is displayed
 - might be better to open showdown before being able to join
   - join showdown from showdown page
   - add share option to let people join
+  - add share to specific turn to see the outcome
 - show connect from adena button from any page
 - add welcome panel that suggest to enable notif and auto sign
 - add link to gnoslinger.xyz to the render node

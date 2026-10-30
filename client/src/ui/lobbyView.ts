@@ -1,5 +1,6 @@
 import { formatCoins } from "../chain/rpc";
 import { spentNow, type SessionState } from "../chain/session";
+import { reportUrl } from "../game/bugReport";
 import { playerLabel, type GameSummary, type GamesView, type PlayersView, type Profile } from "../chain/types";
 import { uprightTokenAngle } from "../rules";
 import { charName, claimable, formatDuration, formatLeft, lobbySections, myResult, outcomeLine, runningOut, seatsTaken, secondsLeft, stillOffered } from "../game/lobby";
@@ -126,6 +127,7 @@ const CSS = `
 .gl-mark{flex-shrink:0;white-space:nowrap;font-family:Rye,Georgia,serif;font-size:30px;letter-spacing:2px;color:#F3E7CE}
 .gl-nav{flex-shrink:0;white-space:nowrap;min-height:44px;padding:0 6px;background:transparent;border:0;color:#D9C9A8;font-size:18px;font-weight:700;cursor:pointer}
 .gl-nav:hover{color:#F2B544}
+.gl-report{display:flex;align-items:center;text-decoration:none}
 .gl-right{margin-left:auto;min-width:0;display:flex;flex-wrap:wrap;justify-content:flex-end;align-items:center;gap:10px;color:#F3E7CE}
 .gl-net{white-space:nowrap;font-size:15px;font-weight:700;border:2px solid #5A4636;border-radius:999px;padding:4px 12px}
 .gl-session{white-space:nowrap;font-size:15px;font-weight:700;line-height:inherit;background:transparent;color:#F3E7CE;border:2px solid #5A4636;border-radius:999px;padding:4px 12px;cursor:pointer}
@@ -374,7 +376,11 @@ export class LobbyView {
     } else {
       right = `<span class="gl-error">${esc(m.error)}</span><button type="button" class="gl-retry" data-act="retry">Retry</button>`;
     }
-    return `<header class="gl-top"><div class="gl-top-in"><span class="gl-mark">GNOSLINGER</span><button type="button" class="gl-nav" data-act="tutorial">How to play</button><div class="gl-right">${right}</div></div></header>`;
+    const report = reportUrl({ shown: "lobby", address: m.address });
+    return (
+      `<header class="gl-top"><div class="gl-top-in"><span class="gl-mark">GNOSLINGER</span><button type="button" class="gl-nav" data-act="tutorial">How to play</button>` +
+      `<a class="gl-nav gl-report" href="${esc(report)}" target="_blank" rel="noopener" title="Open a GitHub issue">Report a bug</a><div class="gl-right">${right}</div></div></header>`
+    );
   }
 
   /** The session's pill in the top bar; it opens the session dialog. */

@@ -736,6 +736,17 @@ calls; `testing.SkipHeights(n)` advances block time 5 s per height.
   triggers' ids may change). The notification's click opens the game.
   Brave refuses to subscribe until "Use Google services for push
   messaging" is on in its privacy settings; the toast says so.
+- **Report a bug** (`game/bugReport.ts`): a link in the lobby's top bar and
+  at the game header's end opens a new GitHub issue
+  (`github.com/tbruyelle/gnoslinger/issues/new`, label `bug`) filled with
+  a title naming the game and turn, blanks for what happened and what was
+  expected, then the facts: the game's link on the turn shown (it opens
+  that turn's replay, where the chain holds the plans, cards and state),
+  what the screen showed (mode and phase, or replay and segment), my seat
+  and address, the chain and realm, the build's commit (`__BUILD__`,
+  `git rev-parse --short HEAD` in `vite.config.ts`, "dev" without git),
+  the window size and browser. The player signs in to GitHub to send it;
+  the link stays far under GitHub's ~8 KB, so it never carries the game's JSON.
 - `ui/toast.ts`: toasts are DOM elements over the canvas, because the
   scenes rebuild their display list (`children.removeAll`) on every refresh,
   which destroyed Phaser toasts the moment they appeared; identical texts

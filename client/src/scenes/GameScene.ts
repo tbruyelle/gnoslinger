@@ -41,6 +41,7 @@ import { openAndReveal } from "../game/opener";
 import { seatColor, seatColorNum } from "../ui/seats";
 import { TUTORIAL_GAME, TUTORIAL_HASH, tutorialChain, tutorialCoach } from "../tutorial/tutorial";
 import { formatGnot, payoutLine } from "../game/stakes";
+import { reportUrl, type BugContext } from "../game/bugReport";
 
 // ── Layout constants ────────────────────────────────────────────────────────
 
@@ -1873,6 +1874,7 @@ export class GameScene extends Phaser.Scene {
       statusTone: tone,
       lineup: this.headerLineup(),
       error: this.netError ? `RPC offline: ${this.netError}` : "",
+      reportUrl: reportUrl(this.bugContext()),
     };
 
     // Replay: every character as the segment shown leaves it, the log, the timeline.
@@ -1951,6 +1953,25 @@ export class GameScene extends Phaser.Scene {
     const tracker = me && trackerPlan ? segmentFills(trackerPlan.map((e) => getActionDef(e).cost), me.delay) : null;
 
     return { ...base, left, tracker, others, plan: this.planPanel(names), hand: this.handModel(), replay: null };
+  }
+
+  /** What a bug report says the screen showed: the game, the turn shown, the moment, my seat. */
+  private bugContext(): BugContext {
+    if (this.tutorial) return { shown: "How to play (tutorial)" };
+    const pb = this.playback;
+    const shownTurn = this.mode === "playback" && pb ? pb.turns[pb.index]?.turn : undefined;
+    const shown =
+      this.mode === "playback" && pb
+        ? `${pb.live ? "turn playback" : this.finalReplay ? "final replay" : "replay"} · ${pb.seg === 0 ? "turn start" : `segment ${pb.seg}`}`
+        : `${this.mode}${this.view ? ` · phase ${this.view.phase}` : ""}`;
+    const me = this.myIndex >= 0 ? this.charOf(this.myIndex) : "";
+    return {
+      gameID: this.gameID || undefined,
+      turn: shownTurn ?? this.view?.turn,
+      shown,
+      seat: me ? `${this.myIndex} (${charName(me)})` : "spectator",
+      address: this.chain.wallet.address,
+    };
   }
 
   /** The header's line-up: who sits in each seat (me by my character, a seat I am setting up in included). */
