@@ -12,7 +12,7 @@ import { formatCoins } from "../chain/rpc";
 export const HOUSE_CUT_PERCENT = 5;
 
 /** The stakes the New showdown form offers, in ugnot: free first. */
-export const STAKE_OPTIONS = [0, 1, 5, 10, 25].map((gnot) => gnot * 1_000_000);
+export const STAKE_OPTIONS = [0, 1, 5, 10, 25, 100, 500].map((gnot) => gnot * 1_000_000);
 
 /** An amount of ugnot in GNOT: "5 GNOT", "9.5 GNOT". */
 export function formatGnot(ugnot: number): string {
@@ -21,7 +21,7 @@ export function formatGnot(ugnot: number): string {
 
 /** The stake as the form's select names it. */
 export function stakeOption(ugnot: number): string {
-  return ugnot === 0 ? "Free" : formatGnot(ugnot);
+  return ugnot === 0 ? "For glory" : formatGnot(ugnot);
 }
 
 /** A showdown's stake and pot for its line or title: "5 GNOT stake · 10 GNOT pot", "" for a free one. */

@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { STAKE_OPTIONS, formatGnot, payoutLine, stakeLine, stakeOption, winnings } from "./stakes";
 
 describe("stakes", () => {
-  it("offers free first, then GNOT amounts in ugnot", () => {
-    expect(STAKE_OPTIONS).toEqual([0, 1_000_000, 5_000_000, 10_000_000, 25_000_000]);
-    expect(STAKE_OPTIONS.map(stakeOption)).toEqual(["Free", "1 GNOT", "5 GNOT", "10 GNOT", "25 GNOT"]);
+  it("offers glory first, then GNOT amounts in ugnot", () => {
+    expect(STAKE_OPTIONS).toEqual([0, 1_000_000, 5_000_000, 10_000_000, 25_000_000, 100_000_000, 500_000_000]);
+    expect(STAKE_OPTIONS.map(stakeOption)).toEqual(["For glory", "1 GNOT", "5 GNOT", "10 GNOT", "25 GNOT", "100 GNOT", "500 GNOT"]);
   });
 
   it("words amounts, lines and what a seat got", () => {

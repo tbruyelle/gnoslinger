@@ -811,7 +811,7 @@ calls; `testing.SkipHeights(n)` advances block time 5 s per height.
   the game screen's button says CALL TIME too, the UI's words for a
   claim), **Waiting on others**,
   **Open showdowns** to join (those with a join or the call within a week, `stillOffered`; **Open** shows one first, as a spectator, the game screen offering the join too, **Join** goes straight to the set up), **Current showdowns** (anyone's being played, mine aside: **Watch** opens it as a spectator), **Recently finished** (anyone's last 10 finished, mine aside, told as nobody's, `outcomeLine(g, "")`: **Replay**), **Finished** (mine: Replay) and the **New showdown**
-  form (turns 10 to 30, time per turn, **Stake**: Free, 1, 5, 10 or 25
+  form (turns 10 to 30, time per turn, **Stake**: For glory, 1, 5, 10, 25, 100 or 500
   GNOT, `game/stakes.ts`, its note saying what the winner takes; a line
   shows the stake and pot, a finished one what I won or lost, the game
   screen's title the pot). Each showdown's line shows my
