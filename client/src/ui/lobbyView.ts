@@ -165,6 +165,8 @@ const CSS = `
 .gl-wl-opts li div{display:flex;flex-direction:column;gap:2px;flex:1 1 240px}
 .gl-wl-opts b{font-size:18px}
 .gl-wl-opts span{font-size:15px;color:#5A4636}
+.gl-wl-opts .gl-join{min-width:236px}
+.gl-wl-actions{justify-content:flex-end}
 .gl-wl-on{font-weight:700;color:#4F7A3A !important;font-size:16px !important}
 .gl-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:4px 12px;border-bottom:3px solid #2A1C14;padding-bottom:8px}
 .gl-h2{margin:0;font-family:Rye,Georgia,serif;font-weight:400;font-size:26px}
@@ -455,7 +457,7 @@ export class LobbyView {
       `<li><div><b>Auto-sign</b><span>Sign your moves without an Adena popup each time, within a daily spending limit.</span></div>${session}</li>` +
       notif +
       "</ul>" +
-      '<div class="gl-actions"><button type="button" class="gl-open" data-act="welcome-close">Got it</button></div>' +
+      '<div class="gl-actions gl-wl-actions"><button type="button" class="gl-open" data-act="welcome-close">Got it</button></div>' +
       "</section>"
     );
   }
