@@ -1,5 +1,7 @@
 import Phaser from "phaser";
 import { connectIfAllowed } from "../chain";
+import { TRAILER_HASH } from "../links";
+import { openTrailerDialog } from "../ui/trailerDialog";
 import { parseRoute } from "../game/route";
 import { installWalletNotices } from "../ui/walletNotices";
 import { TUTORIAL_HASH } from "../tutorial/tutorial";
@@ -39,6 +41,11 @@ export class BootScene extends Phaser.Scene {
       .then(async () => {
         const route = parseRoute(location.hash);
         if (location.hash === TUTORIAL_HASH) return this.scene.start("GameScene", { tutorial: true });
+        // The trailer's address: the splash with the trailer over it (the README's link).
+        if (location.hash === TRAILER_HASH) {
+          this.scene.start("LobbyScene");
+          return openTrailerDialog();
+        }
         if (!route) return this.scene.start("LobbyScene");
         if (await connectIfAllowed()) installWalletNotices();
         this.scene.start("GameScene", { gameID: route.gameID, turn: route.turn });

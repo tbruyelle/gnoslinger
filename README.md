@@ -6,7 +6,7 @@ tables. It runs on the **gno.land chain**: a Gno realm holds every showdown
 and settles every turn, the web client is the interface and signs its
 moves with the Adena wallet. There is no game server.
 
-[![The trailer](https://img.youtube.com/vi/YQ4HInJah5s/maxresdefault.jpg)](https://youtu.be/YQ4HInJah5s)
+[![The trailer](assets-src/trailer.jpg)](https://gnoslinger.xyz/#trailer)
 
 **Play at [gnoslinger.xyz](https://gnoslinger.xyz)** (on Onyx, with Adena),
 or start with **How to play**, a guided duel that needs no wallet.

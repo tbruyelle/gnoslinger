@@ -787,9 +787,13 @@ calls; `testing.SkipHeights(n)` advances block time 5 s per height.
   runs reloads the page onto it.
 - `LobbyScene`: splash screen as in the Design canvas (the cover framed like
   a card in a double-ruled page, the tagline, **Connect with Adena**, **How
-  to play** and **Watch the trailer** (the video of `video/` on YouTube, played in a
-  dialog over the page, `ui/trailerDialog.ts`, `links.ts`; the welcome
-  panel links it too), the
+  to play** and **Watch the trailer** (the video of `video/`, played in a dialog over
+  the page by a plain `<video>`, `ui/trailerDialog.ts`, from the mp4
+  published as the repository's `trailer` release asset, `links.ts`
+  `TRAILER_VIDEO_URL`: full quality at once and no YouTube account shown;
+  the welcome panel links it too, and `#trailer` opens the splash with
+  it, `TRAILER_HASH` in `BootScene`, what the README's thumbnail
+  `assets-src/trailer.jpg` links), the
   Avalon Hill credit), animated (intro, slow zoom, blowing dust, gun smoke;
   Connect with Adena fires a gunshot, always `gunshot1.wav`; the western music,
   `sounds/music-splash.mp3`, then plays once in the lobby, fading out when a game
