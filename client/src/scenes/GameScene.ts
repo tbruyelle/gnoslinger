@@ -42,6 +42,7 @@ import { seatColor, seatColorNum } from "../ui/seats";
 import { TUTORIAL_GAME, TUTORIAL_HASH, tutorialChain, tutorialCoach } from "../tutorial/tutorial";
 import { formatGnot, payoutLine } from "../game/stakes";
 import { reportUrl, type BugContext } from "../game/bugReport";
+import { closeProfileDialog, openProfileDialog } from "../ui/profileDialog";
 
 // ── Layout constants ────────────────────────────────────────────────────────
 
@@ -982,6 +983,9 @@ export class GameScene extends Phaser.Scene {
       segment: (seg) => {
         if (this.playback) this.stepTo({ index: this.playback.index, seg });
       },
+      profile: (addr) => {
+        if (addr && !this.tutorial) void openProfileDialog({ realm: this.chain.realm, addr, me: this.chain.wallet.address });
+      },
     });
     this.buildAll();
     this.setupInput();
@@ -1034,6 +1038,7 @@ export class GameScene extends Phaser.Scene {
     this.events.once("shutdown", () => {
       if (this.tutorial || this.gameID) history.replaceState(null, "", location.pathname + location.search);
       closeCharacterSheet();
+      closeProfileDialog();
       this.showdown?.destroy();
       this.showdown = null;
       this.scale.off("resize", onResize);

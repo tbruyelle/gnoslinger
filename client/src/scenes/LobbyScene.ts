@@ -19,6 +19,7 @@ import { openableSeats, summaryOpenable, summaryRevealDue } from "../game/reveal
 import { openAndReveal } from "../game/opener";
 import type { GamesView as GamesList } from "../chain/types";
 import type { SetupRequest } from "./GameScene";
+import { closeProfileDialog, copyAddress, openProfileDialog } from "../ui/profileDialog";
 import { STAKE_OPTIONS } from "../game/stakes";
 
 /** All character tokens, for the picker that will come back later. */
@@ -160,9 +161,8 @@ export class LobbyScene extends Phaser.Scene {
       retry: () => void this.connect(),
       quit: () => this.quit(),
       tutorial: () => this.scene.start("GameScene", { tutorial: true }),
-      copyAddress: (addr) => {
-        const a = addr ?? this.chain?.wallet.address;
-        if (a) void this.copyAddress(a);
+      copyAddress: () => {
+        if (this.chain) void copyAddress(this.chain.wallet.address);
       },
       open: (id) => this.scene.start("GameScene", { gameID: id }),
       // Calling and joining go through the board first, where the player takes position (GameScene's set up).
@@ -216,6 +216,7 @@ export class LobbyScene extends Phaser.Scene {
     // The time left to play each game counts down.
     this.time.addEvent({ delay: 30_000, loop: true, callback: () => this.screen === "lobby" && this.renderView() });
     this.events.once("shutdown", () => {
+      closeProfileDialog();
       this.scale.off("resize", onResize);
       this.refreshTimer?.remove();
       for (const u of this.unsubscribe) u();
@@ -270,15 +271,6 @@ export class LobbyScene extends Phaser.Scene {
       this.balance = `balance unavailable (${userMessage(e)})`;
     }
     if (this.scene.isActive() && this.screen === "lobby") this.renderView();
-  }
-
-  private async copyAddress(addr: string) {
-    try {
-      await navigator.clipboard.writeText(addr);
-      showToast(this, "Address copied", "info", 2000);
-    } catch {
-      showToast(this, "Could not copy: " + addr, "error", 6000);
-    }
   }
 
   // ── Chain ─────────────────────────────────────────────────────────────────
@@ -481,21 +473,12 @@ export class LobbyScene extends Phaser.Scene {
   }
 
   /** Shows a player's profile; fromPage is the ranking page it was picked from. */
-  private async openProfile(addr: string, fromPage: number | null) {
+  private openProfile(addr: string, fromPage: number | null) {
     if (!this.chain) return;
-    const seq = ++this.dialogSeq;
-    this.dialog = { kind: "profile", addr, profile: null, loading: true, error: "", fromPage };
+    this.dialogSeq++;
+    this.dialog = null;
     this.renderView();
-    let profile = null;
-    let error = "";
-    try {
-      profile = await this.chain.realm.getProfile(addr);
-    } catch (e) {
-      error = userMessage(e);
-    }
-    if (seq !== this.dialogSeq || !this.dialog || !this.scene.isActive()) return;
-    this.dialog = { kind: "profile", addr, profile, loading: false, error, fromPage };
-    this.renderView();
+    void openProfileDialog({ realm: this.chain.realm, addr, me: this.chain.wallet.address, back: fromPage === null ? undefined : () => void this.openPlayers(fromPage) });
   }
 
   /** Shows a page (0-based) of the whole ranking; the page on screen stays until the next one loads. */

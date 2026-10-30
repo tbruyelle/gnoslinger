@@ -207,6 +207,8 @@ export interface ShowdownActions {
   card(card: number, side: "front" | "back"): void;
   sheet(seat: number): void;
   segment(seg: number): void;
+  /** A player's profile (a seat of the header's line-up). */
+  profile(addr: string): void;
 }
 
 const CSS = `
@@ -236,7 +238,10 @@ const CSS = `
 .gv-herr{margin-left:auto;font-size:15px;color:#F2B544;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .gv-lineup{margin-left:auto;display:flex;align-items:center;gap:12px;min-width:0;overflow:hidden;white-space:nowrap}
 .gv-vs{font-size:14px;font-style:italic;color:#8E7A5E}
-.gv-seat{display:inline-flex;align-items:center;gap:8px;font-size:17px;font-weight:700;color:#F3E7CE}
+.gv-seat{display:inline-flex;align-items:center;gap:8px;font-size:17px;font-weight:700;color:#F3E7CE;background:transparent;border:0;border-radius:999px;padding:2px 8px 2px 2px;margin:-2px -8px -2px -2px}
+button.gv-seat{cursor:pointer}
+button.gv-seat:hover{background:#3D2B20}
+button.gv-seat:hover b{text-decoration:underline}
 .gv-seat img{width:32px;height:32px;border-radius:50%;box-shadow:0 0 0 2px #2A1C14,0 0 0 4px var(--seat)}
 .gv-free{width:32px;height:32px;border-radius:50%;border:2px dashed #8E7A5E}
 .gv-seat small{font-size:11px;font-weight:700;letter-spacing:1.5px;color:#F2B544}
@@ -505,6 +510,8 @@ export class ShowdownView {
           return this.actions.sheet(Number(d.seat));
         case "seg":
           return this.actions.segment(Number(d.seg));
+        case "profile":
+          return this.actions.profile(d.addr ?? "");
         case "log":
           return this.setLogOpen(true);
         case "unlog":
@@ -648,11 +655,12 @@ export class ShowdownView {
   private lineupHtml(seats: HeaderSeat[]): string {
     return seats
       .map((s) => {
-        const title = s.addr ? `${s.name} · ${s.player} · ${s.addr}` : s.name;
+        const inner = (s.charKey ? tokenImg(s.charKey) : '<i class="gv-free"></i>') + `<b>${esc(s.name)}</b>${s.you ? "<small>YOU</small>" : ""}`;
+        // A seat with a player opens its profile; an empty one, or mine while I set up, is only shown.
+        if (!s.addr) return `<span class="gv-seat" style="--seat:${esc(s.color)}" title="${esc(s.name)}">${inner}</span>`;
         return (
-          `<span class="gv-seat" style="--seat:${esc(s.color)}" title="${esc(title)}">` +
-          (s.charKey ? tokenImg(s.charKey) : '<i class="gv-free"></i>') +
-          `<b>${esc(s.name)}</b>${s.you ? "<small>YOU</small>" : ""}</span>`
+          `<button type="button" class="gv-seat" style="--seat:${esc(s.color)}" data-act="profile" data-addr="${esc(s.addr)}" ` +
+          `title="${esc(`${s.name} · ${s.player} · ${s.addr} · open the player's profile`)}">${inner}</button>`
         );
       })
       .join('<em class="gv-vs">vs</em>');

@@ -795,7 +795,7 @@ calls; `testing.SkipHeights(n)` advances block time 5 s per height.
   shows the stake and pot, a finished one what I won or lost, the game
   screen's title the pot). Each showdown's line shows my
   character's token (on an open showdown, the one I would join as) ringed
-  in its seat's colour (`crest`); its title names the others as ringed tokens and character names, a registered name after, the address on hover (`lineup`); anyone's showdown has no crest, its title naming every seat. Under the form, **Top guns** lists the first 5 of the ranking (refreshed
+  in its seat's colour (`crest`); its title names the others as ringed tokens and character names, a registered name after, the address on hover, a click opening the player's profile (`lineup`; the profile dialog is `ui/profileDialog.ts`, shared with the game header and the ranking, its address with a copy button); anyone's showdown has no crest, its title naming every seat. Under the form, **Top guns** lists the first 5 of the ranking (refreshed
 with the games every 5 s; a player shows as its registered name, else its
 short address, `playerLabel`); a click anywhere on it opens the whole
 ranking in a dialog, 20 a page (`PLAYERS_PAGE`), whose rows open a
@@ -843,7 +843,7 @@ played, victory points, since). `game/lobby.ts` sorts the games into
   and rendered from the scene's state (`viewModel`) on every change: the
   header (Lobby, turn, status, the line-up: each seat's token ringed in
   its colour and its character's name, the player on hover, YOU after
-  mine, an empty seat a dashed ring; `HeaderSeat`); while planning, waiting or once
+  mine, an empty seat a dashed ring, a seat with a player opening its profile; `HeaderSeat`); while planning, waiting or once
   over, my character (endurance boxes, delay, AIM, wounds, guns) and
   **Your plan** (the segment tracker, `game/segments.ts`, then the entries,
   points, Send / Clear / Replay / Surrender, or the plan sent, Claim, Cancel

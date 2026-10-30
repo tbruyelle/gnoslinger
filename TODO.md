@@ -5,7 +5,6 @@
 
 ## UI
 - change window size to see how things fit
-- add profile page clickable from where the player is displayed
 - might be better to open showdown before being able to join
   - join showdown from showdown page
   - add share option to let people join
