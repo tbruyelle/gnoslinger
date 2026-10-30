@@ -8,6 +8,7 @@
  * turns them on (the browser asks for permission) or off.
  */
 import { Gnotif, GnotifError, type Optin, type Trigger } from "gnotif";
+import { CONFIG } from "../config";
 
 /** The realm's events a browser is told about, each by a trigger whose param is the player's address. */
 export const NOTIFIED_EVENTS = ["PlanDue", "RevealDue", "ShowdownOver"] as const;
@@ -102,5 +103,7 @@ export function notificationsMessage(e: unknown): string {
   if (/push service error/i.test(msg)) {
     return "The browser could not subscribe to push: on Brave, turn on \"Use Google services for push messaging\" in its privacy settings";
   }
+  // fetch's own failure (the browsers word it "Failed to fetch", "NetworkError", "Load failed"): the server is down or unreachable, on gnodev `make notif` not running.
+  if (/failed to fetch|networkerror|load failed/i.test(msg)) return `The notification server cannot be reached (${CONFIG.gnotifServer})`;
   return `Notifications: ${msg}`;
 }
