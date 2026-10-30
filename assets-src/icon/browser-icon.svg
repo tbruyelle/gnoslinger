@@ -1,0 +1,14 @@
+<svg viewBox="0 0 512 512" width="512" height="512" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="GNOSLINGER browser icon: a title-style G on a red desert tile">
+<defs>
+<radialGradient id="icBg" cx="50%" cy="38%" r="70%"><stop offset="0" stop-color="#E07A4E"></stop><stop offset="0.6" stop-color="#B5482A"></stop><stop offset="1" stop-color="#7A2A16"></stop></radialGradient>
+<linearGradient id="icG" gradientUnits="userSpaceOnUse" x1="0" y1="96" x2="0" y2="420"><stop offset="0" stop-color="#3E9DB0"></stop><stop offset="0.55" stop-color="#3F4F9E"></stop><stop offset="1" stop-color="#3A2384"></stop></linearGradient>
+</defs>
+<rect x="8" y="8" width="496" height="496" rx="104" fill="#2A1C14"></rect>
+<rect x="22" y="22" width="468" height="468" rx="92" fill="url(#icBg)"></rect>
+<rect x="40" y="40" width="432" height="432" rx="76" fill="none" stroke="#F3E7CE" stroke-width="6" opacity="0.85"></rect>
+<g fill="#F3E7CE" opacity="0.25"><circle cx="110" cy="400" r="6"></circle><circle cx="140" cy="420" r="4"></circle><circle cx="400" cy="120" r="5"></circle><circle cx="380" cy="420" r="7"></circle><circle cx="420" cy="380" r="3.5"></circle></g>
+<text x="270" y="282" font-family="Rye, Georgia, serif" font-size="400" text-anchor="middle" dominant-baseline="central" fill="#2A1C14" opacity="0.55">G</text>
+<text x="256" y="266" font-family="Rye, Georgia, serif" font-size="400" text-anchor="middle" dominant-baseline="central" fill="none" stroke="#1E1618" stroke-width="40" stroke-linejoin="round">G</text>
+<text x="256" y="266" font-family="Rye, Georgia, serif" font-size="400" text-anchor="middle" dominant-baseline="central" fill="none" stroke="#EDE4CF" stroke-width="26" stroke-linejoin="round">G</text>
+<text x="256" y="266" font-family="Rye, Georgia, serif" font-size="400" text-anchor="middle" dominant-baseline="central" fill="url(#icG)" stroke="#1E1618" stroke-width="8" stroke-linejoin="round">G</text>
+</svg>

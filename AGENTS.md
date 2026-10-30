@@ -1091,7 +1091,7 @@ only what the client loads, about 20 MB; checked on 2026-10-25 against the
 names the code builds, the rest moved to `assets-src/`, the TTS dump's
 leftovers deleted): board 1600×2232 (`board_A.png`; the others in `assets-src/`),
 character tokens `char_*.png` 95×95, action cards `action_card_a{1-12}[_back].png` (630×880),
-`hex_grid.json` (hex centres, scaled 2×), gun icons `guns/<type>.gif` and AIM
+`hex_grid.json` (hex centres, scaled 2×), the browser icon from the Design canvas's BrowserIcon (`favicon.ico` 16/32/48, `icon-192.png`, `apple-touch-icon.png` 180, linked in `client/index.html`; its SVG and a 512 render in `assets-src/icon/`: the G is Rye text, so the PNGs are rendered with the font loaded, `chromium --headless=new --default-background-color=00000000 --window-size=512,512 --virtual-time-budget=8000 --screenshot=icon-512.png render.html`, then downsized with `magick`), gun icons `guns/<type>.gif` and AIM
 markers `aim{2,4,6,8}.gif` (from the VASSAL module), sound effects `sounds/`
 (played during turn playback: `game/sounds.ts` maps events to groups of
 variants, `GameScene.playSounds` picks one from the turn's seed, hashed with the event's place in the turn and the group, `variantIndex`, so a turn sounds the same on every playback, and a wild shot's bullet flies the same way (`turnPick`); the planning sounds pick at random; a miss, misfires
