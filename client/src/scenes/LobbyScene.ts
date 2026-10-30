@@ -19,6 +19,7 @@ import { openableSeats, summaryOpenable, summaryRevealDue } from "../game/reveal
 import { openAndReveal } from "../game/opener";
 import type { GamesView as GamesList } from "../chain/types";
 import type { SetupRequest } from "./GameScene";
+import { setWelcomed, welcomed } from "../game/welcome";
 import { closeProfileDialog, copyAddress, openProfileDialog } from "../ui/profileDialog";
 import { STAKE_OPTIONS } from "../game/stakes";
 
@@ -204,6 +205,10 @@ export class LobbyScene extends Phaser.Scene {
       closeDialog: () => {
         this.dialogSeq++;
         this.dialog = null;
+        this.renderView();
+      },
+      closeWelcome: () => {
+        setWelcomed();
         this.renderView();
       },
     });
@@ -536,6 +541,7 @@ export class LobbyScene extends Phaser.Scene {
         limitIndex: this.sessionLimit,
       },
       notifications: { available: this.notif !== null, on: this.notifOn, busy: this.notifBusy },
+      welcome: !welcomed(),
       games: this.games,
       creatorChar: CREATOR_CHAR,
       seats: this.seats,

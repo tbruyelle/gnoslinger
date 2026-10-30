@@ -86,6 +86,8 @@ export interface LobbyModel {
   /** The game whose reveal or opening the lobby is sending (auto-sign on), null if none. */
   revealingId: string | null;
   dialog: LobbyDialog | null;
+  /** The welcome panel, until this browser closes it once (game/welcome.ts). */
+  welcome: boolean;
 }
 
 export interface LobbyActions {
@@ -112,6 +114,8 @@ export interface LobbyActions {
   /** Turns the browser notifications of my moves on (the browser asks for permission) or off. */
   toggleNotifications(): void;
   closeDialog(): void;
+  /** Closes the welcome panel for good. */
+  closeWelcome(): void;
 }
 
 const CSS = `
@@ -148,6 +152,17 @@ const CSS = `
 .gl-col{flex:999 1 560px;min-width:0;display:flex;flex-direction:column;gap:24px}
 .gl-panel{background:#F3E7CE;border:3px solid #2A1C14;border-radius:18px;box-shadow:inset 0 0 0 5px #F3E7CE,inset 0 0 0 7px #2A1C14;padding:22px 24px;display:flex;flex-direction:column;gap:14px}
 .gl-panel.hot{box-shadow:inset 0 0 0 5px #F3E7CE,inset 0 0 0 7px #B5482A}
+.gl-welcome .gl-head{align-items:center}
+.gl-wl-lead{margin:0;font-size:18px;font-style:italic;color:#5A4636}
+.gl-wl-sub{margin:-6px 0 0;font-size:16px;color:#2A1C14}
+.gl-wl-tips{margin:0;padding-left:22px;display:flex;flex-direction:column;gap:8px;font-size:17px;line-height:1.35}
+.gl-wl-link{padding:0;background:transparent;border:0;color:#33307F;font-size:inherit;font-weight:700;text-decoration:underline;cursor:pointer}
+.gl-wl-opts{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:10px}
+.gl-wl-opts li{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px 16px;background:#FBF4E4;border:2px solid #2A1C14;border-radius:12px;padding:10px 14px}
+.gl-wl-opts li div{display:flex;flex-direction:column;gap:2px;flex:1 1 240px}
+.gl-wl-opts b{font-size:18px}
+.gl-wl-opts span{font-size:15px;color:#5A4636}
+.gl-wl-on{font-weight:700;color:#4F7A3A !important;font-size:16px !important}
 .gl-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:4px 12px;border-bottom:3px solid #2A1C14;padding-bottom:8px}
 .gl-h2{margin:0;font-family:Rye,Georgia,serif;font-weight:400;font-size:26px}
 .gl-h2.big{font-size:32px;color:#33307F}
@@ -307,6 +322,8 @@ export class LobbyView {
           return this.actions.toggleNotifications();
         case "close":
           return this.actions.closeDialog();
+        case "welcome-close":
+          return this.actions.closeWelcome();
         case "retry":
           return this.actions.retry();
         case "quit":
@@ -401,6 +418,40 @@ export class LobbyView {
       return `<button type="button" class="gl-session on" data-act="notif"${dis} title="This browser is told when it is your move, even with the game closed">Notifications on</button>`;
     }
     return `<button type="button" class="gl-session" data-act="notif"${dis} title="Be told when it is your move, even with the game closed">Notifications off</button>`;
+  }
+
+  /**
+   * The first time this browser sees the lobby: how to start or join a
+   * showdown, and an invitation to turn on auto-sign and notifications,
+   * each with its button while it is off.
+   */
+  private welcomePanel(m: LobbyModel): string {
+    const on = '<span class="gl-wl-on">✓ On</span>';
+    const session = m.session.state.kind === "active" ? on : '<button type="button" class="gl-join" data-act="session">Turn on auto-sign</button>';
+    const notif = !m.notifications.available
+      ? ""
+      : `<li><div><b>Notifications</b><span>Be told when it is your move, even with the game closed: showdowns last days.</span></div>` +
+        (m.notifications.on ? on : `<button type="button" class="gl-join" data-act="notif"${m.notifications.busy ? " disabled" : ""}>Turn on notifications</button>`) +
+        "</li>";
+    return (
+      '<section class="gl-panel hot gl-welcome" aria-labelledby="gl-welcome">' +
+      '<div class="gl-head"><h2 id="gl-welcome" class="gl-h2 big">Welcome, stranger</h2>' +
+      '<button type="button" class="gl-close" data-act="welcome-close" aria-label="Close the welcome">×</button></div>' +
+      '<p class="gl-wl-lead">Gunfights in the Old West, five segments a turn, settled on the gno.land chain.</p>' +
+      '<p class="gl-wl-sub">Each turn is two seconds of the fight: a gunfight played in slow motion, where every step, every draw and every shot counts. Twenty turns make forty seconds of lead, played over days.</p>' +
+      '<ol class="gl-wl-tips">' +
+      "<li><b>Call a showdown</b> with the form on the right: the number of players, the turns, the time per turn and a stake if you like. You take position on the board, then sign.</li>" +
+      "<li><b>Or join one</b> under Open showdowns (Open shows it first), or open the link a friend shared with you.</li>" +
+      "<li><b>Each turn</b> you pick up to 5 time points of action cards in secret. Once every plan is in, they are revealed and play out together.</li>" +
+      '<li><b>New to the game?</b> <button type="button" class="gl-wl-link" data-act="tutorial">How to play</button> walks you through a duel against the Kid.</li>' +
+      "</ol>" +
+      '<ul class="gl-wl-opts">' +
+      `<li><div><b>Auto-sign</b><span>Sign your moves without an Adena popup each time, within a daily spending limit.</span></div>${session}</li>` +
+      notif +
+      "</ul>" +
+      '<div class="gl-actions"><button type="button" class="gl-open" data-act="welcome-close">Got it</button></div>' +
+      "</section>"
+    );
   }
 
   private lists(m: LobbyModel): string {
@@ -537,6 +588,7 @@ export class LobbyView {
 
     return (
       '<div class="gl-col">' +
+      (m.welcome ? this.welcomePanel(m) : "") +
       yourMovePanel +
       (waiting ? panel("gl-waiting", "Waiting on others", waiting) : "") +
       panel("gl-open-games", "Open showdowns", open || '<p class="gl-empty">No showdown is waiting for a player: call one.</p>') +

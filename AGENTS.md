@@ -736,6 +736,11 @@ calls; `testing.SkipHeights(n)` advances block time 5 s per height.
   triggers' ids may change). The notification's click opens the game.
   Brave refuses to subscribe until "Use Google services for push
   messaging" is on in its privacy settings; the toast says so.
+- **Welcome** (`game/welcome.ts`): the lobby's first panel until this
+  browser closes it (× or Got it; `gnoslinger.welcomed` in `localStorage`):
+  how to call or join a showdown, what a turn is, How to play, and
+  auto-sign and notifications, each with its button while off (the
+  Auto-sign dialog; the Notifications toggle) and a check once on.
 - **Share** (`game/share.ts`): beside Report a bug in the game header,
   copies an invitation with the showdown's link: while a seat is free, to
   join, with the terms (seats, turns, time per turn, stake; not the
