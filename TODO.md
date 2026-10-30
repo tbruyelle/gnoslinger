@@ -6,8 +6,14 @@
 ## UI
 - change window size to see how things fit
 - add link to gnoslinger.xyz to the render node
+- add links to jmgj youtube videos for the rules in details
 
 ## General
+- move the repository to a gnoslinger organization (github.com/gnoslinger/gnoslinger)
+  - create the org, transfer the repository (Settings → Danger Zone), `git remote set-url origin git@github.com:gnoslinger/gnoslinger.git`
+  - Pages: enter the custom domain again if it is gone, point the DNS CNAME of gnoslinger.xyz at gnoslinger.github.io, verify the domain in the org's settings
+  - update the links: client/src/game/bugReport.ts (issues), client/src/links.ts (the trailer's release asset), video/src/Video.tsx (the outro card), AGENTS.md
+  - add Open Graph tags to client/index.html (title, description, the trailer frame, the mp4) so the site's link unfurls in chats
 - check albttx/drand, how this can be used ?
   - github.com/albttx/gno-drand (prototype, upstreamed in gnolang/gno#6268,
     still open on 2026-10-25, becomes gno.land/{p,r}/drand/v0; nothing on
