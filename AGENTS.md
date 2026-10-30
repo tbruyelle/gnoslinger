@@ -75,6 +75,7 @@ make notif         # tx-indexer + gnotifd against the running gnodev, following 
 make fetch-gnotif  # refetch the gnotif registry as deployed on Onyx into gno/third_party/gnotif
 make mod-download  # sync ~/.config/gno/pkg/mod with the pinned gno (after update-gno)
 make deploy-onyx   # deploy the packages, the realms and the gnotif triggers on Onyx (scripts/deploy.sh: in import order, without the tests, each simulated first and skipped if already there; signed by the th0mas key, which owns the namespace)
+make video-record  # the marketing video's footage: video/record.sh (a gnodev on :36657, the client on :5175, Playwright); make video-voice says the narration with Kokoro, make video-render cuts it with Remotion into video/out/gnoslinger.mp4 (video/README.md)
 make update-gno GNO_REF=<ref>     # re-pin gnolang/gno in go.mod: a release tag (what Onyx runs), a branch or a commit; contribs/gnodev has no tags, so it is pinned at the ref's commit
 ```
 
@@ -118,6 +119,7 @@ scripts/gen_tutorial.py     extracts the tutorial's showdown from filetest z16 i
 scripts/deploy.sh           make deploy-onyx: deploys on Onyx, signed by the namespace owner's key
 .github/workflows/pages.yml builds the client for Onyx and publishes it to GitHub Pages on every push to master touching the client or the assets
 scripts/notif.sh            make notif: the local notification stack (tx-indexer + gnotifd, tools and VAPID keys in .tools/)
+video/                      the marketing video (its README): record/record.ts (Playwright on a gnodev of its own, a stand-in Adena signing with gnokey), script.ts + voice/say.ts (Kokoro), src/ (Remotion: scenes.ts the cut, Video.tsx), record.sh; make video-record / video-voice / video-render
 assets/                     served as the Vite public dir, shipped whole by a build: only what the client loads (board A, tokens, cards, markers, sounds, hex_grid.json)
 assets-src/                 the rest, kept for later: other boards, result cards, rifle sounds, the VASSAL module and its images (vassal_v2/, local/: untracked)
 ```

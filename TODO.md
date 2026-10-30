@@ -6,12 +6,6 @@
 ## UI
 - change window size to see how things fit
 - add link to gnoslinger.xyz to the render node
-- marketting video
-The app footage is the real Bolo, recorded with Playwright on a local gno test
-chain. The rest (chat, captions, animations) is code in Remotion, the voice is
-Kokoro (open-source text-to-speech), and Claude reviewed the script, design and
-final render several times before it was done 🙂 Happy to share the repo if
-you're curious.
 
 ## General
 - check albttx/drand, how this can be used ?

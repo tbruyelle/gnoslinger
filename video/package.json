@@ -1,0 +1,27 @@
+{
+  "name": "gnoslinger-video",
+  "private": true,
+  "description": "The marketing video: the real app recorded with Playwright on a local gno chain, captions and animation in Remotion, the voice by Kokoro.",
+  "type": "module",
+  "scripts": {
+    "record": "tsx record/record.ts",
+    "voice": "tsx voice/say.ts",
+    "studio": "remotion studio",
+    "render": "remotion render Gnoslinger out/gnoslinger.mp4"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.539",
+    "@remotion/google-fonts": "4.0.539",
+    "kokoro-js": "1.2.1",
+    "playwright": "1.64.1",
+    "react": "19.1.10",
+    "react-dom": "19.1.10",
+    "remotion": "4.0.539"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0",
+    "tsx": "4.23.15",
+    "@types/node": "^24",
+    "typescript": "^5.9"
+  }
+}

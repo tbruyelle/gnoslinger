@@ -1,0 +1,10 @@
+node_modules/
+footage/
+out/
+keys/
+public/clips/
+public/voice/
+public/music.mp3
+public/gunshot.wav
+public/icon.png
+src/voice.json

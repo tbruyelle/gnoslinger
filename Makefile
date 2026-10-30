@@ -121,4 +121,15 @@ update-gno:
 	go get github.com/gnolang/gno/contribs/gnodev@$$(go list -m -f '{{.Origin.Hash}}' github.com/gnolang/gno@$(GNO_REF))
 	go mod tidy
 
-.PHONY: gnodev web dev notif fetch-gnotif test test-v lint fmt check gen-board gen-tutorial mod-download update-gno deploy-onyx
+# The marketing video (video/README.md): the footage recorded with Playwright on
+# a gnodev of its own, the narration said by Kokoro, the cut rendered by Remotion.
+video-record:
+	cd video && ./record.sh
+
+video-voice:
+	cd video && npm run voice
+
+video-render:
+	cd video && npm run render
+
+.PHONY: gnodev web dev notif fetch-gnotif test test-v lint fmt check gen-board gen-tutorial mod-download update-gno deploy-onyx video-record video-voice video-render
