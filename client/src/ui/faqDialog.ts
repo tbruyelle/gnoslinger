@@ -1,6 +1,6 @@
 /**
  * The FAQ, in a dialog over the page: the questions players run into with
- * the guns, the shots, the throws, the wounds and leaving the fight, each a
+ * moving, delay, the guns, the shots, the throws, the wounds and leaving the fight, each a
  * <details> that opens on a click, grouped under headings. Opened from the
  * lobby's top bar, the game header and its own address, #faq (BootScene);
  * the cross, a click outside or Esc closes it.
@@ -33,6 +33,71 @@ const CSS = `
 
 /** A group of questions under its heading; the answers are HTML. */
 const FAQ: { title: string; items: [question: string, answer: string][] }[] = [
+  {
+    title: "Moving",
+    items: [
+      [
+        "How do I move?",
+        "<p><b>Advance</b> (2 points) and <b>Run</b> (1) move one hex ahead, ahead left or ahead right; <b>Back Up</b> (3) one hex back, back left or back right. " +
+          "Your character keeps facing the same way: <b>Turn</b> (1) faces ahead left or ahead right, <b>Spin Around</b> (2) back left, back or back right.</p>",
+      ],
+      [
+        "Why can't I play Run?",
+        "<p>Run is played only with an <b>Advance</b> in the same plan, in any order. Advance then Run moves two hexes for 3 points.</p>",
+      ],
+      [
+        "Why can't I play Sprint?",
+        "<p>You must build up speed first: Sprint needs <b>Advance and Run in the same plan</b>, and a <b>Run played the turn before</b>. " +
+          "Run this turn, and next turn Advance, Run and Sprint, once or twice (there are two Sprint cards).</p>" +
+          "<p>Sprint costs only 1 point, but it goes <b>straight ahead</b>, and each one draws a <b>delay card</b>.</p>",
+      ],
+      [
+        "How do I go down, and get up again?",
+        "<p>Two cards flip your character between upright and <b>DOWN</b>, facing the same way:</p>" +
+          "<ul><li><b>Get Up/Down</b> (3 points): slow, but free of delay;</li>" +
+          "<li><b>Leap/Drop</b> (1 point): fast, but it draws <b>two delay cards</b>.</li></ul>" +
+          "<p>Lying DOWN, only a bullseye hits you, and lying next to the horse trough hides you from anyone on its other side.</p>",
+      ],
+      [
+        "Can I move while DOWN?",
+        "<p>Yes, you crawl: Advance, Run and Back Up move you as usual, but each hex crawled gives <b>2 delay points</b>.</p>",
+      ],
+      [
+        "What else gives delay when moving?",
+        "<ul><li>ending a segment in a hex someone else stands in: a delay card each;</li>" +
+          "<li>crossing the corral fence, or climbing onto or off the horse trough: two delay cards;</li>" +
+          "<li>a LEG wound: fatigue cards for each hex moved upright.</li></ul>" +
+          "<p>What delay does is in Delay, below.</p>",
+      ],
+    ],
+  },
+  {
+    title: "Delay",
+    items: [
+      [
+        "Where does delay come from?",
+        "<p>From the cards drawn: a <b>delay card</b> gives the number on its DELAY line (moves: Sprint, Leap/Drop, the fence, a shared hex), " +
+          "a <b>wound card</b> or a <b>fatigue card</b> gives delay too and crosses off endurance boxes (hits, SERIOUS and LEG wounds); crawling gives 2. " +
+          "Some delay cards say something else: DROP throws you DOWN and draws three more, WILD SHOT fires every cocked gun.</p>",
+      ],
+      [
+        "How does delay change my plan?",
+        "<p>Each action goes off once the segments have reached its cost, plus the cost of the actions before it, <b>plus your delay</b>. " +
+          "Delay taken during the turn pushes every action left later, from the next segment: an action pushed past segment 5 is <b>cancelled</b>.</p>" +
+          "<p>Delay left at the end of the turn takes points off the next plan: you plan with <b>5 points minus your delay</b>. With 5 or more you cannot play anything, and the turn is passed for you.</p>",
+      ],
+      [
+        "How does delay go away?",
+        "<p>At the end of every turn, <b>half your delay goes</b>, rounded up: 5 becomes 2, 3 becomes 1, 1 becomes 0. Nothing else takes it off: a quiet turn gives it time to drop.</p>",
+      ],
+      [
+        "Can delay make me lose the fight?",
+        "<p>Yes: with <b>more delay than endurance boxes left</b> at the end of <b>two turns in a row</b>, your character <b>passes out</b>. " +
+          "It is out of the fight, the enemy who hurt it most scores Knock out +1, and if an enemy holds the field you are captured, −4 VP. " +
+          "Watch it once wounds have eaten your endurance: each hit and each fatigue card both take boxes off and add delay.</p>",
+      ],
+    ],
+  },
   {
     title: "Guns",
     items: [
@@ -80,8 +145,21 @@ const FAQ: { title: string; items: [question: string, answer: string][] }[] = [
           "The aim time is the card's (Cock/Aim/Shoot 2, Shoot 1) plus your <b>AIM points</b>, minus your GUN ARM wounds.</p>" +
           "<p>Each <b>Aim</b> (Cock/Aim/Shoot) puts 2 AIM points on the target, up to 8. They stay while you only Turn, aim and shoot; " +
           "any other action, a shot, or the target getting more than one hex away from them, out of your aim zone or out of sight loses them.</p>" +
-          "<p>While picking a shot's target, the hover shows the chance to hit and to hit the bullseye. " +
-          "It leaves out the target's status: a target that moves or runs this turn is hit only on a bullseye, which then counts as the lesser hit; one lying DOWN only on a bullseye.</p>",
+          "<p>While picking a shot's target, the hover shows the chance to hit and to hit the bullseye (BE). " +
+          "It leaves out the target's status, next question.</p>",
+      ],
+      [
+        "Is a moving or lying target harder to hit?",
+        "<p>Yes, often. The hit chart gives a first hit, then the card drawn may list <b>Target Status</b> entries, " +
+          "which change it when the target qualifies (not every card lists them, so it is never sure):</p>" +
+          "<ul><li><b>Move</b>: the target's plan holds any foot action this turn (a move, a turn, going up or down), " +
+          "<b>from the start of the turn</b>, even before it is played, or a DROP threw it down;</li>" +
+          "<li><b>Run</b>: its plan holds a Run this turn;</li>" +
+          "<li><b>Down</b>: it is lying DOWN.</li></ul>" +
+          "<p>Against Move or Run, a bullseye becomes the card's lesser hit and any other hit a miss; a runner has both (Run comes with an Advance), and a card listing both makes even its bullseye a miss. " +
+          "Against Down, any hit but a bullseye misses.</p>" +
+          "<p>Throws are read the same way. The resolution log says so: \"BE → ARM hit (target moved)\". " +
+          "Standing still to shoot makes you an easier target.</p>",
       ],
       [
         "My shot did nothing, why?",
@@ -109,6 +187,28 @@ const FAQ: { title: string; items: [question: string, answer: string][] }[] = [
   {
     title: "Wounds",
     items: [
+      [
+        "My gun hand was hit, what does it change?",
+        "<p>A hit on the gun hand (GUN on the hit chart) makes you <b>drop the weapon</b> in that hand, in your hex (a cocked gun goes off harmlessly), " +
+          "and leaves a <b>GUN ARM</b> wound: from then on, every shot or throw from the GUN HAND or BOTH HANDS has that much less aim time, so it hits less often. " +
+          "It also stuns you and gives a SERIOUS point.</p>" +
+          "<p>Pick the gun up again with <b>Draw &amp; Cock</b>, it lies in your hex. Aiming longer makes up for the lost aim time.</p>",
+      ],
+      [
+        "My other arm was hit, what does it change?",
+        "<p>An ARM hit makes you drop what the other hand holds, and leaves an <b>OTHER ARM</b> wound: less aim time for a gun held in BOTH HANDS. " +
+          "It also stuns you and gives a SERIOUS point.</p>",
+      ],
+      [
+        "My leg was hit, what does it change?",
+        "<p>A LEG hit staggers you (thrown into a hex nearby, DOWN) and leaves a <b>LEG</b> wound: for <b>every hex you move upright</b>, you draw that many fatigue cards, " +
+          "each crossing off endurance boxes and adding delay. Moving gets costly: stay put, or crawl while DOWN (2 delay a hex, no fatigue). " +
+          "It also stuns you and gives two SERIOUS points.</p>",
+      ],
+      [
+        "Where do I see my wounds?",
+        "<p>On your character sheet (click your token or your panel): the endurance boxes crossed off, and the wounds that stay, SERIOUS, GUN ARM, OTHER ARM and LEG, with what they cost.</p>",
+      ],
       [
         "I have a SERIOUS wound, what does it do?",
         "<p>It stays for the whole showdown: at the start of <b>every turn</b>, each SERIOUS point draws a fatigue card, which crosses off endurance boxes and adds as much delay. " +

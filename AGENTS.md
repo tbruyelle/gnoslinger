@@ -757,7 +757,9 @@ calls; `testing.SkipHeights(n)` advances block time 5 s per height.
   spectator, or watch its replay once over; the link opens the game screen,
   where a newcomer connects Adena and joins. Not in the tutorial nor
   while calling a showdown (no game yet).
-- **FAQ** (`ui/faqDialog.ts`): questions and answers on the guns
+- **FAQ** (`ui/faqDialog.ts`): questions and answers on moving (Run,
+  Sprint, going down and up, crawling, the delay of a move), delay
+  (where it comes from, the plan it shortens, the halving, passing out), the guns
   (drawing, cocking, loading, picking up, jammed and exploded guns), the
   odds of a shot, throwing and Strength, SERIOUS wounds and running away,
   in a dialog opened from the bottom bar of the lobby and of the game
