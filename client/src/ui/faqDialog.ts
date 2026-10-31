@@ -6,6 +6,8 @@
  * bottom bar of the lobby and of the game screen and its own address, #faq (BootScene);
  * the cross, a click outside or Esc closes it.
  */
+import { countView } from "../analytics";
+
 export const FAQ_HASH = "#faq";
 
 const STYLE_ID = "fq-style";
@@ -316,6 +318,7 @@ export function closeFaqDialog(): void {
 /** Shows the FAQ. */
 export function openFaqDialog(): void {
   closeFaqDialog();
+  countView("/faq");
   if (!document.getElementById(STYLE_ID)) {
     const style = document.createElement("style");
     style.id = STYLE_ID;

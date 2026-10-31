@@ -9,7 +9,7 @@ import { pubKeyAddress, publicKey, type Simulation } from "./tx";
 const MASTER = "g1tnz4rhep0fhj3s52qerakj58q87fxes36f3558";
 const SECRET = "1cd7e52b3a4f1b041d723f43e12453e9bbd8681020858cb0b91a13bd05889b85";
 const KEY_ADDR = pubKeyAddress(publicKey(hex.decode(SECRET)));
-const CFG: ChainConfig = { rpcUrl: "", chainId: "dev", chainName: "dev", realmPath: "gno.land/r/x/v0", profilesPath: "", pollMs: 2000, gnotifServer: "" };
+const CFG: ChainConfig = { rpcUrl: "", chainId: "dev", chainName: "dev", realmPath: "gno.land/r/x/v0", profilesPath: "", pollMs: 2000, gnotifServer: "", goatcounter: "" };
 const NOW = 1792340000;
 
 // As gnodev answers auth/accounts/<master>/session/<addr>.

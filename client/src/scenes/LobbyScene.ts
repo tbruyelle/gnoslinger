@@ -1,3 +1,4 @@
+import { countView } from "../analytics";
 import Phaser from "phaser";
 import { CHAR_ARROW_DIR } from "../rules";
 import { CONFIG } from "../config";
@@ -235,6 +236,7 @@ export class LobbyScene extends Phaser.Scene {
       this.view = null;
     });
     if (this.screen === "lobby") void this.connect();
+    countView(this.screen === "lobby" ? "/lobby" : "/");
   }
 
   private enter() {
@@ -242,6 +244,7 @@ export class LobbyScene extends Phaser.Scene {
     this.time.delayedCall(MUSIC_AFTER_SHOT_MS, () => this.screen === "lobby" && this.playMusic());
     this.screen = "lobby";
     void this.connect();
+    countView("/lobby");
   }
 
   /** Loads the gunshots in the background, for the splash's Connect button (the game scene then finds them loaded). */
@@ -268,6 +271,7 @@ export class LobbyScene extends Phaser.Scene {
     this.screen = "splash";
     this.fadeOutMusic();
     this.buildAll();
+    countView("/");
   }
 
   private async loadBalance(addr: string) {

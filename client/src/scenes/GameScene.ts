@@ -1,3 +1,4 @@
+import { countView } from "../analytics";
 import Phaser from "phaser";
 import type { CardNumber, CardSide, ChoiceType, RelativeDirection } from "../rules";
 import { AHEAD_DIRS, BACK_DIRS, dirIndexToAngle, getActionCardAsset, getActionDef, relativeToAbsoluteDir, CHAR_ARROW_DIR } from "../rules";
@@ -973,6 +974,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   create() {
+    countView(this.tutorial ? "/how-to-play" : this.setup ? (this.setup.req.kind === "create" ? "/call" : "/join") : "/game");
     // No wallet connected (a game's address opened in a fresh page): watched, read-only.
     this.chain = this.tutorial ? tutorialChain() : (currentChain() ?? viewerChain());
     this.showdown = new ShowdownView({
@@ -1195,6 +1197,7 @@ export class GameScene extends Phaser.Scene {
     const seat = nextSeat(view.players);
     if (seat < 0) return;
     this.setup = newSetup({ kind: "join", seat, charKey: seatChar(seat), stake: view.stake });
+    countView("/join");
     void this.onGame(view);
   }
 

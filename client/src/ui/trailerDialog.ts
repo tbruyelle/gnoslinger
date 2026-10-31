@@ -1,3 +1,4 @@
+import { countView } from "../analytics";
 import { TRAILER_VIDEO_URL } from "../links";
 
 /**
@@ -32,6 +33,7 @@ export function closeTrailerDialog(): void {
 /** Shows the trailer, playing. */
 export function openTrailerDialog(): void {
   closeTrailerDialog();
+  countView("/trailer");
   if (!document.getElementById(STYLE_ID)) {
     const style = document.createElement("style");
     style.id = STYLE_ID;

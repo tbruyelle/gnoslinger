@@ -17,6 +17,8 @@ export interface ChainConfig {
   pollMs: number;
   /** The gnotif server pushing the browser notifications (game/notifications.ts), "" for none offered: http://127.0.0.1:8080 with make notif. */
   gnotifServer: string;
+  /** GoatCounter's endpoint counting the page views (analytics.ts), "" for none: https://gnoslinger.goatcounter.com/count in production. */
+  goatcounter: string;
 }
 
 function str(value: string | undefined, fallback: string): string {
@@ -39,4 +41,5 @@ export const CONFIG: ChainConfig = {
   gasFee: num(import.meta.env.VITE_GAS_FEE),
   pollMs: num(import.meta.env.VITE_POLL_MS) ?? 2000,
   gnotifServer: str(import.meta.env.VITE_GNOTIF_SERVER, ""),
+  goatcounter: str(import.meta.env.VITE_GOATCOUNTER, ""),
 };

@@ -1051,7 +1051,12 @@ Clicking a token opens the **character
   `VITE_PROFILES_PATH` (the profiles realm, where `getProfile` and
   `listPlayers` read), `VITE_POLL_MS`, `VITE_GNOTIF_SERVER` (the gnotif
   server, none by default: `http://127.0.0.1:8080` with `make notif`,
-  `https://gnotif.xyz/onyx` on Onyx),
+  `https://gnotif.xyz/onyx` on Onyx), `VITE_GOATCOUNTER` (where
+  `analytics.ts` counts the page views, none by default:
+  `https://gnoslinger.goatcounter.com/count` in production; each screen
+  and dialog counts itself as it opens, under a path without the game's
+  id, `/`, `/lobby`, `/game`, `/call`, `/join`, `/how-to-play`, `/faq`,
+  `/trailer`; no cookie, localhost ignored),
   optional `VITE_GAS_WANTED`/`VITE_GAS_FEE`. Without `VITE_GAS_WANTED` each
   call's gas limit is fitted (`chain/gas.ts`, `SessionWallet.gasFor`): the
   call is simulated first (`Rpc.simulate`, the node's `.app/simulate` on

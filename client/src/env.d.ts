@@ -9,6 +9,8 @@ interface ImportMetaEnv {
   readonly VITE_POLL_MS?: string;
   readonly VITE_GAS_WANTED?: string;
   readonly VITE_GAS_FEE?: string;
+  readonly VITE_GNOTIF_SERVER?: string;
+  readonly VITE_GOATCOUNTER?: string;
 }
 
 /** The commit built (vite.config.ts). */
