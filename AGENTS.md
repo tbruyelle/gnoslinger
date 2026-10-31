@@ -743,7 +743,7 @@ calls; `testing.SkipHeights(n)` advances block time 5 s per height.
   how to call or join a showdown, what a turn is, How to play, and
   auto-sign and notifications, each with its button while off (the
   Auto-sign dialog; the Notifications toggle) and a check once on.
-- **Share** (`game/share.ts`): beside Report a bug in the game header,
+- **Share** (`game/share.ts`): in the game header, after the title,
   copies an invitation with the showdown's link: while a seat is free, to
   join, with the terms (seats, turns, time per turn, stake; not the
   character, which follows the join order), else to come and watch as a
@@ -753,11 +753,13 @@ calls; `testing.SkipHeights(n)` advances block time 5 s per height.
 - **FAQ** (`ui/faqDialog.ts`): questions and answers on the guns
   (drawing, cocking, loading, picking up, jammed and exploded guns), the
   odds of a shot, throwing and Strength, SERIOUS wounds and running away,
-  in a dialog opened from the lobby's top bar (after How to play), the
-  game header (before Share) and `#faq` (`FAQ_HASH`, the splash with it
+  in a dialog opened from the bottom bar of the lobby and of the game
+  screen and from `#faq` (`FAQ_HASH`, the splash with it
   over, `BootScene`). A rule changing what an answer says needs it changed.
-- **Report a bug** (`game/bugReport.ts`): a link in the lobby's top bar and
-  at the game header's end opens a new GitHub issue
+- **Bottom bar**: a small bar at the bottom of the lobby (sticky, under
+  the lists) and of the game screen (under the hand, `ShowdownLayout.foot`,
+  the board giving up its height) holds the FAQ and Report a bug.
+- **Report a bug** (`game/bugReport.ts`): a link in the bottom bar opens a new GitHub issue
   (`github.com/tbruyelle/gnoslinger/issues/new`, label `bug`) filled with
   a title naming the game and turn, blanks for what happened and what was
   expected, then the facts: the game's link on the turn shown (it opens

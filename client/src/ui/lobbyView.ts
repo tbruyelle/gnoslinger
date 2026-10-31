@@ -122,17 +122,19 @@ export interface LobbyActions {
 }
 
 const CSS = `
-.gl-root{position:fixed;inset:0;overflow-y:auto;z-index:400;background:#1E1618;font-family:'Zilla Slab',Rockwell,Georgia,serif;color:#2A1C14}
+.gl-root{position:fixed;inset:0;overflow-y:auto;flex-direction:column;z-index:400;background:#1E1618;font-family:'Zilla Slab',Rockwell,Georgia,serif;color:#2A1C14}
 .gl-root *{box-sizing:border-box}
 .gl-root :where(button,select){font-family:inherit}
 .gl-root button:focus-visible,.gl-root select:focus-visible{outline:3px solid #F2B544;outline-offset:2px}
 .gl-root button:disabled{opacity:.5;cursor:default}
-.gl-top{background:#2A1C14;border-bottom:3px solid #5A4636;box-shadow:0 3px 0 #1E1618,0 5px 0 #5A4636}
+.gl-top{flex-shrink:0;background:#2A1C14;border-bottom:3px solid #5A4636;box-shadow:0 3px 0 #1E1618,0 5px 0 #5A4636}
 .gl-top-in{max-width:80rem;margin:0 auto;padding:12px 24px;display:flex;align-items:center;gap:20px}
 .gl-mark{flex-shrink:0;white-space:nowrap;font-family:Rye,Georgia,serif;font-size:30px;letter-spacing:2px;color:#F3E7CE}
 .gl-nav{flex-shrink:0;white-space:nowrap;min-height:44px;padding:0 6px;background:transparent;border:0;color:#D9C9A8;font-size:18px;font-weight:700;cursor:pointer}
 .gl-nav:hover{color:#F2B544}
-.gl-report{display:flex;align-items:center;text-decoration:none}
+.gl-foot{position:sticky;bottom:0;flex-shrink:0;background:#2A1C14;border-top:2px solid #5A4636}
+.gl-foot-in{max-width:80rem;margin:0 auto;padding:2px 24px;display:flex;align-items:center;justify-content:center;gap:24px}
+.gl-foot .gl-nav{min-height:32px;font-size:15px;display:flex;align-items:center;text-decoration:none}
 .gl-right{margin-left:auto;min-width:0;display:flex;flex-wrap:wrap;justify-content:flex-end;align-items:center;gap:10px;color:#F3E7CE}
 .gl-net{white-space:nowrap;font-size:15px;font-weight:700;border:2px solid #5A4636;border-radius:999px;padding:4px 12px}
 .gl-session{white-space:nowrap;font-size:15px;font-weight:700;line-height:inherit;background:transparent;color:#F3E7CE;border:2px solid #5A4636;border-radius:999px;padding:4px 12px;cursor:pointer}
@@ -151,7 +153,7 @@ const CSS = `
 .gl-quit:hover{background:#5A4636}
 .gl-retry{min-height:44px;padding:0 16px;background:#F3E7CE;color:#2A1C14;border:2px solid #F3E7CE;border-radius:10px;font-size:16px;font-weight:700;cursor:pointer}
 .gl-error{color:#F2B544;font-size:16px;max-width:40rem}
-.gl-main{max-width:80rem;margin:0 auto;padding:28px 24px 40px;display:flex;flex-wrap:wrap;align-items:flex-start;gap:24px}
+.gl-main{flex:1 0 auto;width:100%;max-width:80rem;margin:0 auto;padding:28px 24px 40px;display:flex;flex-wrap:wrap;align-items:flex-start;gap:24px}
 .gl-col{flex:999 1 560px;min-width:0;display:flex;flex-direction:column;gap:24px}
 .gl-panel{background:#F3E7CE;border:3px solid #2A1C14;border-radius:18px;box-shadow:inset 0 0 0 5px #F3E7CE,inset 0 0 0 7px #2A1C14;padding:22px 24px;display:flex;flex-direction:column;gap:14px}
 .gl-panel.hot{box-shadow:inset 0 0 0 5px #F3E7CE,inset 0 0 0 7px #B5482A}
@@ -374,8 +376,8 @@ export class LobbyView {
   }
 
   render(m: LobbyModel) {
-    this.root.innerHTML = this.top(m) + `<main class="gl-main">${this.lists(m)}${this.form(m)}</main>` + this.dialog(m);
-    this.root.style.display = "block";
+    this.root.innerHTML = this.top(m) + `<main class="gl-main">${this.lists(m)}${this.form(m)}</main>` + this.foot(m) + this.dialog(m);
+    this.root.style.display = "flex";
   }
 
   hide() {
@@ -402,10 +404,18 @@ export class LobbyView {
     } else {
       right = `<span class="gl-error">${esc(m.error)}</span><button type="button" class="gl-retry" data-act="retry">Retry</button>`;
     }
+    return (
+      `<header class="gl-top"><div class="gl-top-in"><span class="gl-mark">GNOSLINGER</span><button type="button" class="gl-nav" data-act="tutorial">How to play</button>` +
+      `<div class="gl-right">${right}</div></div></header>`
+    );
+  }
+
+  /** The bottom bar: the FAQ and Report a bug. */
+  private foot(m: LobbyModel): string {
     const report = reportUrl({ shown: "lobby", address: m.address });
     return (
-      `<header class="gl-top"><div class="gl-top-in"><span class="gl-mark">GNOSLINGER</span><button type="button" class="gl-nav" data-act="tutorial">How to play</button><button type="button" class="gl-nav" data-act="faq">FAQ</button>` +
-      `<a class="gl-nav gl-report" href="${esc(report)}" target="_blank" rel="noopener" title="Open a GitHub issue">Report a bug</a><div class="gl-right">${right}</div></div></header>`
+      '<footer class="gl-foot"><div class="gl-foot-in"><button type="button" class="gl-nav" data-act="faq">FAQ</button>' +
+      `<a class="gl-nav" href="${esc(report)}" target="_blank" rel="noopener" title="Open a GitHub issue">Report a bug</a></div></footer>`
     );
   }
 

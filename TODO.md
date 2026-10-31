@@ -80,14 +80,6 @@
 ## Showdown
 - some screen size hides the run away hexes
 - add winning/losing burst
-- show tips (or highlight a card with some text)
-  - when no gun: show need to draw and cock
-  - when gun uncocked: show needs to be cocked
-  - when gun has no bullet: show needs to LOAD
-  - when gun is jammed: show it needs to be fully loaded
-  - when gun is exploded: nothing can be done except thrown or drop
-  - when player has serious
-  - allow enable/disable tooltip
 - Movements
   - Check possible to move around a building corner
 - Cards

@@ -30,6 +30,8 @@ export interface ShowdownLayout {
   left: number;
   right: number;
   bottom: number;
+  /** The small bar under the hand: the FAQ and Report a bug. */
+  foot: number;
   board: BoardRect;
 }
 
@@ -42,12 +44,13 @@ export function showdownLayout(w: number, h: number): ShowdownLayout {
   const header = 56;
   const ribbon = 48;
   const bottom = 268;
+  const foot = 30;
   // Both columns the same width; narrower in a small window, so the board keeps some room.
   const side = w < 1180 ? 255 : 296;
   const left = side;
   const right = side;
   const top = header + ribbon;
-  return { header, ribbon, left, right, bottom, board: { x: left, y: top, w: Math.max(120, w - left - right), h: Math.max(120, h - top - bottom) } };
+  return { header, ribbon, left, right, bottom, foot, board: { x: left, y: top, w: Math.max(120, w - left - right), h: Math.max(120, h - top - bottom - foot) } };
 }
 
 export interface GunLine {
@@ -220,7 +223,11 @@ const CSS = `
 .gv-root button{font-family:inherit}
 .gv-root button:focus-visible{outline:3px solid #F2B544;outline-offset:2px}
 .gv-root button:disabled{opacity:.45;cursor:default}
-.gv-header,.gv-left,.gv-right,.gv-bottom{pointer-events:auto}
+.gv-header,.gv-left,.gv-right,.gv-bottom,.gv-foot{pointer-events:auto}
+.gv-foot{grid-area:foot;background:#2A1C14;border-top:2px solid #5A4636;min-width:0;overflow:hidden}
+.gv-foot-in{height:100%;display:flex;align-items:center;justify-content:center;gap:24px}
+.gv-flink{background:transparent;border:0;padding:0 6px;font-size:15px;font-weight:700;color:#D9C9A8;text-decoration:none;cursor:pointer;white-space:nowrap}
+.gv-flink:hover{color:#F2B544}
 .gv-header{grid-area:header;background:#2A1C14;border-bottom:3px solid #5A4636;display:flex;align-items:center;gap:10px 20px;padding:0 18px;color:#F3E7CE;min-width:0;overflow:hidden}
 .gv-lobby{display:flex;align-items:center;gap:6px;min-height:44px;padding:0 6px;background:transparent;border:0;color:#F2B544;font-size:17px;font-weight:700;cursor:pointer}
 .gv-lobby:hover{color:#FBF4E4}
@@ -470,6 +477,7 @@ export class ShowdownView {
   private left: HTMLElement;
   private right: HTMLElement;
   private bottom: HTMLElement;
+  private foot: HTMLElement;
   private preview: HTMLImageElement;
   private images = new Map<string, string>();
 
@@ -493,7 +501,9 @@ export class ShowdownView {
     this.right.className = "gv-right";
     this.bottom = document.createElement("section");
     this.bottom.className = "gv-bottom";
-    this.root.append(this.header, this.ribbon, this.left, this.right, this.bottom);
+    this.foot = document.createElement("footer");
+    this.foot.className = "gv-foot";
+    this.root.append(this.header, this.ribbon, this.left, this.right, this.bottom, this.foot);
     this.preview = document.createElement("img");
     this.preview.className = "gv-preview";
     this.preview.alt = "";
@@ -539,12 +549,13 @@ export class ShowdownView {
 
   render(m: ShowdownModel, layout: ShowdownLayout) {
     Object.assign(this.root.style, {
-      gridTemplateRows: `${layout.header}px ${layout.ribbon}px 1fr ${layout.bottom}px`,
+      gridTemplateRows: `${layout.header}px ${layout.ribbon}px 1fr ${layout.bottom}px ${layout.foot}px`,
       gridTemplateColumns: `${layout.left}px 1fr ${layout.right}px`,
-      gridTemplateAreas: '"header header header" "left ribbon right" "left . right" "bottom bottom bottom"',
+      gridTemplateAreas: '"header header header" "left ribbon right" "left . right" "bottom bottom bottom" "foot foot foot"',
       display: "grid",
     });
     this.header.innerHTML = this.headerHtml(m);
+    this.foot.innerHTML = this.footHtml(m);
     // Rewritten only when it changes (the animation would restart on every
     // refresh), then flashed to draw the eye, except when the screen opens.
     const status = `${m.statusTone}|${m.status}`;
@@ -623,12 +634,18 @@ export class ShowdownView {
     return (
       `<button type="button" class="gv-lobby" data-act="btn" data-id="lobby">${BACK_SVG}Lobby</button>` +
       `<span class="gv-title">${esc(m.title)}</span>` +
-      (m.error ? `<span class="gv-herr">${esc(m.error)}</span>` : `<div class="gv-lineup">${this.lineupHtml(m.lineup)}</div>`) +
-      '<button type="button" class="gv-report" data-act="faq" title="Questions and answers about the rules">FAQ</button>' +
       (m.share
         ? `<button type="button" class="gv-report" data-act="btn" data-id="share" title="${m.share === "join" ? "Copy an invitation to join, with the showdown's link" : "Copy the showdown's link, to watch it"}">Share</button>`
         : "") +
-      `<a class="gv-report" href="${esc(m.reportUrl)}" target="_blank" rel="noopener" title="Open a GitHub issue about this game and turn">Report a bug</a>`
+      (m.error ? `<span class="gv-herr">${esc(m.error)}</span>` : `<div class="gv-lineup">${this.lineupHtml(m.lineup)}</div>`)
+    );
+  }
+
+  /** The bottom bar: the FAQ and Report a bug (on this game and turn). */
+  private footHtml(m: ShowdownModel): string {
+    return (
+      '<div class="gv-foot-in"><button type="button" class="gv-flink" data-act="faq" title="Questions and answers about the rules">FAQ</button>' +
+      `<a class="gv-flink" href="${esc(m.reportUrl)}" target="_blank" rel="noopener" title="Open a GitHub issue about this game and turn">Report a bug</a></div>`
     );
   }
 
