@@ -12,7 +12,7 @@ const STYLE_ID = "fq-style";
 
 const CSS = `
 .fq-back{position:fixed;inset:0;z-index:600;background:rgba(30,22,24,.85);display:flex;align-items:center;justify-content:center;padding:32px 16px}
-.fq-dialog{position:relative;width:min(760px,100%);max-height:100%;display:flex;flex-direction:column;background:#F3E7CE;border:3px solid #2A1C14;border-radius:18px;box-shadow:inset 0 0 0 5px #F3E7CE,inset 0 0 0 7px #2A1C14,0 10px 0 #1E1618;padding:26px 14px 18px 26px;font-family:'Zilla Slab',Rockwell,Georgia,serif;color:#2A1C14}
+.fq-dialog{position:relative;width:min(1000px,100%);max-height:100%;display:flex;flex-direction:column;background:#F3E7CE;border:3px solid #2A1C14;border-radius:18px;box-shadow:inset 0 0 0 5px #F3E7CE,inset 0 0 0 7px #2A1C14,0 10px 0 #1E1618;padding:26px 14px 18px 26px;font-family:'Zilla Slab',Rockwell,Georgia,serif;color:#2A1C14}
 .fq-title{margin:0 12px 12px 0;font-family:Rye,Georgia,serif;font-weight:400;font-size:30px;color:#33307F;border-bottom:3px solid #2A1C14;padding-bottom:8px}
 .fq-search{margin:0 12px 6px 0;width:calc(100% - 12px);min-height:36px;padding:4px 12px;background:#FBF4E4;color:#2A1C14;border:2px solid #2A1C14;border-radius:10px;font-family:inherit;font-size:16px}
 .fq-search:focus-visible{outline:3px solid #F2B544;outline-offset:2px}
