@@ -1,6 +1,7 @@
 import { uprightTokenAngle } from "../rules";
 import type { SegFill } from "../game/segments";
 import { openFaqDialog } from "./faqDialog";
+import { openTrailerDialog } from "./trailerDialog";
 
 /**
  * The showdown screen around the board, an HTML overlay over the canvas (like
@@ -531,6 +532,8 @@ export class ShowdownView {
           return this.setLogOpen(false);
         case "faq":
           return openFaqDialog();
+        case "trailer":
+          return openTrailerDialog();
       }
     });
     this.onKey = (e: KeyboardEvent) => {
@@ -641,10 +644,11 @@ export class ShowdownView {
     );
   }
 
-  /** The bottom bar: the FAQ and Report a bug (on this game and turn). */
+  /** The bottom bar: the FAQ, the trailer and Report a bug (on this game and turn). */
   private footHtml(m: ShowdownModel): string {
     return (
       '<div class="gv-foot-in"><button type="button" class="gv-flink" data-act="faq" title="Questions and answers about the rules">FAQ</button>' +
+      '<button type="button" class="gv-flink" data-act="trailer" title="A showdown in two minutes">Trailer</button>' +
       `<a class="gv-flink" href="${esc(m.reportUrl)}" target="_blank" rel="noopener" title="Open a GitHub issue about this game and turn">Report a bug</a></div>`
     );
   }

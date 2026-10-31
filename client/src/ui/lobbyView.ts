@@ -410,11 +410,12 @@ export class LobbyView {
     );
   }
 
-  /** The bottom bar: the FAQ and Report a bug. */
+  /** The bottom bar: the FAQ, the trailer and Report a bug. */
   private foot(m: LobbyModel): string {
     const report = reportUrl({ shown: "lobby", address: m.address });
     return (
       '<footer class="gl-foot"><div class="gl-foot-in"><button type="button" class="gl-nav" data-act="faq">FAQ</button>' +
+      '<button type="button" class="gl-nav" data-act="trailer">Trailer</button>' +
       `<a class="gl-nav" href="${esc(report)}" target="_blank" rel="noopener" title="Open a GitHub issue">Report a bug</a></div></footer>`
     );
   }

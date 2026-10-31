@@ -769,7 +769,8 @@ calls; `testing.SkipHeights(n)` advances block time 5 s per height.
   over, `BootScene`). A rule changing what an answer says needs it changed.
 - **Bottom bar**: a small bar at the bottom of the lobby (sticky, under
   the lists) and of the game screen (under the hand, `ShowdownLayout.foot`,
-  the board giving up its height) holds the FAQ and Report a bug.
+  the board giving up its height) holds the FAQ, the trailer and Report a
+  bug.
 - **Report a bug** (`game/bugReport.ts`): a link in the bottom bar opens a new GitHub issue
   (`github.com/tbruyelle/gnoslinger/issues/new`, label `bug`) filled with
   a title naming the game and turn, blanks for what happened and what was
