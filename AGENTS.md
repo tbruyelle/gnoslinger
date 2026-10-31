@@ -750,6 +750,12 @@ calls; `testing.SkipHeights(n)` advances block time 5 s per height.
   spectator, or watch its replay once over; the link opens the game screen,
   where a newcomer connects Adena and joins. Not in the tutorial nor
   while calling a showdown (no game yet).
+- **FAQ** (`ui/faqDialog.ts`): questions and answers on the guns
+  (drawing, cocking, loading, picking up, jammed and exploded guns), the
+  odds of a shot, throwing and Strength, SERIOUS wounds and running away,
+  in a dialog opened from the lobby's top bar (after How to play), the
+  game header (before Share) and `#faq` (`FAQ_HASH`, the splash with it
+  over, `BootScene`). A rule changing what an answer says needs it changed.
 - **Report a bug** (`game/bugReport.ts`): a link in the lobby's top bar and
   at the game header's end opens a new GitHub issue
   (`github.com/tbruyelle/gnoslinger/issues/new`, label `bug`) filled with

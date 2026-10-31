@@ -1,5 +1,6 @@
 import { uprightTokenAngle } from "../rules";
 import type { SegFill } from "../game/segments";
+import { openFaqDialog } from "./faqDialog";
 
 /**
  * The showdown screen around the board, an HTML overlay over the canvas (like
@@ -518,6 +519,8 @@ export class ShowdownView {
           return this.setLogOpen(true);
         case "unlog":
           return this.setLogOpen(false);
+        case "faq":
+          return openFaqDialog();
       }
     });
     this.onKey = (e: KeyboardEvent) => {
@@ -621,6 +624,7 @@ export class ShowdownView {
       `<button type="button" class="gv-lobby" data-act="btn" data-id="lobby">${BACK_SVG}Lobby</button>` +
       `<span class="gv-title">${esc(m.title)}</span>` +
       (m.error ? `<span class="gv-herr">${esc(m.error)}</span>` : `<div class="gv-lineup">${this.lineupHtml(m.lineup)}</div>`) +
+      '<button type="button" class="gv-report" data-act="faq" title="Questions and answers about the rules">FAQ</button>' +
       (m.share
         ? `<button type="button" class="gv-report" data-act="btn" data-id="share" title="${m.share === "join" ? "Copy an invitation to join, with the showdown's link" : "Copy the showdown's link, to watch it"}">Share</button>`
         : "") +

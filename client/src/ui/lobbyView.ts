@@ -1,6 +1,7 @@
 import { formatCoins } from "../chain/rpc";
 import { spentNow, type SessionState } from "../chain/session";
 import { reportUrl } from "../game/bugReport";
+import { openFaqDialog } from "./faqDialog";
 import { playerLabel, type GameSummary, type GamesView, type PlayersView, type Profile } from "../chain/types";
 import { uprightTokenAngle } from "../rules";
 import { charName, claimable, formatDuration, formatLeft, lobbySections, myResult, outcomeLine, runningOut, seatsTaken, secondsLeft, stillOffered } from "../game/lobby";
@@ -331,6 +332,8 @@ export class LobbyView {
           return this.actions.closeWelcome();
         case "trailer":
           return this.actions.openTrailer();
+        case "faq":
+          return openFaqDialog();
         case "retry":
           return this.actions.retry();
         case "quit":
@@ -401,7 +404,7 @@ export class LobbyView {
     }
     const report = reportUrl({ shown: "lobby", address: m.address });
     return (
-      `<header class="gl-top"><div class="gl-top-in"><span class="gl-mark">GNOSLINGER</span><button type="button" class="gl-nav" data-act="tutorial">How to play</button>` +
+      `<header class="gl-top"><div class="gl-top-in"><span class="gl-mark">GNOSLINGER</span><button type="button" class="gl-nav" data-act="tutorial">How to play</button><button type="button" class="gl-nav" data-act="faq">FAQ</button>` +
       `<a class="gl-nav gl-report" href="${esc(report)}" target="_blank" rel="noopener" title="Open a GitHub issue">Report a bug</a><div class="gl-right">${right}</div></div></header>`
     );
   }

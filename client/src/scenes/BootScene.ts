@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import { connectIfAllowed } from "../chain";
 import { TRAILER_HASH } from "../links";
 import { openTrailerDialog } from "../ui/trailerDialog";
+import { FAQ_HASH, openFaqDialog } from "../ui/faqDialog";
 import { parseRoute } from "../game/route";
 import { installWalletNotices } from "../ui/walletNotices";
 import { TUTORIAL_HASH } from "../tutorial/tutorial";
@@ -45,6 +46,11 @@ export class BootScene extends Phaser.Scene {
         if (location.hash === TRAILER_HASH) {
           this.scene.start("LobbyScene");
           return openTrailerDialog();
+        }
+        // The FAQ's address: the splash with the FAQ over it.
+        if (location.hash === FAQ_HASH) {
+          this.scene.start("LobbyScene");
+          return openFaqDialog();
         }
         if (!route) return this.scene.start("LobbyScene");
         if (await connectIfAllowed()) installWalletNotices();
