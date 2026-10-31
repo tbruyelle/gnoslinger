@@ -13,6 +13,10 @@ const CSS = `
 .fq-back{position:fixed;inset:0;z-index:600;background:rgba(30,22,24,.85);display:flex;align-items:center;justify-content:center;padding:32px 16px}
 .fq-dialog{position:relative;width:min(760px,100%);max-height:100%;display:flex;flex-direction:column;background:#F3E7CE;border:3px solid #2A1C14;border-radius:18px;box-shadow:inset 0 0 0 5px #F3E7CE,inset 0 0 0 7px #2A1C14,0 10px 0 #1E1618;padding:26px 14px 18px 26px;font-family:'Zilla Slab',Rockwell,Georgia,serif;color:#2A1C14}
 .fq-title{margin:0 12px 12px 0;font-family:Rye,Georgia,serif;font-weight:400;font-size:30px;color:#33307F;border-bottom:3px solid #2A1C14;padding-bottom:8px}
+.fq-search{margin:0 12px 6px 0;width:calc(100% - 12px);min-height:36px;padding:4px 12px;background:#FBF4E4;color:#2A1C14;border:2px solid #2A1C14;border-radius:10px;font-family:inherit;font-size:16px}
+.fq-search:focus-visible{outline:3px solid #F2B544;outline-offset:2px}
+.fq-body mark{background:#F2B544;color:inherit;border-radius:3px;padding:0 1px}
+.fq-none{margin:14px 0;font-size:17px;font-style:italic;color:#5A4636}
 .fq-body{overflow-y:auto;padding-right:12px}
 .fq-body h3{margin:18px 0 6px;font-family:Rye,Georgia,serif;font-weight:400;font-size:20px;letter-spacing:1px;color:#8E2F1A}
 .fq-body details{border-bottom:1px solid #5A4636}
@@ -254,9 +258,13 @@ export function openFaqDialog(): void {
   root.innerHTML =
     '<section class="fq-dialog" role="dialog" aria-modal="true" aria-labelledby="fq-title">' +
     '<button type="button" class="fq-close" data-act="close" aria-label="Close">×</button>' +
-    '<h2 id="fq-title" class="fq-title">Questions &amp; answers</h2><div class="fq-body">' +
-    FAQ.map((g) => `<h3>${g.title}</h3>` + g.items.map(([q, a]) => `<details><summary>${q}</summary>${a}</details>`).join("")).join("") +
-    "</div></section>";
+    '<h2 id="fq-title" class="fq-title">Questions &amp; answers</h2>' +
+    '<input type="search" class="fq-search" placeholder="Search: sprint, jammed, delay…" aria-label="Search the questions">' +
+    '<div class="fq-body">' +
+    FAQ.map((g) => `<section><h3>${g.title}</h3>` + g.items.map(([q, a]) => `<details><summary>${q}</summary>${a}</details>`).join("") + "</section>").join("") +
+    '<p class="fq-none" hidden>No question matches.</p></div></section>';
+  const search = root.querySelector<HTMLInputElement>(".fq-search")!;
+  search.addEventListener("input", () => filterFaq(root, search.value));
   const onKey = (e: KeyboardEvent) => {
     if (e.key === "Escape") {
       e.stopPropagation();
@@ -264,6 +272,14 @@ export function openFaqDialog(): void {
     }
   };
   document.addEventListener("keydown", onKey);
+  // The keys typed in the search stay there too (Phaser's keyboard listens on the window);
+  // Esc still closes the dialog.
+  for (const type of ["keydown", "keyup"]) {
+    root.addEventListener(type, (e) => {
+      e.stopPropagation();
+      if (type === "keydown" && (e as KeyboardEvent).key === "Escape") closeFaqDialog();
+    });
+  }
   root.addEventListener("click", (e) => {
     if (e.target === root || (e.target as Element).closest('[data-act="close"]')) closeFaqDialog();
   });
@@ -274,5 +290,57 @@ export function openFaqDialog(): void {
   }
   document.body.appendChild(root);
   open = { root, onKey };
-  root.querySelector<HTMLButtonElement>(".fq-close")?.focus();
+  search.focus();
+}
+
+/**
+ * Shows only the questions whose question or answer holds every word of the
+ * query, opened, and the headings with one left; an empty query shows them
+ * all, closed. The words found are marked in the questions shown.
+ */
+function filterFaq(root: HTMLElement, query: string): void {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  let any = false;
+  for (const group of Array.from(root.querySelectorAll<HTMLElement>(".fq-body section"))) {
+    let shown = 0;
+    for (const item of Array.from(group.querySelectorAll<HTMLDetailsElement>("details"))) {
+      // Back to the text as written, without the marks of the previous search.
+      const html = (item.dataset.html ??= item.innerHTML);
+      item.innerHTML = html;
+      const text = (item.textContent ?? "").toLowerCase();
+      const match = words.every((w) => text.includes(w));
+      if (match && words.length) markWords(item, words);
+      item.hidden = !match;
+      item.open = match && words.length > 0;
+      if (match) shown++;
+    }
+    group.hidden = shown === 0;
+    if (shown) any = true;
+  }
+  root.querySelector<HTMLElement>(".fq-none")!.hidden = any;
+}
+
+/** Wraps every occurrence of the words in the element's text in a <mark>. */
+function markWords(el: HTMLElement, words: string[]): void {
+  const re = new RegExp(words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), "gi");
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  const nodes: Text[] = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode as Text);
+  for (const node of nodes) {
+    const text = node.data;
+    re.lastIndex = 0;
+    if (!re.test(text)) continue;
+    re.lastIndex = 0;
+    const frag = document.createDocumentFragment();
+    let last = 0;
+    for (let m = re.exec(text); m; m = re.exec(text)) {
+      frag.append(text.slice(last, m.index));
+      const mark = document.createElement("mark");
+      mark.textContent = m[0];
+      frag.append(mark);
+      last = m.index + m[0].length;
+    }
+    frag.append(text.slice(last));
+    node.replaceWith(frag);
+  }
 }
