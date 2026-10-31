@@ -91,6 +91,13 @@ go tool gno test -run ./gno/r/v0/z2_ ./gno/r/v0/
 go tool gno test -update-golden-tests ./gno/r/v0/   # refresh // Output: and // Events:
 ```
 
+## Commits
+
+The first line of a commit message is a short summary, **50 characters at
+most** (72 is the hard limit, past which git tools cut it), with no period
+at the end; the details go in the body, after a blank line, wrapped at 72
+columns.
+
 ## Layout
 
 The directories do not mirror the package paths: a package's path is the
