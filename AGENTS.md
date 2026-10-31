@@ -762,7 +762,8 @@ calls; `testing.SkipHeights(n)` advances block time 5 s per height.
   (where it comes from, the plan it shortens, the halving, passing out), the guns
   (drawing, cocking, loading, picking up, jammed and exploded guns), the
   odds of a shot, throwing and Strength, the wounds, and winning (when a showdown ends, the victory points,
-  running away, surrendering, time),
+  running away, surrendering, time), the transactions (what is signed,
+  commit and reveal, the fees and deposits, auto-sign),
   in a dialog opened from the bottom bar of the lobby and of the game
   screen and from `#faq` (`FAQ_HASH`, the splash with it
   over, `BootScene`). A rule changing what an answer says needs it changed.

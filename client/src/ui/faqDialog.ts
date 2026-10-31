@@ -1,6 +1,7 @@
 /**
  * The FAQ, in a dialog over the page: the questions players run into with
- * moving, delay, the guns, the shots, the throws, the wounds and winning, each a
+ * moving, delay, the guns, the shots, the throws, the wounds, winning and
+ * the transactions, each a
  * <details> that opens on a click, grouped under headings. Opened from the
  * bottom bar of the lobby and of the game screen and its own address, #faq (BootScene);
  * the cross, a click outside or Esc closes it.
@@ -261,6 +262,42 @@ const FAQ: { title: string; items: [question: string, answer: string][] }[] = [
         "What if I do not play in time?",
         "<p>Each turn has a time limit. Past it, anyone may <b>call time</b>: a player who sent no plan passes the turn, and is out of the fight after <b>three missed turns in a row</b>, which counts as surrendering. " +
           "If nobody plays any more, the showdown ends with every stake given back.</p>",
+      ],
+    ],
+  },
+  {
+    title: "Playing on the chain",
+    items: [
+      [
+        "What do I need to play?",
+        "<p>The <b>Adena</b> wallet, and an account on the chain the site plays on (Onyx, a gno.land testnet) holding some <b>GNOT</b>, " +
+          "to pay the transactions and, if you play for one, the stake. Every move is a transaction: there is no game server, the chain holds the showdowns and plays the turns.</p>",
+      ],
+      [
+        "Which transactions do I sign?",
+        "<ul><li><b>Calling</b> a showdown, or <b>joining</b> one: once, with the stake if there is one;</li>" +
+          "<li>each turn, <b>sending your plan</b>, then <b>revealing</b> it once everyone has sent theirs (below); the last player to send a plan sends it in the clear, in one go;</li>" +
+          "<li>now and then: <b>call time</b> on late players, <b>surrender</b>, <b>cancel</b> a showdown nobody joined yet.</li></ul>",
+      ],
+      [
+        "Why send my plan, then reveal it?",
+        "<p>So that nobody sees your plan before playing theirs. Sending it puts on the chain only a fingerprint (a hash) of your plan, and a copy locked until shortly after the turn's deadline. " +
+          "Once every plan is in, each is revealed, checked against its fingerprint, and the last reveal plays the turn.</p>" +
+          "<p>The site reveals your plan by itself with auto-sign on (else press REVEAL). If you are gone, anyone can open your locked copy once its time comes and reveal it: the turn goes on without you.</p>",
+      ],
+      [
+        "What does it cost?",
+        "<p>Each transaction pays a small <b>fee</b> (a plan, about 0.03 GNOT), and a <b>storage deposit</b> for what it stores on the chain, which comes back when that is deleted. Roughly:</p>" +
+          "<ul><li>calling a showdown: about 2 GNOT (1.7 once you have played before); joining: 0.7 the first time, then nothing;</li>" +
+          "<li>a turn: about 0.2 GNOT, paid by the reveal that plays it;</li>" +
+          "<li>cancelling a showdown gives its caller the deposit back.</li></ul>" +
+          "<p>A stake is not a cost: the realm holds it, and pays it back to the winner, or to everyone if the showdown is cancelled.</p>",
+      ],
+      [
+        "Can I play without a wallet popup on every move?",
+        "<p>Yes: turn on <b>Auto-sign</b> in the lobby's top bar. You sign once, in Adena, a session for 1, 7 or 30 days with a daily spending limit; " +
+          "the site then signs your moves itself, with a key kept in this browser that can only play Gnoslinger. Turn it off there at any time. " +
+          "Stakes always go through Adena.</p>",
       ],
     ],
   },
