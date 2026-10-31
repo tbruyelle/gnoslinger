@@ -213,7 +213,7 @@ const CSS = `
 .gl-field label{font-size:18px;font-weight:700}
 .gl-field select{min-height:46px;padding:0 12px;background:#FBF4E4;color:#2A1C14;border:2px solid #2A1C14;border-radius:10px;font-size:18px}
 .gl-note{font-size:15px;font-style:italic;color:#5A4636}
-.gl-create{min-height:56px;background:#B5482A;color:#FBF4E4;border:3px solid #2A1C14;border-radius:12px;box-shadow:0 5px 0 #2A1C14;font-family:Rye,Georgia,serif;font-size:22px;letter-spacing:1.5px;cursor:pointer}
+.gl-create{min-height:56px;padding:0 28px;background:#B5482A;color:#FBF4E4;border:3px solid #2A1C14;border-radius:12px;box-shadow:0 5px 0 #2A1C14;font-family:Rye,Georgia,serif;font-size:22px;letter-spacing:1.5px;cursor:pointer}
 .gl-create:hover:not(:disabled){background:#C65634}
 .gl-account-btn{display:flex;flex-direction:column;align-items:flex-start;line-height:1.15;background:transparent;border:0;border-radius:8px;padding:2px 6px;margin-left:-6px;color:inherit;text-align:left;cursor:pointer}
 .gl-account-btn:hover{background:#E9DCC0}
