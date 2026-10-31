@@ -7,6 +7,7 @@
 - change window size to see how things fit
 - add link to gnoslinger.xyz to the render node
 - add links to jmgj youtube videos for the rules in details
+- allow to make a video from a finished game replay
 
 ## General
 - move the repository to a gnoslinger organization (github.com/gnoslinger/gnoslinger)
