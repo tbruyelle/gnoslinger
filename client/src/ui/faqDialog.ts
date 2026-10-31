@@ -1,8 +1,8 @@
 /**
  * The FAQ, in a dialog over the page: the questions players run into with
- * moving, delay, the guns, the shots, the throws, the wounds and leaving the fight, each a
+ * moving, delay, the guns, the shots, the throws, the wounds and winning, each a
  * <details> that opens on a click, grouped under headings. Opened from the
- * lobby's top bar, the game header and its own address, #faq (BootScene);
+ * bottom bar of the lobby and of the game screen and its own address, #faq (BootScene);
  * the cross, a click outside or Esc closes it.
  */
 export const FAQ_HASH = "#faq";
@@ -222,13 +222,45 @@ const FAQ: { title: string; items: [question: string, answer: string][] }[] = [
     ],
   },
   {
-    title: "Leaving the fight",
+    title: "Winning and losing",
     items: [
+      [
+        "When does a showdown end?",
+        "<p>When <b>one character is left</b> in the fight (the others killed, passed out, run away or surrendered), or at the end of the <b>last turn</b> (10 to 30, set when the showdown is called), whoever is still standing.</p>",
+      ],
+      [
+        "How do I win?",
+        "<p>Not by being the last one standing, but with the <b>most victory points</b> (VP) at the end. A tie for the most is a draw. " +
+          "With a stake, the winner takes the pot, less 5 % for the house; a draw splits it between the tied players.</p>" +
+          "<p>Your VP also add up in the ranking, Top guns in the lobby.</p>",
+      ],
+      [
+        "What gives victory points?",
+        "<p>During the showdown, on the turn it happens:</p>" +
+          "<ul><li><b>Killed</b>: −8; the enemy whose shot killed you: <b>Kill enemy +2</b>, or +1 each when several kill you in the same segment;</li>" +
+          "<li><b>Passed out</b>: 0; the enemy who crossed off most of your endurance: <b>Knock out enemy +1</b>;</li>" +
+          "<li><b>Run away</b>: −2.</li></ul>" +
+          "<p>At the end of the showdown:</p>" +
+          "<ul><li>still in the fight: <b>Survive +2</b>, and <b>Hold the field +2</b> more when you are the only one;</li>" +
+          "<li>surrendered or out of time: <b>Surrender −2</b>, and Knock out enemy +1 to whoever hurt you most;</li>" +
+          "<li>passed out or surrendered while an enemy holds the field: <b>Captured −4</b>;</li>" +
+          "<li>a SERIOUS wound may still kill you then, the Kill going to the enemy who gave you the most SERIOUS points.</li></ul>" +
+          "<p>The log of each turn lists the points scored, and the final replay ends with everyone's.</p>",
+      ],
       [
         "Can I run away?",
         "<p>Yes: move off the edge of the board (Advance, Run, Back Up, Sprint, even crawling). When picking a move at the edge, a gold arrow offers it. " +
-          "You are out of the fight, nobody can shoot you any more, and it costs <b>−2 VP</b>, " +
-          "where being killed costs −8, and surrendering −2 and −4 more when captured.</p>",
+          "You are out of the fight, nobody can shoot you any more, and it costs <b>−2 VP</b>: " +
+          "better than being killed (−8), or surrendering and being captured (−6).</p>",
+      ],
+      [
+        "Can I surrender?",
+        "<p>Yes, with <b>Surrender</b> under your plan, at the start of a turn (not once the plans are being revealed). Your character is out of the fight; it scores as above.</p>",
+      ],
+      [
+        "What if I do not play in time?",
+        "<p>Each turn has a time limit. Past it, anyone may <b>call time</b>: a player who sent no plan passes the turn, and is out of the fight after <b>three missed turns in a row</b>, which counts as surrendering. " +
+          "If nobody plays any more, the showdown ends with every stake given back.</p>",
       ],
     ],
   },
