@@ -52,6 +52,11 @@ export function openTrailerDialog(): void {
   root.addEventListener("click", (e) => {
     if (e.target === root || (e.target as Element).closest('[data-act="close"]')) closeTrailerDialog();
   });
+  // Keep every pointer event on the dialog away from the game canvas
+  // (Phaser listens on the window too: a click would reach the splash's buttons under it).
+  for (const type of ["pointerdown", "pointerup", "pointermove", "mousedown", "mouseup", "touchstart", "touchend", "wheel"]) {
+    root.addEventListener(type, (e) => e.stopPropagation(), { passive: type === "wheel" });
+  }
   document.body.appendChild(root);
   open = { root, onKey };
   root.querySelector<HTMLButtonElement>(".td-close")?.focus();
