@@ -123,7 +123,7 @@ export interface LobbyActions {
 const CSS = `
 .gl-root{position:fixed;inset:0;overflow-y:auto;z-index:400;background:#1E1618;font-family:'Zilla Slab',Rockwell,Georgia,serif;color:#2A1C14}
 .gl-root *{box-sizing:border-box}
-.gl-root button,.gl-root select{font-family:inherit}
+.gl-root :where(button,select){font-family:inherit}
 .gl-root button:focus-visible,.gl-root select:focus-visible{outline:3px solid #F2B544;outline-offset:2px}
 .gl-root button:disabled{opacity:.5;cursor:default}
 .gl-top{background:#2A1C14;border-bottom:3px solid #5A4636;box-shadow:0 3px 0 #1E1618,0 5px 0 #5A4636}
