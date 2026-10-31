@@ -465,6 +465,7 @@ export class LobbyView {
       "<li><b>Each turn</b> you pick up to 5 time points of action cards in secret. Once every plan is in, they are revealed and play out together.</li>" +
       '<li><b>New to the game?</b> <button type="button" class="gl-wl-link" data-act="tutorial">How to play</button> walks you through a duel against the Kid, ' +
       'and <button type="button" class="gl-wl-link" data-act="trailer">the trailer</button> shows a showdown in two minutes.</li>' +
+      '<li><b>Stuck?</b> The <button type="button" class="gl-wl-link" data-act="faq">FAQ</button>, at the bottom of the page, answers the usual questions: why a gun will not shoot, how Sprint works, what delay does, how victory points are scored…</li>' +
       "</ol>" +
       '<ul class="gl-wl-opts">' +
       `<li><div><b>Auto-sign</b><span>Sign your moves without an Adena popup each time, within a daily spending limit.</span></div>${session}</li>` +

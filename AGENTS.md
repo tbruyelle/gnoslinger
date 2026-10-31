@@ -747,7 +747,7 @@ calls; `testing.SkipHeights(n)` advances block time 5 s per height.
   messaging" is on in its privacy settings; the toast says so.
 - **Welcome** (`game/welcome.ts`): the lobby's first panel until this
   browser closes it (× or Got it; `gnoslinger.welcomed` in `localStorage`):
-  how to call or join a showdown, what a turn is, How to play, and
+  how to call or join a showdown, what a turn is, How to play, the FAQ and
   auto-sign and notifications, each with its button while off (the
   Auto-sign dialog; the Notifications toggle) and a check once on.
 - **Share** (`game/share.ts`): in the game header, after the title,
