@@ -781,6 +781,17 @@ calls; `testing.SkipHeights(n)` advances block time 5 s per height.
   `git rev-parse --short HEAD` in `vite.config.ts`, "dev" without git),
   the window size and browser. The player signs in to GitHub to send it;
   the link stays far under GitHub's ~8 KB, so it never carries the game's JSON.
+- **Record** (`game/recorder.ts`): a finished game's replay has a red
+  dot beside its controls that records the whole replay as a WebM, in
+  the browser: back to turn 1, auto play to the end (a pause, a step or
+  the button again stops it early), then the file is saved
+  (`gnoslinger-<id>.webm`). Only the board's cell is in the picture,
+  copied after each render and encoded with WebCodecs (VP9, else VP8)
+  at the time it rendered; every `sound.play` is noted on the same
+  clock and mixed at the end (`OfflineAudioContext`, Opus), and
+  `webm-muxer` writes both. MediaRecorder was tried first: it timed
+  the picture and the sound apart, which drifted up to ±350 ms when
+  the page was busy (now within ±5 ms, measured on 2026-11-01).
 - `ui/toast.ts`: toasts are DOM elements over the canvas, because the
   scenes rebuild their display list (`children.removeAll`) on every refresh,
   which destroyed Phaser toasts the moment they appeared; identical texts

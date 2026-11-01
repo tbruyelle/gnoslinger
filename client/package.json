@@ -15,7 +15,8 @@
     "@scure/base": "^2.4.0",
     "gnotif": "^0.4.0",
     "phaser": "^3.87.0",
-    "tlock-js": "^0.9.0"
+    "tlock-js": "^0.9.0",
+    "webm-muxer": "^5.1.4"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

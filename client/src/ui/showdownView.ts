@@ -204,6 +204,8 @@ export interface ShowdownModel {
     playing: boolean;
     /** Names the panel's close cross, what closing does; null: no cross (a finished game's replay). */
     closeLabel: string | null;
+    /** The button recording the replay as a video: off, recording, or none (only a finished game's replay has it). */
+    record: "off" | "on" | null;
   } | null;
   /** The tutorial's coach, none outside it. */
   coach?: CoachModel | null;
@@ -388,6 +390,7 @@ button.gv-seat:hover b{text-decoration:underline}
 .gv-turn:hover{color:#F2B544}
 .gv-ghost{flex:1;min-height:44px;background:transparent;color:#F3E7CE;border:2px solid #5A4636;border-radius:10px;font-size:16px;font-weight:700;cursor:pointer}
 .gv-ghost:hover:not(:disabled){border-color:#F3E7CE}
+.gv-rec[aria-pressed="true"]{background:#B5482A}
 .gv-icon{width:50px;min-height:50px;background:#F3E7CE;border:3px solid #F3E7CE;border-radius:12px;display:flex;align-items:center;justify-content:center;cursor:pointer}
 .gv-play{flex:1;min-height:50px;background:#B5482A;color:#FBF4E4;border:3px solid #F3E7CE;border-radius:12px;font-family:Rye,Georgia,serif;font-size:19px;letter-spacing:1.5px;cursor:pointer}
 .gv-log{--rule:#2A1C14;flex:1;min-height:0}
@@ -824,6 +827,11 @@ export class ShowdownView {
       `<button type="button" class="gv-icon" data-act="btn" data-id="prevSeg" aria-label="Previous segment"${dis(r.prevSeg)}><svg width="20" height="20" viewBox="0 0 24 24" fill="#2A1C14" aria-hidden="true"><path d="M17 5 L7 12 L17 19 Z"></path></svg></button>` +
       `<button type="button" class="gv-play" data-act="btn" data-id="play">${r.playing ? "PAUSE" : "PLAY"}</button>` +
       `<button type="button" class="gv-icon" data-act="btn" data-id="nextSeg" aria-label="Next segment"${dis(r.nextSeg)}><svg width="20" height="20" viewBox="0 0 24 24" fill="#2A1C14" aria-hidden="true"><path d="M7 5 L17 12 L7 19 Z"></path></svg></button>` +
+      (r.record === null
+        ? ""
+        : r.record === "on"
+          ? `<button type="button" class="gv-icon gv-rec" data-act="btn" data-id="record" aria-pressed="true" aria-label="Stop recording and save the video" title="Stop recording and save the video"><svg width="18" height="18" viewBox="0 0 24 24" fill="#FBF4E4" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"></rect></svg></button>`
+          : `<button type="button" class="gv-icon gv-rec" data-act="btn" data-id="record" aria-pressed="false" aria-label="Record the whole replay as a video" title="Record the whole replay as a video"><svg width="20" height="20" viewBox="0 0 24 24" fill="#B5482A" aria-hidden="true"><circle cx="12" cy="12" r="7"></circle></svg></button>`) +
       "</div></div></div>" +
       // The replay, or a turn's playback, closes from the panel's top-right cross.
       (r.closeLabel === null ? "" : `<button type="button" class="gv-x" data-act="btn" data-id="close" aria-label="${esc(r.closeLabel)}" title="${esc(r.closeLabel)}">${CLOSE_SVG}</button>`)

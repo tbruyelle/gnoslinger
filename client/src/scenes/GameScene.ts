@@ -45,6 +45,7 @@ import { formatGnot, payoutLine } from "../game/stakes";
 import { reportUrl, type BugContext } from "../game/bugReport";
 import { shareText } from "../game/share";
 import { closeProfileDialog, openProfileDialog } from "../ui/profileDialog";
+import { canRecord, download, startRecording, type Recording } from "../game/recorder";
 
 // ── Layout constants ────────────────────────────────────────────────────────
 
@@ -137,6 +138,8 @@ const STEP_MOVE_MS = 450;
 const STEP_SHOT_MS = 250;
 /** The pause between segments in auto play. */
 const AUTO_GAP_MS = 450;
+/** How long a recording holds the last segment before it ends, its sounds dying out. */
+const RECORD_TAIL_MS = 2000;
 /** How much bigger a token is drawn on an obstacle, where the character stands higher. */
 const OBSTACLE_LIFT = 1.1;
 /** How far a hex highlight's corners are pulled in from the hex's own, in screen pixels. */
@@ -842,6 +845,8 @@ export class GameScene extends Phaser.Scene {
   private playback: { turns: TurnResult[]; index: number; seg: number; cut: number | null; anim: number; live: boolean; auto: Phaser.Time.TimerEvent | null } | null = null;
   /** The game is over and its whole history was asked for: the replay stays on screen, with no way to close it. */
   private finalReplay = false;
+  /** The replay being recorded as a video (the final replay's record button). */
+  private recording: Recording | null = null;
   /** The turn whose replay the page's address asked for (game/route.ts), until the game is first shown. */
   private routeTurn: number | null = null;
   /** The plan sent this turn, shown while waiting: known from sending it, else read back from the chain. */
@@ -1042,6 +1047,8 @@ export class GameScene extends Phaser.Scene {
       if (this.tutorial || this.gameID) history.replaceState(null, "", location.pathname + location.search);
       closeCharacterSheet();
       closeProfileDialog();
+      this.recording?.cancel();
+      this.recording = null;
       this.showdown?.destroy();
       this.showdown = null;
       this.scale.off("resize", onResize);
@@ -1840,6 +1847,8 @@ export class GameScene extends Phaser.Scene {
         return this.stepPlayback(1);
       case "play":
         return this.toggleAuto();
+      case "record":
+        return this.recording ? this.toggleAuto() : void this.startRecord();
       case "close":
         if (pb && !this.finalReplay) this.finishPlayback();
         return;
@@ -1943,6 +1952,7 @@ export class GameScene extends Phaser.Scene {
           nextSeg: !!stepForward(pos, pb.turns.length),
           playing: !!pb.auto,
           closeLabel: this.finalReplay ? null : pb.live ? "End turn" : "Close",
+          record: this.finalReplay && !this.tutorial && canRecord() ? (this.recording ? "on" : "off") : null,
         },
       };
     }
@@ -3911,6 +3921,15 @@ export class GameScene extends Phaser.Scene {
     if (this.playback !== pb || !pb.auto) return;
     const timer = pb.auto;
     const next = stepForward({ index: pb.index, seg: pb.seg }, pb.turns.length);
+    if (!next && this.recording) {
+      // The video ends on the last segment held a moment.
+      pb.auto = this.time.delayedCall(RECORD_TAIL_MS, () => {
+        if (this.playback !== pb || !pb.auto) return;
+        this.stopAuto();
+        this.renderView();
+      });
+      return;
+    }
     if (!next) {
       this.stopAuto();
       this.renderView();
@@ -3928,6 +3947,52 @@ export class GameScene extends Phaser.Scene {
     if (this.playback?.auto) {
       this.playback.auto.remove();
       this.playback.auto = null;
+    }
+    // A recording is the auto play from the first turn: stopping it, by the end of the replay or a pause or a step, saves the video.
+    if (this.recording) void this.saveRecording();
+  }
+
+  /**
+   * Records the whole replay as a video, in the browser: back to the first
+   * turn's start, then the auto play to the end, the board's cell and the
+   * sounds recorded (game/recorder.ts); the file is saved when it ends.
+   */
+  private async startRecord() {
+    const pb = this.playback;
+    if (!pb || !this.finalReplay || this.recording || !canRecord()) return;
+    this.stopAuto();
+    this.stepTo({ index: 0, seg: 0 });
+    let rec: Recording;
+    try {
+      rec = await startRecording(this.game, () => this.board);
+    } catch (e) {
+      showToast(this, `Cannot record: ${e instanceof Error ? e.message : String(e)}`, "error");
+      return;
+    }
+    // The screen may have been left, or the replay moved on, meanwhile.
+    if (!this.scene.isActive() || this.playback !== pb || pb.auto || this.recording) {
+      rec.cancel();
+      return;
+    }
+    this.recording = rec;
+    showToast(this, "Recording the replay: keep this tab in view until it ends", "info");
+    pb.auto = this.time.delayedCall(AUTO_GAP_MS, () => this.autoStep(pb));
+    this.renderView();
+  }
+
+  private async saveRecording() {
+    const rec = this.recording;
+    if (!rec) return;
+    this.recording = null;
+    if (this.scene.isActive()) {
+      showToast(this, "Saving the video…", "info");
+      this.renderView();
+    }
+    try {
+      download(await rec.stop(), `gnoslinger-${this.gameID}.webm`);
+      if (this.scene.isActive()) showToast(this, "Video saved", "info");
+    } catch (e) {
+      if (this.scene.isActive()) showToast(this, `Cannot save the video: ${e instanceof Error ? e.message : String(e)}`, "error");
     }
   }
 
