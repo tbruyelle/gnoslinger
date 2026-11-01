@@ -16,8 +16,8 @@ export const NOTIFIED_EVENTS = ["PlanDue", "RevealDue", "ShowdownOver"] as const
 /** The attribute of those events that names the player. */
 export const RECIPIENT_PARAM = "to";
 
-/** The notification's icon, a PNG the service worker shows. */
-export const NOTIFICATION_ICON = import.meta.env.BASE_URL + "char_marshal.png";
+/** The notification's icon, a PNG the service worker shows: the site's icon at 192 px, the size notifications show it at. */
+export const NOTIFICATION_ICON = import.meta.env.BASE_URL + "icon-192.png";
 
 /** The opt-ins for an address: one per notified event among the realm's verified triggers, by event since ids may change. */
 export function optinsFor(triggers: Trigger[], address: string): Optin[] {
