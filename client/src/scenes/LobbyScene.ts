@@ -539,7 +539,8 @@ export class LobbyScene extends Phaser.Scene {
       address: this.chain?.wallet.address ?? "",
       name: this.games?.name ?? "",
       balance: this.balance ?? "",
-      locked: walletLocked(),
+      // Auto-sign on: the session key signs, the account box stays though Adena is locked.
+      locked: walletLocked() && this.chain?.wallet.state.kind !== "active",
       session: {
         state: this.chain?.wallet.state ?? { kind: "none" },
         busy: this.sessionBusy,

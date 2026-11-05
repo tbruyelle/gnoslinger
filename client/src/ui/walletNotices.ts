@@ -1,4 +1,5 @@
 import { subscribeWalletLocked, subscribeWalletWaiting, WALLET_TIMEOUT_MS } from "../chain/adena";
+import { currentChain } from "../chain";
 import { ChainError, userMessage } from "../chain/errors";
 import { subscribeSession, type SessionState } from "../chain/session";
 import { hideToast, showToast } from "./toast";
@@ -16,6 +17,8 @@ export function installWalletNotices(): void {
   if (installed) return;
   installed = true;
   subscribeWalletLocked((locked) => {
+    // Auto-sign on: the session key signs every move, Adena's lock changes nothing.
+    if (currentChain()?.wallet.state.kind === "active") return;
     if (locked) {
       // Same text as the error of a call refused for the lock, so the two
       // show as one toast.

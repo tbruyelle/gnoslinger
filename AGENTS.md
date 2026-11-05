@@ -704,6 +704,7 @@ calls; `testing.SkipHeights(n)` advances block time 5 s per height.
   switches are detected through `On("changedAccount")` **and** a 3 s
   `GetAccount` poll, since the event is not always delivered. The same poll
   tracks the lock (`GetAccount` answers `WALLET_LOCKED`):
+  unless auto-sign is on (the session key signs, the lock changes nothing),
   `ui/walletNotices.ts` toasts "locked"/"unlocked" and the lobby top bar
   swaps the account box for a **Connect with Adena** button (the splash's
   style, `gl-connect`; it connects again, through Adena's unlock); a call left unanswered for
@@ -805,7 +806,7 @@ calls; `testing.SkipHeights(n)` advances block time 5 s per height.
   connects the wallet first when that needs no popup (`connectIfAllowed`:
   Adena has the site connected already, `adenaConnected`; a page reloaded
   by a code change so stays the player's, following account changes),
-  else opens it with no wallet, to share and watch it. `BootScene` starts
+  else opens it with no wallet, to share and watch it (Adena locked when the page opened, a notification's click say, opens it so too: the game screen then offers **Connect with Adena** in every phase, and reconnects by itself, with no popup, once the account poll sees Adena unlocked, `reconnectQuietly`). `BootScene` starts
   `GameScene` (`turn`: the replay on
   that turn once it resolved, the final replay for a finished game; else a
   toast), which reads the chain through `viewerChain()` (`chain/index.ts`:

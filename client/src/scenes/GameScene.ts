@@ -3,10 +3,10 @@ import Phaser from "phaser";
 import type { CardNumber, CardSide, ChoiceType, RelativeDirection } from "../rules";
 import { AHEAD_DIRS, BACK_DIRS, dirIndexToAngle, getActionCardAsset, getActionDef, relativeToAbsoluteDir, CHAR_ARROW_DIR } from "../rules";
 import { BOARD_A } from "../board/boardA";
-import { currentChain, initChain, resetChain, viewerChain, type Chain } from "../chain";
+import { connectIfAllowed, currentChain, initChain, resetChain, viewerChain, type Chain } from "../chain";
 import { CONFIG } from "../config";
 import { installWalletNotices } from "../ui/walletNotices";
-import { subscribeAccountChanged, subscribeNetworkChanged } from "../chain/adena";
+import { subscribeAccountChanged, subscribeNetworkChanged, subscribeWalletLocked } from "../chain/adena";
 import { userMessage } from "../chain/errors";
 import { GamePoller } from "../chain/poller";
 import { playerLabel, seatOf, type GameView, type TurnResult, type PlayerStatus, type TurnEvent, type GunView, type GroundGunView } from "../chain/types";
@@ -1038,6 +1038,15 @@ export class GameScene extends Phaser.Scene {
         subscribeAccountChanged(() => leave("Account changed")),
         subscribeNetworkChanged(() => leave("Network changed")),
       );
+    } else if (!this.tutorial && window.adena) {
+      // Watched without a wallet because Adena was locked when the page
+      // opened (a reload, a notification's click): once it is unlocked, the
+      // game is opened again as the account's player, with no popup.
+      this.unsubscribe.push(
+        subscribeWalletLocked((locked) => {
+          if (!locked) void this.reconnectQuietly();
+        }),
+      );
     }
 
     // The page's address names what is shown (game/route.ts), to reopen or share it.
@@ -1233,6 +1242,20 @@ export class GameScene extends Phaser.Scene {
       if (!this.scene.isActive()) return;
       showToast(this, userMessage(e), "error");
       this.renderView();
+    }
+  }
+
+  /** connectAdena without a popup: only when Adena has the site connected already (unlocked, say). */
+  private async reconnectQuietly() {
+    if (this.connecting || currentChain()) return;
+    this.connecting = true;
+    try {
+      const chain = await connectIfAllowed();
+      if (!chain || !this.scene.isActive()) return;
+      installWalletNotices();
+      this.scene.restart({ gameID: this.gameID });
+    } finally {
+      this.connecting = false;
     }
   }
 
@@ -2219,7 +2242,21 @@ export class GameScene extends Phaser.Scene {
         ],
       };
     }
-    return { title: this.mode === "spectate" ? "Spectating" : "Loading", points: "", lines: [], empty: this.statusLine(), note: "", warn: false, buttons: [replay, lobby] };
+    // Watched without a wallet (Adena locked when the page opened, say): a seated player connects from here.
+    const connect = this.mode === "spectate" && !this.tutorial && !currentChain();
+    return {
+      title: this.mode === "spectate" ? "Spectating" : "Loading",
+      points: "",
+      lines: [],
+      empty: this.statusLine(),
+      note: connect ? "Playing in this showdown? Connect with Adena to take your seat." : "",
+      warn: false,
+      buttons: [
+        ...(connect ? [{ id: "connect", label: this.connecting ? "Connecting…" : "Connect with Adena", tone: "adena" as const, disabled: this.connecting }] : []),
+        replay,
+        lobby,
+      ],
+    };
   }
 
   /** The hand: each card's two sides, as they can be played right now. */
