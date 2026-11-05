@@ -1,5 +1,6 @@
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
+import * as tlock from "tlock-js";
 
 /**
  * Hidden plans (DESIGN_HIDDEN_PLANS.md): a plan is committed as a hash of a
@@ -117,11 +118,9 @@ export function unpackSealed(text: string): Sealed {
   return { salt: text.slice(0, i), plan: text.slice(i + 1) };
 }
 
-// tlock-js and its drand client are loaded on first use: they are only
-// needed to commit and to open a vanished player's plan.
-async function tlock() {
-  return import("tlock-js");
-}
+// tlock-js is imported statically, not on first use: a lazy chunk is
+// fetched when the first plan is sent, and a tab opened before a deploy
+// asked for a chunk name the new build no longer serves (404).
 
 /**
  * Timelocks a salt and plan to a drand quicknet round (the game's
@@ -130,15 +129,13 @@ async function tlock() {
  * (quicknet), so no drand node is asked; only opening needs one.
  */
 export async function lockSealed(round: number, sealed: Sealed): Promise<string> {
-  const t = await tlock();
-  const offline = { chain: () => ({ info: async () => t.defaultChainInfo }) } as unknown as Parameters<typeof t.timelockEncrypt>[2];
-  return t.timelockEncrypt(round, t.Buffer.from(packSealed(sealed)), offline);
+  const offline = { chain: () => ({ info: async () => tlock.defaultChainInfo }) } as unknown as Parameters<typeof tlock.timelockEncrypt>[2];
+  return tlock.timelockEncrypt(round, tlock.Buffer.from(packSealed(sealed)), offline);
 }
 
 /** Opens a timelocked plan once its round is out (fetches the round's signature from drand). */
 export async function openLocked(locked: string): Promise<Sealed> {
-  const t = await tlock();
-  return unpackSealed((await t.timelockDecrypt(locked, t.mainnetClient())).toString());
+  return unpackSealed((await tlock.timelockDecrypt(locked, tlock.mainnetClient())).toString());
 }
 
 function seenKey(scope: RevealScope, game: string, addr: string): string {
