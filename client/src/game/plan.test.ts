@@ -130,7 +130,9 @@ describe("validatePlan", () => {
     const lying = { id: 4, hex: "A-F3", guns: [COLT] };
     expect(decodePlan("9f:g4:0")[0]).toEqual({ card: 9, side: "front", groundGun: 4, hand: 0 });
     expect(validatePlan(decodePlan("9f:g4:0"), 5, true, [], [lying])).toBeNull();
-    expect(validatePlan(decodePlan("9f:g5:0"), 5, true, [], [lying])).toBe("that weapon is not in your hex");
+    expect(validatePlan(decodePlan("9f:g5:0"), 5, true, [], [lying])).toBe("that weapon is no longer on the ground");
+    // The hex is checked when the action executes, not against where the plan ends: picked up, then walked away.
+    expect(validatePlan(decodePlan("9f:g4:0,1f:ahead_left"), 5, true, [], [lying])).toBeNull();
     expect(validatePlan(decodePlan("9f:g4:0"), 5, true, [{ ...COLT, location: "gun_hand" }], [lying])).toBe("that hand already holds a gun");
     expect(canPlay({ card: 9, side: "front" }, true, [], [lying])).toBe(true);
     expect(canPlay({ card: 9, side: "front" }, true, [{ ...COLT, location: "both_hands" }], [lying])).toBe(true); // the gun itself can move

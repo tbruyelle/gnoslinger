@@ -293,7 +293,7 @@ export function planCost(plan: PlanEntry[]): number {
  * ranLastTurn says whether a Run was played on the previous turn; guns are
  * the character's guns, for Draw & Cock.
  */
-export function validatePlan(plan: PlanEntry[], budget = MAX_ACTION_POINTS, ranLastTurn = true, guns: GunView[] = [], groundHere: GroundGunView[] = []): string | null {
+export function validatePlan(plan: PlanEntry[], budget = MAX_ACTION_POINTS, ranLastTurn = true, guns: GunView[] = [], ground: GroundGunView[] = []): string | null {
   if (plan.length > MAX_PLAN_ENTRIES) return "too many actions in plan";
   const used = new Set<number>();
   const names = new Set<string>();
@@ -334,7 +334,8 @@ export function validatePlan(plan: PlanEntry[], budget = MAX_ACTION_POINTS, ranL
         if (!DRAW_HANDS.includes(hand)) return "only the gun hand or both hands can take a gun for now";
         let g: GunView | undefined;
         if (e.groundGun !== undefined) {
-          if (!groundHere.some((x) => x.id === e.groundGun)) return "that weapon is not in your hex";
+          // Anywhere on the board, as the realm: the plan may walk to it first, the hex is checked when the action executes.
+          if (!ground.some((x) => x.id === e.groundGun)) return "that weapon is no longer on the ground";
         } else {
           g = guns.find((x) => x.id === e.gun);
           if (!g) return "you have no such gun";

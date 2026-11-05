@@ -2345,7 +2345,7 @@ export class GameScene extends Phaser.Scene {
 
   /** What stops the plan from being sent, as the realm would refuse it, or a gun move with no action after it. */
   private planProblem(plan: PlanEntry[]): string | null {
-    const problem = validatePlan(plan, this.budget(), this.ranLastTurn(), this.myGuns(), this.groundHere());
+    const problem = validatePlan(plan, this.budget(), this.ranLastTurn(), this.myGuns(), this.view?.ground ?? []);
     if (problem) return problem;
     return this.looseMoves.length ? "Pick an action after the gun move: it is done when that action comes up." : null;
   }
