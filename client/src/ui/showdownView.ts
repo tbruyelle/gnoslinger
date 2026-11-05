@@ -86,7 +86,7 @@ export interface CharPanel {
   aim: number;
   wounds: number;
   guns: GunLine[];
-  /** A badge on the right of the name ("PLAN SENT", "YOUR TURN"…), "" for none. */
+  /** A badge under the name and position ("PLAN SENT", "YOUR TURN"…), "" for none. */
   badge: string;
 }
 
@@ -282,7 +282,7 @@ button.gv-seat:hover b{text-decoration:underline}
 .gv-name{font-family:Rye,Georgia,serif;font-size:21px;line-height:1.1}
 .gv-where{font-size:14px;color:#5A4636}
 .gv-player{font-size:14px;font-weight:700;color:#2A1C14;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.gv-badge{font-size:12px;font-weight:700;letter-spacing:1px;color:#FBF4E4;background:#4F7A3A;border-radius:999px;padding:3px 9px;white-space:nowrap}
+.gv-badge{align-self:flex-start;margin-top:5px;font-size:12px;font-weight:700;letter-spacing:1px;color:#FBF4E4;background:#4F7A3A;border-radius:999px;padding:3px 9px;white-space:nowrap}
 .gv-badge.out{background:#8E2F1A}
 .gv-end{display:flex;flex-direction:column;gap:4px}
 .gv-endrow{display:flex;justify-content:space-between;font-size:14px;font-weight:700}
@@ -680,7 +680,7 @@ export class ShowdownView {
       `<div class="gv-who">${tokenImg(c.charKey)}<div class="gv-who-txt">${c.you ? '<span class="gv-kicker">YOUR CHARACTER</span>' : ""}` +
       `<span class="gv-name">${esc(c.name)}</span>` +
       (c.player ? `<span class="gv-player" title="${esc(c.addr)}">${esc(c.player)}</span>` : "") +
-      `<span class="gv-where">${esc(c.where)}</span></div>${badge}</div>${detail}</button>`
+      `<span class="gv-where">${esc(c.where)}</span>${badge}</div></div>${detail}</button>`
     );
   }
 
