@@ -12,6 +12,7 @@
   - upload to a service and share
 
 ## General
+- the realm cut on showdown with stake is currently bricked -> remove cut ?
 - move the repository to a gnoslinger organization (github.com/gnoslinger/gnoslinger)
   - create the org, transfer the repository (Settings → Danger Zone), `git remote set-url origin git@github.com:gnoslinger/gnoslinger.git`
   - Pages: enter the custom domain again if it is gone, point the DNS CNAME of gnoslinger.xyz at gnoslinger.github.io, verify the domain in the org's settings
