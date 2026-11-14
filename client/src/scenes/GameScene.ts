@@ -4086,8 +4086,10 @@ export class GameScene extends Phaser.Scene {
     return seats.filter((s) => !tried.has(s));
   }
 
+  /** A plan to open: not my own alone while this browser holds it (revealing it needs no opening, and openPlans would send nothing). */
   private openWaits(): boolean {
-    return this.toOpen().length > 0;
+    const own = this.ownRevealWaits();
+    return this.toOpen().some((s) => !own || s !== this.myIndex);
   }
 
   /** On every poll: with auto-sign on, sends my due reveal, then opens the plans left unrevealed past their round. */
@@ -4169,8 +4171,8 @@ export class GameScene extends Phaser.Scene {
     let note: string;
     if (due && !open) note = `${pending}: no plan came in, nor opened from its timelocked copy. Calling time passes it for them, a missed turn (out of the fight at ${MAX_MISSED} in a row).`;
     else if (this.revealing) note = "Revealing…";
+    else if (open) note = auto ? "Opening the plans left unrevealed…" : `Some plans were not revealed: their timelocked copies can be opened now${own ? ", yours revealed with them" : ""}.`;
     else if (own) note = auto ? "Revealing your plan…" : "Every plan is committed: reveal yours (one Adena signature).";
-    else if (open) note = auto ? "Opening the plans left unrevealed…" : "Some plans were not revealed: their timelocked copies can be opened now.";
     else if (lockAt) note = `Waiting for ${pending} to reveal. Their timelocked plans open in ${left(lockAt)}; time can be called in ${left(view.revealUntil)}.`;
     else note = `Waiting for ${pending} to reveal.`;
     return {
@@ -4181,7 +4183,7 @@ export class GameScene extends Phaser.Scene {
       note,
       warn: (due && !open) || ((own || open) && !auto),
       buttons: [
-        ...(own && !auto ? [{ id: "reveal", label: "REVEAL", tone: "primary" as const, disabled: this.revealing }] : []),
+        ...(own && !open && !auto ? [{ id: "reveal", label: "REVEAL", tone: "primary" as const, disabled: this.revealing }] : []),
         ...(open && !auto ? [{ id: "open", label: "OPEN THE PLANS", tone: "primary" as const, disabled: this.revealing }] : []),
         ...(due && !open ? [{ id: "claim", label: "CALL TIME", tone: "primary" as const }] : []),
         replay,
