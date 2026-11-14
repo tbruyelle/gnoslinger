@@ -53,6 +53,32 @@
     resolving reveal (94.5M), so ~18M less, ~0.04 GNOT of fee and ~0.05 of
     deposit per turn; the history is read a turn per query, no more near
     the query gas ceiling: not urgent
+- v1: one deadline, the claim opens the timelocked plans
+  - why: on Onyx game 1 turn 10 (2026-11-14), a CALL TIME 14 h past the
+    deadline passed the Kid and moved to the reveals with the Marshal's
+    plan still to reveal: a second tx, and `revealUntil` (deadline + 5
+    min) already over, so anyone could claim again at once and pass a
+    plan committed in time
+  - one deadline, the turn's (`commitUntil`); a claim is allowed from the
+    drand round of the copies (deadline + `LockDelay`, 2 min), before
+    which no copy can be opened
+  - `ClaimTimeout(cur, id, turn, seats, salts, plans)` (renamed, say
+    `Settle`): reveals the openings it carries (a bad one skipped with
+    `PlanUnopened`, as `RevealMany` now), then every seat in the fight
+    still not in misses the turn (no commit, or a copy not opened), then
+    the turn resolves; empty lists are today's plain claim
+  - goes away: `RevealMany`, `revealUntil`, `RevealGrace`, the claim of
+    the revealing phase; stays: `Commit`, `Reveal` (own plan, or the last
+    commit in clear, until a claim comes in)
+  - client: the opener (`openAndReveal`, the lobby's auto-open, OPEN THE
+    PLANS) becomes the claim, with every copy opened and my plan from this
+    browser's copy; one button past the round instead of REVEAL / OPEN
+    THE PLANS / CALL TIME; `openTried` and the retries until the grace go;
+    a claim whose openings fail (drand out of reach) is not sent
+  - accepted: a claimer may leave a copy unopened (already the case), and
+    drand down at the claim passes honest committed plans
+  - DESIGN_HIDDEN_PLANS.md, AGENTS.md (crossing functions, reads) and the
+    FAQ to update with it
 - upgrade architecture
   - DESIGN_SHOWDOWN
 
